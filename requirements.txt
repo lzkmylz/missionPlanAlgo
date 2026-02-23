@@ -1,0 +1,34 @@
+# Core scientific computing
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.0.0
+
+# Satellite orbit propagation
+sgp4>=2.22
+
+# Evolutionary algorithms (Genetic Algorithm)
+deap>=1.4.0
+
+# Visualization
+matplotlib>=3.7.0
+plotly>=5.14.0
+
+# Data handling
+pyyaml>=6.0
+h5py>=3.8.0
+tables>=3.8.0
+pyarrow>=12.0.0
+
+# Database
+pymysql>=1.1.0
+sqlalchemy>=2.0.0
+
+# Testing
+pytest>=7.4.0
+
+# Utilities
+python-dateutil>=2.8.0
+tqdm>=4.65.0
+click>=8.1.0
+rich>=13.0.0
+jsonschema>=4.17.0

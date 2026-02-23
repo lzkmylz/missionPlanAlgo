@@ -1,0 +1,16 @@
+{
+  "algorithm": "greedy",
+  "scenario": "\u70b9\u7fa4\u76ee\u6807\u89c2\u6d4b\u573a\u666f",
+  "metrics": {
+    "demand_satisfaction_rate": 0.8,
+    "makespan_hours": 0.18333333333333332,
+    "avg_revisit_time_hours": 0.0,
+    "computation_time_seconds": 0.001293182373046875,
+    "solution_quality": 0.8769444444444445,
+    "satellite_utilization": 0.005787037037037037,
+    "scheduled_task_count": 4,
+    "unscheduled_task_count": 1
+  },
+  "scheduled_count": 4,
+  "unscheduled_count": 1
+}

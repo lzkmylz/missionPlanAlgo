@@ -1,0 +1,3 @@
+[console_scripts]
+sat-cli = utils.entity.cli:main
+scen = utils.entity.cli:main

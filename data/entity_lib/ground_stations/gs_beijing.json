@@ -1,0 +1,57 @@
+{
+  "_comment": "北京地面站配置 - 主要地面接收站，位于北京市区",
+  "id": "gs_beijing",
+  "name": "北京地面站",
+  "longitude": 116.4074,
+  "longitude_comment": "经度 116.4074度 - 北京所在经度",
+  "latitude": 39.9042,
+  "latitude_comment": "纬度 39.9042度 - 北京所在纬度",
+  "altitude": 0,
+  "altitude_comment": "海拔高度 0米 - 相对海平面",
+  "antennas": [
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "BJ-ANT-01",
+      "id_comment": "天线编号 - 北京站1号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+    },
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "BJ-ANT-02",
+      "id_comment": "天线编号 - 北京站2号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+    },
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "BJ-ANT-03",
+      "id_comment": "天线编号 - 北京站3号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+    },
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "BJ-ANT-04",
+      "id_comment": "天线编号 - 北京站4号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+    }
+  ]
+}

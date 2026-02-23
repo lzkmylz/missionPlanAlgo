@@ -1,0 +1,193 @@
+# 点群目标观测场景配置
+# 50颗异构卫星对300个点目标的观测任务
+
+scenario:
+  name: "中规模点群观测场景"
+  description: "50颗卫星(光学/SAR各半)观测300个分布式点目标，24小时规划周期"
+  version: 1.0
+
+  duration:
+    start: "2024-01-01T00:00:00Z"
+    end: "2024-01-02T00:00:00Z"
+
+  satellites:
+    # 光学1型卫星 x 12
+    - &opt1_template
+      id: "OPT-{:02d}"
+      type: "optical_1"
+      count: 12
+      orbit:
+        type: "SSO"
+        altitude: 500000
+        inclination: 97.4
+        raan_spacing: 30.0  # 度
+      capabilities:
+        imaging_modes: ["push_broom"]
+        max_off_nadir: 30.0
+        storage_capacity: 500
+        power_capacity: 2000
+        data_rate: 300
+
+    # 光学2型卫星 x 13
+    - &opt2_template
+      id: "OP2-{:02d}"
+      type: "optical_2"
+      count: 13
+      orbit:
+        type: "SSO"
+        altitude: 550000
+        inclination: 97.8
+        raan_spacing: 27.7
+      capabilities:
+        imaging_modes: ["push_broom", "frame"]
+        max_off_nadir: 45.0
+        storage_capacity: 800
+        power_capacity: 2500
+        data_rate: 450
+
+    # SAR-1型卫星 x 12
+    - &sar1_template
+      id: "SAR-{:02d}"
+      type: "sar_1"
+      count: 12
+      orbit:
+        type: "SSO"
+        altitude: 520000
+        inclination: 97.5
+        raan_spacing: 30.0
+      capabilities:
+        imaging_modes: ["spotlight", "sliding_spotlight", "stripmap"]
+        max_off_nadir: 35.0
+        storage_capacity: 1000
+        power_capacity: 3000
+        data_rate: 300
+
+    # SAR-2型卫星 x 13
+    - &sar2_template
+      id: "SR2-{:02d}"
+      type: "sar_2"
+      count: 13
+      orbit:
+        type: "SSO"
+        altitude: 580000
+        inclination: 97.9
+        raan_spacing: 27.7
+      capabilities:
+        imaging_modes: ["spotlight", "sliding_spotlight", "stripmap"]
+        max_off_nadir: 50.0
+        storage_capacity: 1500
+        power_capacity: 4000
+        data_rate: 600
+
+  targets:
+    point_group:
+      count: 300
+      distribution: "clustered"
+      regions:
+        - name: "华东区域"
+          bounds: [118.0, 30.0, 123.0, 35.0]  # min_lon, min_lat, max_lon, max_lat
+          density: "high"
+          target_count: 80
+          priority_range: [6, 10]
+
+        - name: "华北区域"
+          bounds: [114.0, 38.0, 120.0, 42.0]
+          density: "medium"
+          target_count: 60
+          priority_range: [5, 8]
+
+        - name: "华南区域"
+          bounds: [109.0, 20.0, 118.0, 26.0]
+          density: "medium"
+          target_count: 70
+          priority_range: [4, 7]
+
+        - name: "西部区域"
+          bounds: [95.0, 35.0, 105.0, 40.0]
+          density: "low"
+          target_count: 50
+          priority_range: [3, 6]
+
+        - name: "西南区域"
+          bounds: [100.0, 22.0, 110.0, 30.0]
+          density: "low"
+          target_count: 40
+          priority_range: [3, 5]
+
+  ground_stations:
+    - id: "GS-BEIJING"
+      name: "北京地面站"
+      location: [116.4074, 39.9042, 0.0]  # lon, lat, alt(m)
+      antennas:
+        - id: "BJ-ANT-01"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 450.0
+        - id: "BJ-ANT-02"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 450.0
+
+    - id: "GS-KASHI"
+      name: "喀什地面站"
+      location: [75.9896, 39.4704, 0.0]
+      antennas:
+        - id: "KS-ANT-01"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 300.0
+        - id: "KS-ANT-02"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 300.0
+
+    - id: "GS-SANYA"
+      name: "三亚地面站"
+      location: [109.5082, 18.2479, 0.0]
+      antennas:
+        - id: "SY-ANT-01"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 300.0
+
+    - id: "GS-MIYUN"
+      name: "密云地面站"
+      location: [116.8333, 40.3667, 0.0]
+      antennas:
+        - id: "MY-ANT-01"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 600.0
+        - id: "MY-ANT-02"
+          elevation_min: 5.0
+          elevation_max: 90.0
+          data_rate: 600.0
+
+  # 实验配置
+  experiments:
+    algorithms:
+      - name: "Greedy"
+        params:
+          heuristic: "priority"
+      - name: "GA"
+        params:
+          population_size: 100
+          generations: 200
+          crossover_rate: 0.8
+          mutation_rate: 0.2
+      - name: "SA"
+        params:
+          initial_temp: 1000
+          cooling_rate: 0.95
+      - name: "PSO"
+        params:
+          swarm_size: 50
+          iterations: 200
+
+    repetitions: 10
+    metrics:
+      - demand_satisfaction_rate
+      - makespan
+      - avg_revisit_time
+      - computation_time
+      - solution_quality

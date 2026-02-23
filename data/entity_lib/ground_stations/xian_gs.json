@@ -1,0 +1,50 @@
+{
+  "_comment": "西安地面站 - 西北区域数据接收中心",
+  "template_id": "xian_gs",
+  "name": "西安地面站",
+  "longitude": 108.9398,
+  "longitude_comment": "经度 108.9398° - 西安市中心",
+  "latitude": 34.3416,
+  "latitude_comment": "纬度 34.3416° - 西安市中心",
+  "altitude": 0,
+  "altitude_comment": "海拔 0米 - 海平面基准",
+  "antennas": [
+    {
+      "id": "XA-ANT-01",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    },
+    {
+      "id": "XA-ANT-02",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    },
+    {
+      "id": "XA-ANT-03",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    },
+    {
+      "id": "XA-ANT-04",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    }
+  ],
+  "antennas_comment": "4副天线 - 支持多星同时接收"
+}

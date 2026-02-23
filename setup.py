@@ -1,0 +1,45 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="missionPlanAlgo",
+    version="1.0.0",
+    description="卫星星座任务规划算法研究平台",
+    author="赵林",
+    author_email="zhaolin@hit.edu.cn",
+    packages=find_packages(),
+    python_requires=">=3.10",
+    install_requires=[
+        "numpy>=1.24.0",
+        "scipy>=1.10.0",
+        "pandas>=2.0.0",
+        "sgp4>=2.22",
+        "deap>=1.4.0",
+        "matplotlib>=3.7.0",
+        "plotly>=5.14.0",
+        "pyyaml>=6.0",
+        "h5py>=3.8.0",
+        "tables>=3.8.0",
+        "pyarrow>=12.0.0",
+        "pymysql>=1.1.0",
+        "sqlalchemy>=2.0.0",
+        "pytest>=7.4.0",
+        "python-dateutil>=2.8.0",
+        "tqdm>=4.65.0",
+        "click>=8.1.0",
+        "rich>=13.0.0",
+        "jsonschema>=4.17.0",
+    ],
+    entry_points={
+        'console_scripts': [
+            'sat-cli=utils.entity.cli:main',
+            'scen=utils.entity.cli:main',
+        ],
+    },
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Astronomy",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+    ],
+)

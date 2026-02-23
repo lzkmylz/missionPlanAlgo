@@ -1,0 +1,62 @@
+{
+  "_comment": "光学卫星2型模板 - 框幅式成像，适用于点目标精细观测",
+  "template_id": "optical_2",
+  "name": "光学卫星2型",
+  "sat_type": "optical_2",
+  "orbit": {
+    "_comment": "轨道参数 - SSO太阳同步轨道",
+    "orbit_type": "SSO",
+    "altitude": 645000,
+    "altitude_comment": "轨道高度 645公里",
+    "inclination": 97.9,
+    "inclination_comment": "轨道倾角 97.9度"
+  },
+  "capabilities": {
+    "_comment": "卫星载荷能力配置 - 比optical_1更强的性能",
+    "max_off_nadir": 35.0,
+    "max_off_nadir_comment": "最大侧摆角度 35度 - 比optical_1更大的观测范围",
+    "storage_capacity": 800,
+    "storage_capacity_comment": "存储容量 800GB - 更大的存储空间",
+    "power_capacity": 2500,
+    "power_capacity_comment": "电源容量 2500Wh - 更强的电力供应",
+    "data_rate": 400,
+    "data_rate_comment": "数据传输速率 400Mbps - 更快的数据下传速度",
+    "imager": {
+      "_comment": "光学成像器详细配置",
+      "imager_type": "optical",
+      "imager_type_comment": "成像器类型: optical(光学)",
+      "resolution": 0.5,
+      "resolution_comment": "地面分辨率 0.5米 - 亚米级高分辨率成像",
+      "swath_width": 10.0,
+      "swath_width_comment": "成像幅宽 10公里 - 高分辨率下仍保持较大幅宽",
+      "focal_length": 8.5,
+      "focal_length_comment": "光学焦距 8.5米 - 长焦距实现高分辨率",
+      "aperture": 0.8,
+      "aperture_comment": "光学孔径 0.8米 - 大孔径提高集光能力",
+      "pixel_size": 0.0000065,
+      "pixel_size_comment": "探测器像元尺寸 6.5微米 - 更小的像元实现高分辨率",
+      "quantization": 12,
+      "quantization_comment": "量化位数 12bit - 更高的动态范围"
+    },
+    "imaging_modes": [
+      {
+        "_comment": "框幅式成像模式 - 单帧曝光，适合点目标精细成像",
+        "mode_id": "frame",
+        "mode_name": "框幅模式",
+        "description": "框幅式成像，单帧高分辨率拍摄",
+        "integration_time": 0.001,
+        "integration_time_comment": "积分时间 1毫秒 - 较长曝光时间提高信噪比",
+        "readout_time": 0.005,
+        "readout_time_comment": "读出时间 5毫秒 - 高分辨率图像读出时间较长",
+        "snr_target": 150,
+        "snr_target_comment": "目标信噪比 150 - 高信噪比保证图像质量",
+        "min_imaging_duration": 1,
+        "min_imaging_duration_comment": "最短成像时长 1秒 - 对应7km场景 (7km / 7km/s = 1s)",
+        "max_imaging_duration": 2,
+        "max_imaging_duration_comment": "最长成像时长 2秒 - 对应10km场景 (10km / 7km/s ≈ 1.4s, 取整为2s)",
+        "frame_rate": 1.0,
+        "frame_rate_comment": "帧率 1fps - 每秒拍摄帧数"
+      }
+    ]
+  }
+}

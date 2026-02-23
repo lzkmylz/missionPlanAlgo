@@ -1,0 +1,45 @@
+{
+  "_comment": "光学卫星1型模板 - TLE格式示例",
+  "template_id": "optical_1_tle",
+  "name": "光学卫星1型(TLE示例)",
+  "sat_type": "optical_1",
+  "orbit": {
+    "_comment": "轨道参数 - 使用TLE两行根数（最精确）",
+    "orbit_type": "SSO",
+    "source": "tle",
+    "source_comment": "轨道数据来源: tle - 使用TLE两行根数",
+    "tle_line1": "1 99901U 24001A   24001.00000000  .00000000  00000-0  00000-0 0  0010",
+    "tle_line2": "2 99901  97.9000 270.0000 0010000  90.0000 270.0000 14.50000000    10",
+    "tle_comment": "TLE格式: 卫星目录号、历元时间、轨道参数、平近点角等",
+    "inclination_comment": "可从TLE第2行第9-16列读取: 97.9000度",
+    "raan_comment": "可从TLE第2行第18-25列读取: 270.0000度"
+  },
+  "capabilities": {
+    "max_off_nadir": 30.0,
+    "storage_capacity": 500,
+    "power_capacity": 2000,
+    "data_rate": 700,
+    "imager": {
+      "imager_type": "optical",
+      "resolution": 0.5,
+      "swath_width": 15.0,
+      "focal_length": 5.8,
+      "aperture": 0.6,
+      "pixel_size": 0.00001,
+      "quantization": 16
+    },
+    "imaging_modes": [
+      {
+        "mode_id": "push_broom",
+        "mode_name": "推扫模式",
+        "description": "推扫式成像",
+        "integration_time": 0.0002,
+        "readout_time": 0.0001,
+        "snr_target": 100,
+        "min_imaging_duration": 17,
+        "max_imaging_duration": 143,
+        "typical_velocity": 7000
+      }
+    ]
+  }
+}
