@@ -86,7 +86,7 @@ class ThermalIntegrator:
             initial_temp: Initial temperature in Kelvin (default: ambient)
         """
         self.params = params
-        self.temperature = initial_temp or params.ambient_temperature
+        self.temperature = initial_temp if initial_temp is not None else params.ambient_temperature
         self.last_update_time: Optional[datetime] = None
         self.temperature_history: List[Tuple[datetime, float]] = []
 
@@ -195,11 +195,16 @@ class ThermalIntegrator:
         if target_temp is None:
             target_temp = self.params.ambient_temperature + 10.0
 
+        tau = self.params.time_constant
+        t_amb = self.params.ambient_temperature
+
+        # Check if already at or below target
         if self.temperature <= target_temp:
             return 0.0
 
-        tau = self.params.time_constant
-        t_amb = self.params.ambient_temperature
+        # Cannot cool below ambient - return infinity equivalent
+        if target_temp <= t_amb:
+            return float('inf')
 
         # Time to cool from T_0 to T_target
         try:

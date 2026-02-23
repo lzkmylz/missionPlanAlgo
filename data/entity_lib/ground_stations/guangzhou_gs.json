@@ -1,0 +1,50 @@
+{
+  "_comment": "广州地面站 - 华南区域数据接收中心",
+  "template_id": "guangzhou_gs",
+  "name": "广州地面站",
+  "longitude": 113.2644,
+  "longitude_comment": "经度 113.2644° - 广州市中心",
+  "latitude": 23.1291,
+  "latitude_comment": "纬度 23.1291° - 广州市中心",
+  "altitude": 0,
+  "altitude_comment": "海拔 0米 - 海平面基准",
+  "antennas": [
+    {
+      "id": "GZ-ANT-01",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    },
+    {
+      "id": "GZ-ANT-02",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    },
+    {
+      "id": "GZ-ANT-03",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    },
+    {
+      "id": "GZ-ANT-04",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+      "data_rate": 450.0,
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+    }
+  ],
+  "antennas_comment": "4副天线 - 支持多星同时接收"
+}

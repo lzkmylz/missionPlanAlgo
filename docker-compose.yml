@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  scenario-tools:
+    build: .
+    image: mission-scenario:latest
+    container_name: sat-scenario-cli
+    volumes:
+      # Entity library data persistence
+      - ./data/entity_lib:/app/data/entity_lib
+      # Scenario files directory
+      - ./scenarios:/app/scenarios
+      # Output results directory
+      - ./results:/app/results
+    environment:
+      - ENTITY_LIB_PATH=/app/data/entity_lib
+      - SCENARIOS_PATH=/app/scenarios
+    working_dir: /app
+    command: ["--help"]
+
+  # Optional: MySQL database service for future expansion
+  mysql:
+    image: mysql:8.0
+    container_name: sat-mysql
+    env_file:
+      - .env
+    environment:
+      MYSQL_DATABASE: mission_scenarios
+      MYSQL_USER: mission_user
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    # Only start if explicitly requested
+    profiles:
+      - db
+
+volumes:
+  mysql_data:

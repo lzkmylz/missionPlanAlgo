@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (can be built separately)
+docs/_build/
+
+# Results and logs (mount as volumes instead)
+results/
+logs/
+*.log
+
+# Scenarios (mount as volumes instead)
+scenarios/*.json
+!scenarios/.gitkeep
+
+# Data (mount as volumes instead)
+data/entity_lib/**/*.json

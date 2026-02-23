@@ -1,0 +1,57 @@
+{
+  "_comment": "喀什地面站配置 - 西部地面接收站，位于新疆喀什地区",
+  "id": "gs_kashi",
+  "name": "喀什地面站",
+  "longitude": 75.9896,
+  "longitude_comment": "经度 75.9896度 - 喀什所在经度",
+  "latitude": 39.4704,
+  "latitude_comment": "纬度 39.4704度 - 喀什所在纬度",
+  "altitude": 0,
+  "altitude_comment": "海拔高度 0米 - 相对海平面",
+  "antennas": [
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "KS-ANT-01",
+      "id_comment": "天线编号 - 喀什站1号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+    },
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "KS-ANT-02",
+      "id_comment": "天线编号 - 喀什站2号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+    },
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "KS-ANT-03",
+      "id_comment": "天线编号 - 喀什站3号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+    },
+    {
+      "_comment": "天线配置 - 负责接收卫星下传数据",
+      "id": "KS-ANT-04",
+      "id_comment": "天线编号 - 喀什站4号天线",
+      "elevation_min": 5.0,
+      "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+      "elevation_max": 90.0,
+      "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+      "data_rate": 1500.0,
+      "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+    }
+  ]
+}

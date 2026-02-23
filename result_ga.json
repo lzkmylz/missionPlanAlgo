@@ -1,0 +1,16 @@
+{
+  "algorithm": "ga",
+  "scenario": "\u70b9\u7fa4\u76ee\u6807\u89c2\u6d4b\u573a\u666f",
+  "metrics": {
+    "demand_satisfaction_rate": 1.0,
+    "makespan_hours": 24.0,
+    "avg_revisit_time_hours": 0.0,
+    "computation_time_seconds": 2.631779193878174,
+    "solution_quality": 0.6,
+    "satellite_utilization": 0.7143518518518519,
+    "scheduled_task_count": 5,
+    "unscheduled_task_count": 0
+  },
+  "scheduled_count": 5,
+  "unscheduled_count": 0
+}

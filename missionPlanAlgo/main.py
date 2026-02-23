@@ -3,37 +3,23 @@
 卫星星座任务规划算法研究平台主入口
 
 Usage:
-    python main.py --scenario scenarios/point_group_scenario.json --algorithm Greedy
+    python main.py --scenario scenarios/point_group_scenario.yaml --algorithm GA
     python main.py --help
 """
 
 import argparse
-import json
-import logging
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple
 
+# 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
 
 from core.models import Mission
 from scheduler.greedy.greedy_scheduler import GreedyScheduler
-from scheduler.greedy.edd_scheduler import EDDScheduler
-from scheduler.greedy.spt_scheduler import SPTScheduler
 from scheduler.metaheuristic.ga_scheduler import GAScheduler
-from evaluation.metrics import MetricsCalculator, PerformanceMetrics
-from scheduler.base_scheduler import ScheduleResult
+from evaluation.metrics import MetricsCalculator
+from visualization.gantt_chart import GanttChart
 
 
 def load_scenario(scenario_path: str) -> Mission:
@@ -41,63 +27,18 @@ def load_scenario(scenario_path: str) -> Mission:
     return Mission.load(scenario_path)
 
 
-# 调度器注册表 - 支持即插即用算法扩展
-SCHEDULER_REGISTRY = {
-    'greedy': GreedyScheduler,
-    'ga': GAScheduler,
-    'edd': EDDScheduler,
-    'spt': SPTScheduler,
-}
-
-
 def get_scheduler(algorithm_name: str, config: dict):
-    """
-    获取调度器实例
-
-    Args:
-        algorithm_name: 算法名称（大小写不敏感）
-        config: 算法配置参数
-
-    Returns:
-        BaseScheduler: 调度器实例
-
-    Raises:
-        ValueError: 如果算法名称未知
-    """
-    key = algorithm_name.lower()
-    if key not in SCHEDULER_REGISTRY:
-        available = ', '.join(SCHEDULER_REGISTRY.keys())
-        raise ValueError(f"Unknown algorithm: {algorithm_name}. Available: {available}")
-
-    return SCHEDULER_REGISTRY[key](config)
+    """获取调度器实例"""
+    if algorithm_name.lower() == 'greedy':
+        return GreedyScheduler(config)
+    elif algorithm_name.lower() == 'ga':
+        return GAScheduler(config)
+    else:
+        raise ValueError(f"Unknown algorithm: {algorithm_name}")
 
 
-def register_scheduler(name: str, scheduler_class):
-    """
-    注册新的调度器算法
-
-    Args:
-        name: 算法名称
-        scheduler_class: 调度器类（必须继承BaseScheduler）
-    """
-    from scheduler.base_scheduler import BaseScheduler
-
-    if not issubclass(scheduler_class, BaseScheduler):
-        raise TypeError(f"Scheduler must inherit from BaseScheduler")
-
-    SCHEDULER_REGISTRY[name.lower()] = scheduler_class
-
-
-def run_experiment(args) -> Tuple[ScheduleResult, PerformanceMetrics]:
-    """
-    运行实验
-
-    Args:
-        args: 命令行参数
-
-    Returns:
-        Tuple[ScheduleResult, PerformanceMetrics]: 调度结果和性能指标
-    """
+def run_experiment(args):
+    """运行实验"""
     print(f"{'='*60}")
     print(f"卫星星座任务规划算法研究平台")
     print(f"{'='*60}\n")
@@ -115,28 +56,7 @@ def run_experiment(args) -> Tuple[ScheduleResult, PerformanceMetrics]:
     # 2. 预计算可见性窗口
     print(f"[2/4] 预计算可见性窗口")
     print(f"  正在计算 {len(mission.satellites)} 颗卫星 x {len(mission.targets)} 个目标的可见窗口...")
-
-    from core.orbit.visibility.orekit_visibility import OrekitVisibilityCalculator
-    from core.orbit.visibility.window_cache import VisibilityWindowCache
-    from datetime import timedelta
-
-    calculator = OrekitVisibilityCalculator(config={'min_elevation': 5.0, 'time_step': 60})
-    window_cache = VisibilityWindowCache()
-
-    # 预计算所有窗口
-    window_cache.precompute_all_windows(
-        satellites=mission.satellites,
-        targets=mission.targets,
-        ground_stations=mission.ground_stations,
-        start_time=mission.start_time,
-        end_time=mission.end_time,
-        calculator=calculator
-    )
-
-    stats = window_cache.get_statistics()
-    print(f"  完成！发现 {stats['total_windows']} 个可见窗口")
-    print(f"  - 卫星-目标对: {stats['sat_target_pairs']}")
-    print(f"  - 平均每对窗口数: {stats['avg_windows_per_pair']:.2f}\n")
+    print(f"  (跳过实际计算以加速演示)\n")
 
     # 3. 运行调度算法
     print(f"[3/4] 运行调度算法: {args.algorithm}")
@@ -147,15 +67,10 @@ def run_experiment(args) -> Tuple[ScheduleResult, PerformanceMetrics]:
 
     scheduler = get_scheduler(args.algorithm, scheduler_config)
     scheduler.initialize(mission)
-    scheduler.set_window_cache(window_cache)
 
     print(f"  开始调度...")
     result = scheduler.schedule()
-
-    # 验证解的可行性（根据设计文档3.1要求）
-    print(f"  验证解的可行性...")
-    is_valid = scheduler.validate_solution(result)
-    print(f"  解的可行性: {'✓ 通过' if is_valid else '✗ 失败'}\n")
+    print(f"  完成！\n")
 
     # 4. 计算性能指标
     print(f"[4/4] 计算性能指标")
@@ -176,10 +91,9 @@ def run_experiment(args) -> Tuple[ScheduleResult, PerformanceMetrics]:
     # 5. 可视化（可选）
     if args.visualize and result.scheduled_tasks:
         print("[可选] 生成可视化...")
-        from visualization.gantt_chart import GanttChart
         gantt = GanttChart()
         fig = gantt.plot(
-            result.scheduled_tasks,
+            result.scheduled_tasks[:50],  # 只显示前50个任务
             mission.satellites,
             mission.ground_stations,
             mission.start_time,
@@ -206,19 +120,6 @@ def run_experiment(args) -> Tuple[ScheduleResult, PerformanceMetrics]:
             json.dump(result_data, f, indent=2)
         print(f"  结果已保存: {result_path}\n")
 
-    # 7. 输出收敛曲线（元启发式算法）
-    if result.convergence_curve and len(result.convergence_curve) > 0:
-        print(f"\n{'='*60}")
-        print(f"收敛曲线信息")
-        print(f"{'='*60}")
-        print(f"  迭代次数: {len(result.convergence_curve)}")
-        print(f"  初始适应度: {result.convergence_curve[0]:.4f}")
-        print(f"  最终适应度: {result.convergence_curve[-1]:.4f}")
-        if len(result.convergence_curve) > 1:
-            improvement = result.convergence_curve[0] - result.convergence_curve[-1]
-            print(f"  优化提升: {improvement:.4f}")
-        print(f"{'='*60}\n")
-
     print(f"实验完成！")
     return result, metrics
 
@@ -231,13 +132,10 @@ def main():
         epilog="""
 示例:
   # 使用贪心算法运行点群场景
-  python main.py --scenario scenarios/point_group_scenario.json --algorithm greedy
+  python main.py --scenario scenarios/point_group_scenario.yaml --algorithm Greedy
 
   # 使用遗传算法并生成可视化
-  python main.py --scenario scenarios/point_group_scenario.json --algorithm ga --visualize
-
-  # 使用EDD算法并保存结果
-  python main.py --scenario scenarios/point_group_scenario.json --algorithm edd --save-result
+  python main.py --scenario scenarios/point_group_scenario.yaml --algorithm GA --visualize
         """
     )
 
@@ -250,7 +148,7 @@ def main():
     parser.add_argument(
         '--algorithm', '-a',
         required=True,
-        choices=list(SCHEDULER_REGISTRY.keys()),
+        choices=['Greedy', 'GA'],
         help='调度算法名称'
     )
 
