@@ -118,15 +118,34 @@ class VisibilityCalculator(ABC):
             ground_pos: 地面位置 (x, y, z) in meters
 
         Returns:
-            仰角（度）
+            仰角（度），如果卫星在地球背面返回负值
         """
-        # 从地面站到卫星的向量
+        # 计算地面站到卫星的向量
         dx = sat_pos[0] - ground_pos[0]
         dy = sat_pos[1] - ground_pos[1]
         dz = sat_pos[2] - ground_pos[2]
 
         # 地面站位置向量
         gx, gy, gz = ground_pos
+
+        # 首先检查卫星是否被地球遮挡
+        # 计算地面站-卫星连线到地心的最短距离
+        dot_t_d = gx*dx + gy*dy + gz*dz
+        d_squared = dx*dx + dy*dy + dz*dz
+
+        if d_squared > 1e-6:
+            t = -dot_t_d / d_squared
+
+            # 如果最近点在线段内，检查是否穿过地球
+            if 0 < t < 1:
+                closest_x = gx + t * dx
+                closest_y = gy + t * dy
+                closest_z = gz + t * dz
+                closest_dist = math.sqrt(closest_x**2 + closest_y**2 + closest_z**2)
+
+                if closest_dist < self.EARTH_RADIUS * 0.999:
+                    # 连线穿过地球内部，卫星不可见
+                    return -90.0
 
         # 地面站到天顶的单位向量（地心反方向）
         g_norm = math.sqrt(gx**2 + gy**2 + gz**2)
@@ -144,7 +163,6 @@ class VisibilityCalculator(ABC):
         cos_zenith = dx_norm * up_x + dy_norm * up_y + dz_norm * up_z
 
         # 仰角 = 90° - 天顶角
-        # 使用asin计算更直接：sin(elevation) = cos(zenith)
         elevation = math.degrees(math.asin(max(-1, min(1, cos_zenith))))
 
         return elevation

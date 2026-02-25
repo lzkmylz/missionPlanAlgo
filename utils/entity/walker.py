@@ -118,6 +118,13 @@ class WalkerGenerator:
         sat['orbit']['mean_anomaly'] = round(mean_anomaly, 2)
         sat['orbit']['inclination'] = inclination
 
+        # Calculate and set altitude from semi_major_axis if needed
+        semi_major_axis = sat['orbit'].get('semi_major_axis')
+        if semi_major_axis and 'altitude' not in sat['orbit']:
+            EARTH_RADIUS = 6371000.0  # meters
+            altitude = semi_major_axis - EARTH_RADIUS
+            sat['orbit']['altitude'] = round(altitude, 0)
+
         return sat
 
     @classmethod

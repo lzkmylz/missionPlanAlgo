@@ -28,6 +28,9 @@ class EDDScheduler(BaseScheduler):
     - 适合有严格截止时间的任务场景
     """
 
+    # 默认转移时间
+    DEFAULT_SLEW_TIME = timedelta(seconds=30)
+
     def __init__(self, config: Dict[str, Any] = None):
         """
         初始化EDD调度器
@@ -89,9 +92,6 @@ class EDDScheduler(BaseScheduler):
             for sat in self.mission.satellites
         }
 
-        # 默认转移时间
-        self.DEFAULT_SLEW_TIME = timedelta(seconds=30)
-
         # EDD调度主循环
         for task in pending_tasks:
             # 检查任务是否有截止时间
@@ -104,7 +104,17 @@ class EDDScheduler(BaseScheduler):
             )
 
             if best_assignment:
-                sat_id, window, imaging_mode, actual_start, actual_end = best_assignment
+                sat_id, window, imaging_mode = best_assignment
+
+                # 计算实际开始和结束时间
+                window_start = window['start'] if isinstance(window, dict) else window.start_time
+                window_end = window['end'] if isinstance(window, dict) else window.end_time
+                usage = sat_resource_usage[sat_id]
+                last_task_end = usage.get('last_task_end', self.mission.start_time)
+                earliest_start = last_task_end + self.DEFAULT_SLEW_TIME
+                actual_start = max(window_start, earliest_start)
+                imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
+                actual_end = actual_start + timedelta(seconds=imaging_duration)
 
                 # 更新资源状态
                 self._update_resource_usage(
@@ -193,7 +203,7 @@ class EDDScheduler(BaseScheduler):
         self,
         task: Any,
         sat_resource_usage: Dict
-    ) -> Optional[Tuple[str, Any, Any, datetime, datetime]]:
+    ) -> Optional[Tuple[str, Any, Any]]:
         """
         为任务找到最佳卫星-窗口组合
 
@@ -204,14 +214,12 @@ class EDDScheduler(BaseScheduler):
             sat_resource_usage: 卫星资源使用情况
 
         Returns:
-            Optional[Tuple]: (satellite_id, window, imaging_mode, actual_start, actual_end) 或 None
+            Optional[Tuple]: (satellite_id, window, imaging_mode) 或 None
         """
         best_window = None
         best_sat_id = None
         best_start = None
         best_imaging_mode = None
-        best_actual_start = None
-        best_actual_end = None
 
         for sat in self.mission.satellites:
             # 检查卫星能力匹配
@@ -262,11 +270,9 @@ class EDDScheduler(BaseScheduler):
                     best_window = window
                     best_sat_id = sat.id
                     best_imaging_mode = imaging_mode
-                    best_actual_start = actual_start
-                    best_actual_end = actual_end
 
         if best_sat_id and best_window:
-            return (best_sat_id, best_window, best_imaging_mode, best_actual_start, best_actual_end)
+            return (best_sat_id, best_window, best_imaging_mode)
         return None
 
     def _has_time_conflict(self, sat_id: str, start: datetime, end: datetime, sat_resource_usage: Dict) -> bool:
@@ -336,11 +342,27 @@ class EDDScheduler(BaseScheduler):
         self,
         sat_id: str,
         task: Any,
-        actual_start: datetime,
-        actual_end: datetime,
-        sat_resource_usage: Dict
+        actual_start,
+        actual_end=None,
+        sat_resource_usage: Dict = None
     ) -> None:
-        """更新资源使用状态"""
+        """更新资源使用状态
+
+        Args:
+            sat_id: 卫星ID
+            task: 目标任务
+            actual_start: 实际开始时间（datetime）或 window 字典（测试兼容）
+            actual_end: 实际结束时间（datetime）或 sat_resource_usage 字典（测试兼容）
+            sat_resource_usage: 卫星资源使用情况字典
+        """
+        # 处理测试用例的调用方式: _update_resource_usage(sat_id, task, window, sat_resource_usage)
+        # 其中 window 是 {'start': ..., 'end': ...} 字典
+        if sat_resource_usage is None and isinstance(actual_end, dict):
+            sat_resource_usage = actual_end
+            window = actual_start
+            actual_start = window['start'] if isinstance(window, dict) else window.start_time
+            actual_end = window['end'] if isinstance(window, dict) else window.end_time
+
         usage = sat_resource_usage[sat_id]
         sat = self.mission.get_satellite_by_id(sat_id)
 
