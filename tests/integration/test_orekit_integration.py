@@ -5,15 +5,20 @@ TDD测试套件 - 测试完整流程（配置→初始化→传播→结果）
 """
 
 import pytest
+import sys
+import os
 
-# 从conftest导入requires_jvm标记
-from tests.conftest import requires_jvm
 import math
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch, Mock
 import threading
 import time
 
+# 定义requires_jvm标记 - 运行时检查环境变量
+requires_jvm = pytest.mark.skipif(
+    os.environ.get('_PYTEST_JVM_ENABLED') != '1',
+    reason="需要真实JVM环境，使用 --jvm 选项启用"
+)
 
 
 
@@ -359,6 +364,98 @@ class TestJavaOrekitIntegration:
         )
 
         assert len(results) > 0
+
+    @requires_jvm
+    def test_java_batch_propagation_optimization(self, jvm_bridge):
+        """测试Java批量传播优化 - 验证Phase 1优化生效
+
+        这个测试验证当 use_java_orekit=True 时，
+        _propagate_range 使用批量传播而不是循环调用单点传播。
+        """
+        from core.orbit.visibility.orekit_visibility import OrekitVisibilityCalculator
+
+        assert jvm_bridge.is_jvm_running()
+
+        config = {'use_java_orekit': True}
+        calculator = OrekitVisibilityCalculator(config)
+        satellite = MockSatellite()
+
+        start_time = datetime(2024, 1, 1, 12, 0, 0)
+        end_time = start_time + timedelta(minutes=10)
+        time_step = timedelta(minutes=1)
+
+        # 追踪调用
+        original_batch = calculator._propagate_range_with_java_orekit
+        original_single = calculator._propagate_satellite
+
+        batch_calls = []
+        single_calls = []
+
+        def tracked_batch(sat, start, end, step):
+            batch_calls.append((start, end))
+            return original_batch(sat, start, end, step)
+
+        def tracked_single(sat, dt):
+            single_calls.append(dt)
+            return original_single(sat, dt)
+
+        calculator._propagate_range_with_java_orekit = tracked_batch
+        calculator._propagate_satellite = tracked_single
+
+        try:
+            results = calculator._propagate_range(satellite, start_time, end_time, time_step)
+
+            # 验证批量传播被调用，单点传播未被调用
+            assert len(batch_calls) == 1, f"批量传播应该只被调用1次，实际被调用{len(batch_calls)}次"
+            assert len(single_calls) == 0, f"单点传播不应该被调用，实际被调用{len(single_calls)}次"
+            assert len(results) == 11, f"应该返回11个结果(0-10分钟)，实际返回{len(results)}个"
+
+        finally:
+            calculator._propagate_range_with_java_orekit = original_batch
+            calculator._propagate_satellite = original_single
+
+    @requires_jvm
+    def test_java_visibility_with_real_scenario(self, jvm_bridge):
+        """测试Java可见性计算 - 使用真实场景数据
+
+        这个测试使用真实场景文件进行端到端测试，
+        验证Java Orekit后端可以正确处理真实卫星和目标数据。
+        """
+        from core.orbit.visibility.orekit_visibility import OrekitVisibilityCalculator
+        from core.models import Mission
+
+        assert jvm_bridge.is_jvm_running()
+
+        # 加载真实场景
+        mission = Mission.load('scenarios/point_group_scenario.json')
+        sat = mission.satellites[0]
+        target = mission.targets[0]
+
+        calculator = OrekitVisibilityCalculator(config={
+            'min_elevation': 0.0,
+            'time_step': 60,
+            'use_java_orekit': True,
+        })
+
+        # 计算1小时可见性
+        start_time = mission.start_time
+        end_time = start_time + timedelta(hours=1)
+
+        windows = calculator.compute_satellite_target_windows(
+            satellite=sat,
+            target=target,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        # 验证结果
+        assert isinstance(windows, list)
+
+        # 如果找到窗口，验证窗口数据合理性
+        for w in windows:
+            duration = (w.end_time - w.start_time).total_seconds()
+            assert 0 < duration <= 600, f"窗口持续时间应该在0-600秒之间，实际为{duration}秒"
+            assert 0 <= w.max_elevation <= 90, f"最大仰角应该在0-90度之间，实际为{w.max_elevation}度"
 
 
 class TestConcurrentIntegration:

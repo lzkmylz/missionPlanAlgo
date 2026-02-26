@@ -313,15 +313,17 @@ class TestJavaOrekitIntegration:
 class TestFallbackMechanism:
     """测试回退机制"""
 
-    @patch('core.orbit.visibility.orekit_visibility.OrekitJavaBridge')
-    def test_fallback_when_jvm_not_available(self, mock_bridge_class, java_enabled_calculator, mock_satellite):
+    def test_fallback_when_jvm_not_available(self, java_enabled_calculator, mock_satellite):
         """测试JVM不可用时回退到简化模型"""
         dt = datetime(2024, 1, 1, 12, 0, 0)
 
         # 设置mock - JVM未运行
         mock_bridge = Mock()
-        mock_bridge_class.return_value = mock_bridge
         mock_bridge.is_jvm_running.return_value = False
+        mock_bridge._ensure_jvm_started.side_effect = RuntimeError("JVM not running")
+
+        # 替换calculator的bridge为mock
+        java_enabled_calculator._orekit_bridge = mock_bridge
 
         with patch.object(java_enabled_calculator, '_propagate_simplified') as mock_simple:
             mock_simple.return_value = ((7000000.0, 0.0, 0.0), (0.0, 7000.0, 0.0))
@@ -334,33 +336,34 @@ class TestFallbackMechanism:
             assert pos is not None
             assert vel is not None
 
-    @patch('core.orbit.visibility.orekit_visibility.OrekitJavaBridge')
-    def test_fallback_when_jpype_not_installed(self, mock_bridge_class, java_enabled_calculator, mock_satellite):
+    def test_fallback_when_jpype_not_installed(self, java_enabled_calculator, mock_satellite):
         """测试JPype未安装时回退到简化模型"""
         dt = datetime(2024, 1, 1, 12, 0, 0)
 
-        # 模拟JPype不可用
-        mock_bridge_class.side_effect = ImportError("JPype not available")
+        # 模拟JPype不可用 - 将bridge设为None来模拟导入失败的情况
+        java_enabled_calculator._orekit_bridge = None
 
         with patch.object(java_enabled_calculator, '_propagate_simplified') as mock_simple:
             mock_simple.return_value = ((7000000.0, 0.0, 0.0), (0.0, 7000.0, 0.0))
 
-            # 调用传播方法
+            # 调用传播方法 - 应该直接回退到简化模型，因为bridge为None
             pos, vel = java_enabled_calculator._propagate_satellite(mock_satellite, dt)
 
             # 应该回退到简化方法
             mock_simple.assert_called_once()
 
-    @patch('core.orbit.visibility.orekit_visibility.OrekitJavaBridge')
-    def test_fallback_when_java_exception(self, mock_bridge_class, java_enabled_calculator, mock_satellite):
+    def test_fallback_when_java_exception(self, java_enabled_calculator, mock_satellite):
         """测试Java异常时回退到简化模型"""
         dt = datetime(2024, 1, 1, 12, 0, 0)
 
         # 设置mock - Java调用抛出异常
         mock_bridge = Mock()
-        mock_bridge_class.return_value = mock_bridge
         mock_bridge.is_jvm_running.return_value = True
+        mock_bridge._ensure_jvm_started.return_value = None
         mock_bridge.propagate_batch.side_effect = OrbitPropagationError("Java error")
+
+        # 替换calculator的bridge为mock
+        java_enabled_calculator._orekit_bridge = mock_bridge
 
         with patch.object(java_enabled_calculator, '_propagate_simplified') as mock_simple:
             mock_simple.return_value = ((7000000.0, 0.0, 0.0), (0.0, 7000.0, 0.0))
@@ -371,18 +374,17 @@ class TestFallbackMechanism:
             # 应该回退到简化方法
             mock_simple.assert_called_once()
 
-    @patch('core.orbit.visibility.orekit_visibility.OrekitJavaBridge')
-    def test_fallback_when_bridge_creation_fails(self, mock_bridge_class, java_enabled_calculator, mock_satellite):
+    def test_fallback_when_bridge_creation_fails(self, java_enabled_calculator, mock_satellite):
         """测试桥接器创建失败时回退到简化模型"""
         dt = datetime(2024, 1, 1, 12, 0, 0)
 
-        # 模拟桥接器创建失败
-        mock_bridge_class.side_effect = RuntimeError("Failed to create bridge")
+        # 模拟桥接器创建失败 - 将bridge设为None
+        java_enabled_calculator._orekit_bridge = None
 
         with patch.object(java_enabled_calculator, '_propagate_simplified') as mock_simple:
             mock_simple.return_value = ((7000000.0, 0.0, 0.0), (0.0, 7000.0, 0.0))
 
-            # 调用传播方法
+            # 调用传播方法 - 由于bridge为None，应该直接回退到简化模型
             pos, vel = java_enabled_calculator._propagate_satellite(mock_satellite, dt)
 
             # 应该回退到简化方法
@@ -396,16 +398,18 @@ class TestFallbackMechanism:
 class TestExceptionHandling:
     """测试异常处理"""
 
-    @patch('core.orbit.visibility.orekit_visibility.OrekitJavaBridge')
-    def test_java_exception_handling_in_range(self, mock_bridge_class, java_enabled_calculator, mock_satellite, time_range):
+    def test_java_exception_handling_in_range(self, java_enabled_calculator, mock_satellite, time_range):
         """测试范围传播中的Java异常处理"""
         start, end = time_range
 
         # 设置mock - Java调用抛出异常
         mock_bridge = Mock()
-        mock_bridge_class.return_value = mock_bridge
         mock_bridge.is_jvm_running.return_value = True
+        mock_bridge._ensure_jvm_started.return_value = None
         mock_bridge.propagate_batch.side_effect = OrbitPropagationError("Propagation failed")
+
+        # 替换calculator的bridge为mock
+        java_enabled_calculator._orekit_bridge = mock_bridge
 
         # 应该抛出异常或返回空列表（取决于实现）
         with pytest.raises(Exception) as exc_info:
@@ -417,15 +421,26 @@ class TestExceptionHandling:
         """测试无效卫星对象在Java传播中的处理"""
         dt = datetime(2024, 1, 1, 12, 0, 0)
 
-        # 应该处理无效卫星对象
+        # 设置mock使Java传播失败
+        mock_bridge = Mock()
+        mock_bridge.is_jvm_running.return_value = True
+        mock_bridge._ensure_jvm_started.return_value = None
+        mock_bridge.propagate_batch.side_effect = RuntimeError("Invalid satellite")
+
+        # 替换calculator的bridge为mock
+        java_enabled_calculator._orekit_bridge = mock_bridge
+
+        # 应该处理无效卫星对象并回退到简化模型
         with patch.object(java_enabled_calculator, '_propagate_simplified') as mock_simple:
             mock_simple.return_value = ((7000000.0, 0.0, 0.0), (0.0, 7000.0, 0.0))
 
             # 使用None作为卫星
             pos, vel = java_enabled_calculator._propagate_satellite(None, dt)
 
-            # 应该回退到简化方法
+            # Java失败应该回退到简化方法
             mock_simple.assert_called_once()
+            assert pos is not None
+            assert vel is not None
 
     def test_invalid_time_in_java_propagation(self, java_enabled_calculator, mock_satellite):
         """测试无效时间在Java传播中的处理"""
