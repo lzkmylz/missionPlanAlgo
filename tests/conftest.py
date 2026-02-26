@@ -31,8 +31,9 @@ def _is_jvm_enabled():
 
 
 # 定义requires_jvm标记 - 这个会被测试文件导入
+# 使用os.environ.get直接检查环境变量
 requires_jvm = pytest.mark.skipif(
-    not _is_jvm_enabled(),
+    os.environ.get('_PYTEST_JVM_ENABLED') != '1',
     reason="需要真实JVM环境，使用 --jvm 选项启用"
 )
 
