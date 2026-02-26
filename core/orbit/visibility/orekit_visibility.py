@@ -81,6 +81,8 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         if self.use_java_orekit and OREKIT_BRIDGE_AVAILABLE:
             try:
                 self._orekit_bridge = OrekitJavaBridge(self.orekit_config)
+                # 启动JVM（OrekitJavaBridge是延迟初始化，需要显式启动）
+                self._orekit_bridge._ensure_jvm_started()
                 logger.info("OrekitJavaBridge initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize OrekitJavaBridge: {e}. Will fallback to simplified model.")
