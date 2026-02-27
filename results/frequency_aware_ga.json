@@ -1,0 +1,280 @@
+{
+  "algorithm": "frequency_aware_ga",
+  "scenario": "点群目标观测场景",
+  "cache_file": "data/visibility_cache/point_group_scenario_windows.json",
+  "scheduled_count": 35,
+  "computation_time": 0.6675257682800293,
+  "target_observations": {
+    "TARGET-001": {
+      "required": 6,
+      "actual": 6
+    },
+    "TARGET-002": {
+      "required": -1,
+      "actual": 10
+    },
+    "TARGET-003": {
+      "required": 3,
+      "actual": 3
+    },
+    "TARGET-004": {
+      "required": 1,
+      "actual": 1
+    },
+    "TARGET-005": {
+      "required": -1,
+      "actual": 10
+    },
+    "TARGET-006": {
+      "required": 5,
+      "actual": 5
+    }
+  },
+  "scheduled_tasks": [
+    {
+      "task_id": "TARGET-001-OBS1",
+      "satellite_id": "WALKER-01-01",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T00:32:28",
+      "end_time": "2024-01-01T00:35:53"
+    },
+    {
+      "task_id": "TARGET-001-OBS2",
+      "satellite_id": "WALKER-05-02",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T02:24:35",
+      "end_time": "2024-01-01T02:25:42"
+    },
+    {
+      "task_id": "TARGET-001-OBS3",
+      "satellite_id": "WALKER-01-03",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T07:11:21",
+      "end_time": "2024-01-01T07:12:29"
+    },
+    {
+      "task_id": "TARGET-001-OBS4",
+      "satellite_id": "WALKER-04-03",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T00:16:35",
+      "end_time": "2024-01-01T00:17:22"
+    },
+    {
+      "task_id": "TARGET-001-OBS5",
+      "satellite_id": "WALKER-01-02",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T00:06:01",
+      "end_time": "2024-01-01T00:07:19"
+    },
+    {
+      "task_id": "TARGET-001-OBS6",
+      "satellite_id": "WALKER-03-03",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T05:45:54",
+      "end_time": "2024-01-01T05:47:05"
+    },
+    {
+      "task_id": "TARGET-002-OBS1",
+      "satellite_id": "WALKER-04-02",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T00:48:18",
+      "end_time": "2024-01-01T00:49:28"
+    },
+    {
+      "task_id": "TARGET-002-OBS2",
+      "satellite_id": "WALKER-02-03",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T01:00:44",
+      "end_time": "2024-01-01T01:01:40"
+    },
+    {
+      "task_id": "TARGET-002-OBS3",
+      "satellite_id": "WALKER-01-02",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T07:39:17",
+      "end_time": "2024-01-01T07:40:09"
+    },
+    {
+      "task_id": "TARGET-002-OBS4",
+      "satellite_id": "WALKER-01-01",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T06:39:57",
+      "end_time": "2024-01-01T06:42:15"
+    },
+    {
+      "task_id": "TARGET-002-OBS5",
+      "satellite_id": "WALKER-03-01",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T05:16:34",
+      "end_time": "2024-01-01T05:18:14"
+    },
+    {
+      "task_id": "TARGET-002-OBS6",
+      "satellite_id": "WALKER-03-03",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T05:59:03",
+      "end_time": "2024-01-01T05:59:59"
+    },
+    {
+      "task_id": "TARGET-002-OBS7",
+      "satellite_id": "WALKER-01-02",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T07:51:05",
+      "end_time": "2024-01-01T07:51:57"
+    },
+    {
+      "task_id": "TARGET-002-OBS8",
+      "satellite_id": "WALKER-03-01",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T05:23:17",
+      "end_time": "2024-01-01T05:24:56"
+    },
+    {
+      "task_id": "TARGET-002-OBS9",
+      "satellite_id": "WALKER-01-03",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T07:08:52",
+      "end_time": "2024-01-01T07:10:04"
+    },
+    {
+      "task_id": "TARGET-002-OBS10",
+      "satellite_id": "WALKER-04-03",
+      "target_id": "TARGET-002",
+      "start_time": "2024-01-01T00:14:29",
+      "end_time": "2024-01-01T00:15:19"
+    },
+    {
+      "task_id": "TARGET-003-OBS1",
+      "satellite_id": "WALKER-03-02",
+      "target_id": "TARGET-003",
+      "start_time": "2024-01-01T06:21:12",
+      "end_time": "2024-01-01T06:22:08"
+    },
+    {
+      "task_id": "TARGET-003-OBS2",
+      "satellite_id": "WALKER-05-02",
+      "target_id": "TARGET-003",
+      "start_time": "2024-01-01T03:54:15",
+      "end_time": "2024-01-01T03:55:02"
+    },
+    {
+      "task_id": "TARGET-003-OBS3",
+      "satellite_id": "WALKER-04-02",
+      "target_id": "TARGET-003",
+      "start_time": "2024-01-01T00:44:39",
+      "end_time": "2024-01-01T00:45:29"
+    },
+    {
+      "task_id": "TARGET-004-OBS1",
+      "satellite_id": "WALKER-02-02",
+      "target_id": "TARGET-004",
+      "start_time": "2024-01-01T01:35:44",
+      "end_time": "2024-01-01T01:37:42"
+    },
+    {
+      "task_id": "TARGET-005-OBS1",
+      "satellite_id": "WALKER-04-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T01:00:35",
+      "end_time": "2024-01-01T01:01:22"
+    },
+    {
+      "task_id": "TARGET-005-OBS2",
+      "satellite_id": "WALKER-04-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T11:04:59",
+      "end_time": "2024-01-01T11:06:14"
+    },
+    {
+      "task_id": "TARGET-005-OBS3",
+      "satellite_id": "WALKER-02-03",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T01:03:36",
+      "end_time": "2024-01-01T01:08:29"
+    },
+    {
+      "task_id": "TARGET-005-OBS4",
+      "satellite_id": "WALKER-03-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T06:19:01",
+      "end_time": "2024-01-01T06:20:12"
+    },
+    {
+      "task_id": "TARGET-005-OBS5",
+      "satellite_id": "WALKER-01-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T00:00:00",
+      "end_time": "2024-01-01T00:00:47"
+    },
+    {
+      "task_id": "TARGET-005-OBS6",
+      "satellite_id": "WALKER-02-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T01:33:10",
+      "end_time": "2024-01-01T01:34:19"
+    },
+    {
+      "task_id": "TARGET-005-OBS7",
+      "satellite_id": "WALKER-03-01",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T06:50:49",
+      "end_time": "2024-01-01T06:51:40"
+    },
+    {
+      "task_id": "TARGET-005-OBS8",
+      "satellite_id": "WALKER-02-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T01:42:35",
+      "end_time": "2024-01-01T01:43:43"
+    },
+    {
+      "task_id": "TARGET-005-OBS9",
+      "satellite_id": "WALKER-05-02",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T03:57:27",
+      "end_time": "2024-01-01T03:58:14"
+    },
+    {
+      "task_id": "TARGET-005-OBS10",
+      "satellite_id": "WALKER-04-03",
+      "target_id": "TARGET-005",
+      "start_time": "2024-01-01T00:28:52",
+      "end_time": "2024-01-01T00:29:36"
+    },
+    {
+      "task_id": "TARGET-006-OBS1",
+      "satellite_id": "WALKER-03-02",
+      "target_id": "TARGET-006",
+      "start_time": "2024-01-01T06:30:25",
+      "end_time": "2024-01-01T06:31:20"
+    },
+    {
+      "task_id": "TARGET-006-OBS2",
+      "satellite_id": "WALKER-03-01",
+      "target_id": "TARGET-006",
+      "start_time": "2024-01-01T07:04:39",
+      "end_time": "2024-01-01T07:05:25"
+    },
+    {
+      "task_id": "TARGET-006-OBS3",
+      "satellite_id": "WALKER-04-01",
+      "target_id": "TARGET-006",
+      "start_time": "2024-01-01T01:21:04",
+      "end_time": "2024-01-01T01:22:19"
+    },
+    {
+      "task_id": "TARGET-006-OBS4",
+      "satellite_id": "WALKER-01-01",
+      "target_id": "TARGET-006",
+      "start_time": "2024-01-01T08:10:13",
+      "end_time": "2024-01-01T08:11:05"
+    },
+    {
+      "task_id": "TARGET-006-OBS5",
+      "satellite_id": "WALKER-03-01",
+      "target_id": "TARGET-006",
+      "start_time": "2024-01-01T08:27:57",
+      "end_time": "2024-01-01T08:28:45"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "algorithm": "ga",
+  "scenario": "点群目标观测场景",
+  "cache_file": "data/visibility_cache/point_group_scenario_windows.json",
+  "metrics": {
+    "scheduled_task_count": 1,
+    "unscheduled_task_count": 0,
+    "demand_satisfaction_rate": 1.0,
+    "makespan_hours": 1.5202777777777778,
+    "computation_time": 0.2945888042449951,
+    "solution_quality": 0.974662037037037,
+    "satellite_utilization": 4.0123456790123456e-05
+  },
+  "scheduled_tasks": [
+    {
+      "task_id": "TARGET-001",
+      "satellite_id": "WALKER-02-02",
+      "target_id": "TARGET-001",
+      "start_time": "2024-01-01T01:30:21",
+      "end_time": "2024-01-01T01:31:13"
+    }
+  ]
+}
