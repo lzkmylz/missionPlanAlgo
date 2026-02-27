@@ -1094,7 +1094,26 @@ class OrekitJavaBridge:
                 sat_param.setArgOfPerigee(sat.get('argOfPerigee', 90.0))
                 sat_param.setMeanAnomaly(sat.get('meanAnomaly', 0.0))
                 sat_param.setAltitude(sat.get('altitude', 645000.0))
-                sat_param.setEpoch(start_time.isoformat())
+
+                # ★ 使用卫星指定的epoch，或场景开始时间（高精度UTC格式）
+                sat_epoch = sat.get('epoch')
+                if sat_epoch:
+                    # 确保是UTC时区感知的datetime
+                    if isinstance(sat_epoch, datetime):
+                        from datetime import timezone
+                        if sat_epoch.tzinfo is None:
+                            sat_epoch = sat_epoch.replace(tzinfo=timezone.utc)
+                        else:
+                            sat_epoch = sat_epoch.astimezone(timezone.utc)
+                        # 使用高精度ISO格式（包含微秒）
+                        epoch_str = sat_epoch.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    else:
+                        epoch_str = sat_epoch
+                    sat_param.setEpoch(epoch_str)
+                else:
+                    # 使用场景开始时间，同样高精度格式
+                    epoch_str = start_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    sat_param.setEpoch(epoch_str)
                 sat_list.add(sat_param)
 
             # 转换目标参数

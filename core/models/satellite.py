@@ -11,8 +11,9 @@
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import math
+import warnings
 
 
 class SatelliteType(Enum):
@@ -50,6 +51,79 @@ class OrbitSource(Enum):
     SIMPLIFIED = "simplified"  # 简化参数（仅高度和倾角）
 
 
+# =============================================================================
+# 时间处理工具函数
+# =============================================================================
+
+def ensure_utc_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    确保datetime是UTC时区感知的
+
+    Args:
+        dt: 输入datetime（可以是naive或timezone-aware）
+
+    Returns:
+        UTC timezone-aware datetime，或None如果输入为None
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def parse_epoch_string(epoch_str: str) -> datetime:
+    """
+    解析epoch字符串，返回UTC timezone-aware datetime
+
+    支持的格式：
+    - ISO 8601带时区: "2024-01-15T12:00:00Z"
+    - ISO 8601带微秒: "2024-01-15T12:00:00.123456Z"
+    - ISO 8601带偏移: "2024-01-15T20:00:00+08:00"
+    - ISO 8601无时区: "2024-01-15T12:00:00"（假设为UTC）
+    - 日期only: "2024-01-15"（假设为UTC 00:00:00）
+
+    Args:
+        epoch_str: 时间字符串
+
+    Returns:
+        UTC timezone-aware datetime
+
+    Raises:
+        ValueError: 如果无法解析字符串
+    """
+    # 尝试多种格式
+    formats = [
+        '%Y-%m-%dT%H:%M:%S.%f%z',  # 带微秒和时区偏移
+        '%Y-%m-%dT%H:%M:%S%z',      # 带时区偏移
+        '%Y-%m-%dT%H:%M:%S.%fZ',    # 带微秒和Z
+        '%Y-%m-%dT%H:%M:%SZ',       # 带Z
+        '%Y-%m-%dT%H:%M:%S.%f',     # 带微秒无TZ
+        '%Y-%m-%dT%H:%M:%S',        # 无TZ
+        '%Y-%m-%d %H:%M:%S',        # 空格分隔
+        '%Y-%m-%d',                 # 日期only
+    ]
+
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(epoch_str, fmt)
+            # 如果没有时区信息，假设为UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                # 转换为UTC
+                dt = dt.astimezone(timezone.utc)
+            return dt
+        except ValueError:
+            continue
+
+    raise ValueError(f"Cannot parse epoch string: {epoch_str}")
+
+
+# =============================================================================
+# Orbit数据类
+# =============================================================================
+
 @dataclass
 class Orbit:
     """
@@ -57,10 +131,12 @@ class Orbit:
 
     支持三种配置方式：
     1. 轨道六根数：semi_major_axis, eccentricity, inclination, raan, arg_of_perigee, mean_anomaly
-    2. TLE两行根数：tle_line1, tle_line2
+    2. TLE两行根数：tle_line1, tle_line2（历元从TLE自动解析）
     3. 简化参数：altitude, inclination（用于快速配置）
 
     优先级：TLE > 六根数 > 简化参数
+
+    重要：所有datetime必须是UTC时区感知的（timezone-aware）
     """
     orbit_type: OrbitType = OrbitType.SSO
 
@@ -71,6 +147,11 @@ class Orbit:
     raan: float = 0.0  # 升交点赤经/RAAN（度）
     arg_of_perigee: float = 0.0  # 近地点幅角（度）
     mean_anomaly: float = 0.0  # 平近点角（度）
+
+    # ★ 新增：轨道历元时间（用于六根数和简化参数）
+    # TLE格式自动解析历元，不需要此字段
+    # 必须是UTC timezone-aware datetime
+    epoch: Optional[datetime] = None
 
     # 简化参数（向后兼容）
     altitude: float = 500000.0  # 轨道高度（米）
@@ -83,6 +164,23 @@ class Orbit:
     source: OrbitSource = field(default=OrbitSource.SIMPLIFIED)
 
     def __post_init__(self):
+        """初始化后确定轨道数据来源并处理epoch时区"""
+        # ★ 处理epoch时区：强制转换为UTC
+        if self.epoch is not None:
+            if self.epoch.tzinfo is None:
+                # naive datetime假设为UTC并发出警告
+                warnings.warn(
+                    f"Orbit epoch is naive datetime {self.epoch}, "
+                    "assuming UTC. Please provide timezone-aware datetime.",
+                    UserWarning,
+                    stacklevel=2
+                )
+                self.epoch = self.epoch.replace(tzinfo=timezone.utc)
+            else:
+                # 转换为UTC
+                self.epoch = self.epoch.astimezone(timezone.utc)
+
+        # 确定轨道数据来源
         """初始化后确定轨道数据来源"""
         if self.tle_line1 and self.tle_line2:
             self.source = OrbitSource.TLE
@@ -310,6 +408,11 @@ class Satellite:
             'source': self.orbit.source.value,
         }
 
+        # ★ 添加epoch字段（ISO格式带Z表示UTC）
+        if self.orbit.epoch:
+            epoch_utc = self.orbit.epoch.astimezone(timezone.utc)
+            orbit_dict['epoch'] = epoch_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+
         if self.orbit.source == OrbitSource.TLE and self.orbit.tle_line1 and self.orbit.tle_line2:
             # TLE格式
             orbit_dict['tle_line1'] = self.orbit.tle_line1
@@ -362,6 +465,22 @@ class Satellite:
         # 优先级2: 检查是否有完整的六根数
         semi_major_axis = orbit_data.get('semi_major_axis')
 
+        # ★ 解析epoch字段（强制UTC）
+        epoch_str = orbit_data.get('epoch')
+        epoch = None
+        if epoch_str:
+            epoch = parse_epoch_string(epoch_str)
+
+        # ★ TLE模式下epoch冲突检测和警告
+        if tle_line1 and tle_line2 and epoch_str:
+            warnings.warn(
+                f"Orbit configured with both TLE and explicit epoch ({epoch_str}). "
+                f"TLE内置历元将覆盖指定epoch. "
+                f"Remove 'epoch' field when using TLE to suppress this warning.",
+                UserWarning,
+                stacklevel=2
+            )
+
         # 创建Orbit对象
         if tle_line1 and tle_line2:
             # TLE格式
@@ -371,6 +490,7 @@ class Satellite:
                 tle_line2=tle_line2,
                 inclination=orbit_data.get('inclination', 97.4),
                 raan=orbit_data.get('raan', 0.0),
+                epoch=epoch,  # ★ TLE格式也保存epoch（虽然不会被使用）
             )
         elif semi_major_axis is not None:
             # 六根数格式
@@ -382,6 +502,7 @@ class Satellite:
                 raan=orbit_data.get('raan', 0.0),
                 arg_of_perigee=orbit_data.get('arg_of_perigee', 0.0),
                 mean_anomaly=orbit_data.get('mean_anomaly', 0.0),
+                epoch=epoch,  # ★ 六根数格式的epoch
             )
         else:
             # 简化格式（向后兼容）
@@ -393,6 +514,7 @@ class Satellite:
                 raan=orbit_data.get('raan', 0.0),
                 arg_of_perigee=orbit_data.get('arg_of_perigee', 0.0),
                 mean_anomaly=orbit_data.get('mean_anomaly', 0.0),
+                epoch=epoch,  # ★ 简化参数格式的epoch
             )
 
         cap_data = data.get('capabilities', {})
