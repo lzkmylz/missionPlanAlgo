@@ -1,6 +1,7 @@
 package orekit.visibility;
 
 import org.orekit.time.AbsoluteDate;
+import org.orekit.time.TimeScalesFactory;
 import java.util.*;
 
 /**
@@ -32,9 +33,9 @@ public class PythonBridge {
             ComputationConfig config) {
 
         try {
-            // 解析时间
-            AbsoluteDate startTime = AbsoluteDate.parseISO8601(startTimeIso);
-            AbsoluteDate endTime = AbsoluteDate.parseISO8601(endTimeIso);
+            // 解析时间 - Orekit 12使用字符串+时间尺度构造函数
+            AbsoluteDate startTime = new AbsoluteDate(startTimeIso, TimeScalesFactory.getUTC());
+            AbsoluteDate endTime = new AbsoluteDate(endTimeIso, TimeScalesFactory.getUTC());
 
             // 执行计算
             BatchResult result = calculator.computeAllWindows(

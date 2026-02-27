@@ -1139,10 +1139,11 @@ class OrekitJavaBridge:
                 java_config
             )
 
-            # 检查结果是否有错误
-            if result.get('error'):
+            # 检查结果是否有错误 (Java Map doesn't support get(key, default))
+            if result.containsKey('error') and result.get('error'):
+                error_msg = result.get('errorMessage') if result.containsKey('errorMessage') else 'Unknown error'
                 raise RuntimeError(
-                    f"Java computation failed: {result.get('errorMessage')}"
+                    f"Java computation failed: {error_msg}"
                 )
 
             # 转换结果为Python原生类型
@@ -1160,36 +1161,45 @@ class OrekitJavaBridge:
             'stats': {}
         }
 
+        # Helper to safely get from Java Map (no default value support)
+        def safe_get(map_obj, key, default=None):
+            if map_obj and map_obj.containsKey(key):
+                return map_obj.get(key)
+            return default
+
         # 转换目标窗口
-        target_windows = java_result.get('targetWindows', [])
-        for window in target_windows:
-            result['targetWindows'].append({
-                'satelliteId': str(window.get('satelliteId')),
-                'targetId': str(window.get('targetId')),
-                'startTime': str(window.get('startTime')),
-                'endTime': str(window.get('endTime')),
-                'maxElevation': float(window.get('maxElevation', 0.0)),
-                'durationSeconds': float(window.get('durationSeconds', 0.0)),
-            })
+        target_windows = safe_get(java_result, 'targetWindows', [])
+        if target_windows:
+            for window in target_windows:
+                result['targetWindows'].append({
+                    'satelliteId': str(safe_get(window, 'satelliteId')),
+                    'targetId': str(safe_get(window, 'targetId')),
+                    'startTime': str(safe_get(window, 'startTime')),
+                    'endTime': str(safe_get(window, 'endTime')),
+                    'maxElevation': float(safe_get(window, 'maxElevation', 0.0)),
+                    'durationSeconds': float(safe_get(window, 'durationSeconds', 0.0)),
+                })
 
         # 转换地面站窗口
-        gs_windows = java_result.get('groundStationWindows', [])
-        for window in gs_windows:
-            result['groundStationWindows'].append({
-                'satelliteId': str(window.get('satelliteId')),
-                'targetId': str(window.get('targetId')),
-                'startTime': str(window.get('startTime')),
-                'endTime': str(window.get('endTime')),
-                'maxElevation': float(window.get('maxElevation', 0.0)),
-                'durationSeconds': float(window.get('durationSeconds', 0.0)),
-            })
+        gs_windows = safe_get(java_result, 'groundStationWindows', [])
+        if gs_windows:
+            for window in gs_windows:
+                result['groundStationWindows'].append({
+                    'satelliteId': str(safe_get(window, 'satelliteId')),
+                    'targetId': str(safe_get(window, 'targetId')),
+                    'startTime': str(safe_get(window, 'startTime')),
+                    'endTime': str(safe_get(window, 'endTime')),
+                    'maxElevation': float(safe_get(window, 'maxElevation', 0.0)),
+                    'durationSeconds': float(safe_get(window, 'durationSeconds', 0.0)),
+                })
 
         # 转换统计信息
-        stats = java_result.get('stats', {})
-        result['stats'] = {
-            'computationTimeMs': int(stats.get('computationTimeMs', 0)),
-            'nWindows': int(stats.get('nWindows', 0)),
-            'memoryUsageMb': float(stats.get('memoryUsageMb', 0.0)),
-        }
+        stats = safe_get(java_result, 'stats', {})
+        if stats:
+            result['stats'] = {
+                'computationTimeMs': int(safe_get(stats, 'computationTimeMs', 0)),
+                'nWindows': int(safe_get(stats, 'nWindows', 0)),
+                'memoryUsageMb': float(safe_get(stats, 'memoryUsageMb', 0.0)),
+            }
 
         return result

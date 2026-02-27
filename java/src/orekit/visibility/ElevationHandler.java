@@ -2,7 +2,7 @@ package orekit.visibility;
 
 import org.hipparchus.ode.events.Action;
 import org.orekit.propagation.SpacecraftState;
-import org.orekit.propagation.events.ElevationDetector;
+import org.orekit.propagation.events.EventDetector;
 import org.orekit.propagation.events.handlers.EventHandler;
 
 /**
@@ -10,7 +10,7 @@ import org.orekit.propagation.events.handlers.EventHandler;
  *
  * 处理Orekit的仰角检测器触发的事件，记录窗口开始和结束
  */
-public class ElevationHandler implements EventHandler<ElevationDetector> {
+public class ElevationHandler implements EventHandler {
 
     private final String satelliteId;
     private final String pointId;
@@ -34,7 +34,7 @@ public class ElevationHandler implements EventHandler<ElevationDetector> {
     }
 
     @Override
-    public Action eventOccurred(SpacecraftState s, ElevationDetector detector,
+    public Action eventOccurred(SpacecraftState s, EventDetector detector,
                                 boolean increasing) {
         if (increasing) {
             // 仰角从零增加到阈值以上：窗口开始
@@ -48,7 +48,7 @@ public class ElevationHandler implements EventHandler<ElevationDetector> {
     }
 
     @Override
-    public SpacecraftState resetState(ElevationDetector detector, SpacecraftState oldState) {
+    public SpacecraftState resetState(EventDetector detector, SpacecraftState oldState) {
         // 不需要重置状态
         return oldState;
     }

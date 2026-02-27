@@ -286,10 +286,14 @@ class BatchVisibilityCalculator:
     def _serialize_satellite(self, satellite) -> Dict[str, Any]:
         """序列化卫星参数"""
         orbit = getattr(satellite, "orbit", None)
+        orbit_type = getattr(orbit, "orbit_type", "SSO")
+        # Ensure orbitType is a string, not an enum
+        if hasattr(orbit_type, 'value'):
+            orbit_type = orbit_type.value
         return {
             "id": satellite.id,
             "name": getattr(satellite, "name", satellite.id),
-            "orbitType": getattr(orbit, "orbit_type", "SSO"),
+            "orbitType": str(orbit_type),
             "semiMajorAxis": getattr(orbit, "semi_major_axis", 7016000.0),
             "eccentricity": getattr(orbit, "eccentricity", 0.001),
             "inclination": getattr(orbit, "inclination", 97.9),
