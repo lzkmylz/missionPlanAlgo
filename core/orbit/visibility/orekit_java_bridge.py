@@ -8,7 +8,8 @@ Orekit Java桥接层
 import functools
 import threading
 import logging
-from typing import Dict, Any, Optional, Callable
+from datetime import datetime
+from typing import Dict, Any, Optional, Callable, List
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -252,11 +253,20 @@ class OrekitJavaBridge:
 
         if name not in self._cached_frames:
             FramesFactory = JClass("org.orekit.frames.FramesFactory")
-            method_name = f"get{name}"
-            if hasattr(FramesFactory, method_name):
-                self._cached_frames[name] = getattr(FramesFactory, method_name)()
+
+            # 处理Orekit 12.x ITRF API变化
+            if name == "ITRF":
+                # Orekit 12.x 需要额外参数: getITRF(IERSConventions, boolean)
+                IERSConventions = JClass("org.orekit.utils.IERSConventions")
+                self._cached_frames[name] = FramesFactory.getITRF(
+                    IERSConventions.IERS_2010, True
+                )
             else:
-                raise ValueError(f"Unknown frame: {name}")
+                method_name = f"get{name}"
+                if hasattr(FramesFactory, method_name):
+                    self._cached_frames[name] = getattr(FramesFactory, method_name)()
+                else:
+                    raise ValueError(f"Unknown frame: {name}")
 
         return self._cached_frames[name]
 
@@ -526,7 +536,7 @@ class OrekitJavaBridge:
 
     def _add_solar_radiation_pressure(self, propagator: Any,
                                       config: Dict[str, Any]) -> None:
-        """添加太阳光压摄动力
+        """添加太阳光压摄动力 (Orekit 12.x API)
 
         Args:
             propagator: Java传播器对象
@@ -540,9 +550,17 @@ class OrekitJavaBridge:
             "org.orekit.bodies.CelestialBodyFactory"
         )
         sun = CelestialBodyFactory.getSun()
-        earth = CelestialBodyFactory.getEarth()
 
-        # 创建太阳光压模型
+        # Orekit 12.x: 使用OneAxisEllipsoid作为地球参数
+        OneAxisEllipsoid = JClass("org.orekit.bodies.OneAxisEllipsoid")
+        Constants = JClass("org.orekit.utils.Constants")
+        earth = OneAxisEllipsoid(
+            Constants.WGS84_EARTH_EQUATORIAL_RADIUS,
+            Constants.WGS84_EARTH_FLATTENING,
+            self.get_frame("ITRF")
+        )
+
+        # 创建太阳光压模型 (Orekit 12.x API)
         SolarRadiationPressure = JClass(
             "org.orekit.forces.radiation.SolarRadiationPressure"
         )
@@ -551,6 +569,7 @@ class OrekitJavaBridge:
         )
 
         radiation_sensitive = IsotropicRadiationSingleCoefficient(area, cr)
+        # Orekit 12.x: SolarRadiationPressure(sun, earth, radiation_sensitive)
         srp_force = SolarRadiationPressure(sun, earth, radiation_sensitive)
 
         propagator.addForceModel(srp_force)
@@ -632,8 +651,17 @@ class OrekitJavaBridge:
         BatchStepHandler = JClass("orekit.helper.BatchStepHandler")
         handler = BatchStepHandler()
 
+        # Orekit 12.x: 使用setStepHandler代替setMasterMode
+        FixedStepHandler = JClass(
+            "org.orekit.propagation.sampling.OrekitStepHandler"
+        )
         # 设置固定步长处理器
-        propagator.setMasterMode(step_size, handler)
+        try:
+            # Orekit 12.x API
+            propagator.setStepHandler(step_size, handler)
+        except AttributeError:
+            # 回退到旧版API (Orekit 11.x)
+            propagator.setMasterMode(step_size, handler)
 
         # 执行传播
         propagator.propagate(start_date, end_date)
@@ -697,7 +725,6 @@ class OrekitJavaBridge:
         """
         return self._config.copy()
 
-    @ensure_jvm_attached
     @translate_java_exception
     def _get_java_class(self, class_name: str) -> Any:
         """获取Java类
@@ -716,5 +743,287 @@ class OrekitJavaBridge:
         if not JPYPE_AVAILABLE:
             raise RuntimeError("JPype not available")
 
+        # 确保JVM已启动
         self._ensure_jvm_started()
+
+        # 确保当前线程已附加到JVM（多线程环境下必需）
+        if jpype.isJVMStarted() and not jpype.isThreadAttachedToJVM():
+            jpype.attachThreadToJVM()
+
         return JClass(class_name)
+
+    # =========================================================================
+    # Phase 2: Java端批量可见性计算接口
+    # =========================================================================
+
+    @ensure_jvm_attached
+    @translate_java_exception
+    def compute_visibility_batch(
+        self,
+        satellite_configs: List[Dict[str, Any]],
+        target_configs: List[Dict[str, Any]],
+        start_time: datetime,
+        end_time: datetime,
+        coarse_step_seconds: int = 300,
+        fine_step_seconds: int = 60,
+        min_elevation_degrees: float = 5.0,
+        min_window_duration_seconds: int = 60,
+    ) -> Dict[str, Any]:
+        """
+        Java端批量可见窗口计算
+
+        Phase 2优化：单次JNI调用完成所有计算，大幅减少JNI开销。
+        在Java端实现自适应步长算法（粗扫描+精化）。
+
+        Args:
+            satellite_configs: 卫星配置列表
+                [{ 'id': str, 'tle_line1': str, 'tle_line2': str,
+                   'min_elevation': float (可选), 'sensor_fov': float (可选) }]
+            target_configs: 目标配置列表
+                [{ 'id': str, 'longitude': float, 'latitude': float,
+                   'altitude': float (默认0), 'min_observation_duration': int (默认60),
+                   'priority': int (默认5) }]
+            start_time: 开始时间
+            end_time: 结束时间
+            coarse_step_seconds: 粗扫描步长（秒，默认300）
+            fine_step_seconds: 精化步长（秒，默认60）
+            min_elevation_degrees: 最小仰角（度，默认5.0）
+            min_window_duration_seconds: 最小窗口持续时间（秒，默认60）
+
+        Returns:
+            Dict: {
+                'windows': {
+                    (sat_id, target_id): [
+                        {
+                            'satellite_id': str,
+                            'target_id': str,
+                            'start_time': datetime,
+                            'end_time': datetime,
+                            'duration_seconds': float,
+                            'max_elevation': float,
+                            'max_elevation_time': datetime,
+                            'entry_azimuth': float,
+                            'exit_azimuth': float,
+                            'quality_score': float,
+                            'confidence': str
+                        },
+                        ...
+                    ]
+                },
+                'statistics': {
+                    'total_pairs': int,
+                    'pairs_with_windows': int,
+                    'total_windows': int,
+                    'computation_time_ms': int,
+                    'coarse_scan_points': int,
+                    'fine_scan_points': int
+                },
+                'errors': [
+                    {
+                        'satellite_id': str,
+                        'target_id': str,
+                        'error_type': str,
+                        'error_message': str
+                    },
+                    ...
+                ]
+            }
+
+        Raises:
+            OrbitPropagationError: 如果Java计算失败
+        """
+        self._ensure_jvm_started()
+
+        try:
+            # 获取Java类
+            BatchCalculator = JClass(
+                "orekit.visibility.calculator.VisibilityBatchCalculator"
+            )
+            SatelliteConfig = JClass(
+                "orekit.visibility.model.SatelliteConfig"
+            )
+            TargetConfig = JClass(
+                "orekit.visibility.model.TargetConfig"
+            )
+            AbsoluteDate = JClass("org.orekit.time.AbsoluteDate")
+
+            # 创建计算器实例
+            calculator = BatchCalculator(
+                float(coarse_step_seconds),
+                float(fine_step_seconds),
+                float(min_elevation_degrees),
+                float(min_window_duration_seconds)
+            )
+
+            # 转换卫星配置为Java对象
+            java_satellites = []
+            for sat in satellite_configs:
+                java_sat = SatelliteConfig(
+                    sat['id'],
+                    sat.get('tle_line1', ''),
+                    sat.get('tle_line2', ''),
+                    float(sat.get('min_elevation', min_elevation_degrees)),
+                    float(sat.get('sensor_fov', 0.0))
+                )
+                java_satellites.append(java_sat)
+
+            # 转换目标配置为Java对象
+            java_targets = []
+            for tgt in target_configs:
+                java_tgt = TargetConfig(
+                    tgt['id'],
+                    float(tgt['longitude']),
+                    float(tgt['latitude']),
+                    float(tgt.get('altitude', 0.0)),
+                    int(tgt.get('min_observation_duration', min_window_duration_seconds)),
+                    int(tgt.get('priority', 5))
+                )
+                java_targets.append(java_tgt)
+
+            # 转换时间
+            java_start = self._datetime_to_java_date(start_time, AbsoluteDate)
+            java_end = self._datetime_to_java_date(end_time, AbsoluteDate)
+
+            # 执行批量计算
+            java_result = calculator.computeBatch(
+                java_satellites,
+                java_targets,
+                java_start,
+                java_end
+            )
+
+            # 转换结果为Python字典
+            return self._convert_batch_result(java_result)
+
+        except Exception as e:
+            logger.error(f"Java batch computation failed: {e}")
+            raise OrbitPropagationError(
+                f"Java批量计算失败: {e}"
+            ) from e
+
+    def _datetime_to_java_date(
+        self,
+        dt: datetime,
+        AbsoluteDate_class: Any
+    ) -> Any:
+        """将Python datetime转换为Java AbsoluteDate"""
+        utc = self.get_time_scale("UTC")
+
+        # 使用JClass获取DateTimeComponents
+        DateTimeComponents = JClass(
+            "org.orekit.time.DateTimeComponents"
+        )
+
+        # 创建DateTimeComponents
+        components = DateTimeComponents(
+            dt.year,
+            dt.month,
+            dt.day,
+            dt.hour,
+            dt.minute,
+            float(dt.second + dt.microsecond / 1e6)
+        )
+
+        return AbsoluteDate_class(components, utc)
+
+    def _convert_batch_result(self, java_result: Any) -> Dict[str, Any]:
+        """将Java BatchResult转换为Python字典"""
+        result = {
+            'windows': {},
+            'statistics': {},
+            'errors': []
+        }
+
+        try:
+            # 转换统计信息
+            java_stats = java_result.getStatistics()
+            result['statistics'] = {
+                'total_pairs': java_stats.getTotalPairs(),
+                'pairs_with_windows': java_stats.getPairsWithWindows(),
+                'total_windows': java_stats.getTotalWindows(),
+                'computation_time_ms': java_stats.getComputationTimeMs(),
+                'coarse_scan_points': java_stats.getCoarseScanPoints(),
+                'fine_scan_points': java_stats.getFineScanPoints(),
+            }
+
+            # 转换错误信息
+            java_errors = java_result.getErrors()
+            for error in java_errors:
+                result['errors'].append({
+                    'satellite_id': error.getSatelliteId(),
+                    'target_id': error.getTargetId(),
+                    'error_type': error.getErrorType(),
+                    'error_message': error.getErrorMessage()
+                })
+
+            # 转换窗口数据
+            java_windows_map = java_result.getAllWindows()
+            for entry in java_windows_map.entrySet():
+                key = entry.getKey()  # "sat_id-target_id"格式
+                window_list = entry.getValue()
+
+                # 解析键
+                parts = key.split('-', 1)
+                if len(parts) == 2:
+                    sat_id, target_id = parts
+                else:
+                    sat_id = key
+                    target_id = key
+
+                result['windows'][(sat_id, target_id)] = []
+
+                for java_window in window_list:
+                    # 转换Java日期为Python datetime
+                    start_dt = self._java_date_to_datetime(
+                        java_window.getStartTime()
+                    )
+                    end_dt = self._java_date_to_datetime(
+                        java_window.getEndTime()
+                    )
+                    max_el_time = self._java_date_to_datetime(
+                        java_window.getMaxElevationTime()
+                    )
+
+                    result['windows'][(sat_id, target_id)].append({
+                        'satellite_id': java_window.getSatelliteId(),
+                        'target_id': java_window.getTargetId(),
+                        'start_time': start_dt,
+                        'end_time': end_dt,
+                        'duration_seconds': java_window.getDurationSeconds(),
+                        'max_elevation': java_window.getMaxElevation(),
+                        'max_elevation_time': max_el_time,
+                        'entry_azimuth': java_window.getEntryAzimuth(),
+                        'exit_azimuth': java_window.getExitAzimuth(),
+                        'quality_score': java_window.getQualityScore(),
+                        'confidence': java_window.getConfidence()
+                    })
+
+        except Exception as e:
+            logger.error(f"Failed to convert batch result: {e}")
+            result['errors'].append({
+                'satellite_id': 'CONVERSION',
+                'target_id': 'CONVERSION',
+                'error_type': 'CONVERSION_ERROR',
+                'error_message': str(e)
+            })
+
+        return result
+
+    def _java_date_to_datetime(self, java_date: Any) -> datetime:
+        """将Java AbsoluteDate转换为Python datetime"""
+        utc = self.get_time_scale("UTC")
+
+        # 获取日期组件
+        components = java_date.getComponents(utc)
+        date = components.getDate()
+        time = components.getTime()
+
+        return datetime(
+            int(date.getYear()),
+            int(date.getMonth()),
+            int(date.getDay()),
+            int(time.getHour()),
+            int(time.getMinute()),
+            int(time.getSecond()),
+            int((time.getSecond() - int(time.getSecond())) * 1e6)
+        )
