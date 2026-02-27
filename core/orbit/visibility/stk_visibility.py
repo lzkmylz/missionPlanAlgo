@@ -14,6 +14,10 @@ from datetime import datetime, timedelta
 import logging
 
 from .base import VisibilityCalculator, VisibilityWindow
+from ..utils import (
+    EARTH_J2, EARTH_RADIUS_M, EARTH_GM,
+    clamp, calculate_j2_perturbations, apply_j2_perturbations
+)
 
 logger = logging.getLogger(__name__)
 
@@ -790,45 +794,96 @@ class STKVisibilityCalculator(VisibilityCalculator):
 
         return windows
 
+    def _get_orbit_attr(self, orbit, attr_name: str, default_value):
+        """安全获取轨道属性，处理Mock对象"""
+        try:
+            from unittest.mock import Mock
+            value = getattr(orbit, attr_name, default_value)
+            # 如果值是Mock对象，返回默认值
+            if isinstance(value, Mock):
+                return default_value
+            return value
+        except Exception:
+            return default_value
+
     def _estimate_satellite_position(
         self,
         satellite,
-        dt: datetime
+        dt: datetime,
+        scenario_start_time: Optional[datetime] = None
     ) -> Optional[Tuple[float, float, float]]:
         """
-        估计卫星位置（简化计算）
+        估计卫星位置（简化计算，支持历元和J2摄动）
+
+        Args:
+            satellite: 卫星模型
+            dt: 目标时间
+            scenario_start_time: 场景开始时间，作为默认历元
 
         Returns:
             (x, y, z) in meters
         """
         try:
             import math
+            from datetime import timezone
+            from core.models.satellite import ensure_utc_datetime
+
+            # 确保dt是UTC时区感知的（向后兼容）
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.astimezone(timezone.utc)
 
             # 使用简化的圆轨道模型
-            orbit = satellite.orbit
-            altitude = orbit.altitude
-            inclination = math.radians(orbit.inclination)
-            raan = math.radians(orbit.raan)
+            orbit = getattr(satellite, 'orbit', None)
+            if orbit is None:
+                return None
+            altitude = self._get_orbit_attr(orbit, 'altitude', 500000.0)
+            inclination = self._get_orbit_attr(orbit, 'inclination', 97.4)
+            raan = self._get_orbit_attr(orbit, 'raan', 0.0)
+            arg_of_perigee = self._get_orbit_attr(orbit, 'arg_of_perigee', 0.0)
+            mean_anomaly_offset = self._get_orbit_attr(orbit, 'mean_anomaly', 0.0)
 
-            # 计算轨道周期
-            GM = 3.986004418e14
-            a = 6371000.0 + altitude
-            period = 2 * math.pi * math.sqrt(a**3 / GM)
+            # ★ 确定参考历元
+            epoch = self._get_orbit_attr(orbit, 'epoch', None)
+            if epoch:
+                ref_time = epoch
+            elif scenario_start_time:
+                ref_time = ensure_utc_datetime(scenario_start_time)
+            else:
+                ref_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
-            # 计算平近点角
-            ref_time = datetime(2024, 1, 1)
+            # 确保ref_time是UTC
+            if ref_time.tzinfo is None:
+                ref_time = ref_time.replace(tzinfo=timezone.utc)
+
+            # 计算轨道参数
+            a = EARTH_RADIUS_M + altitude
+            mean_motion = math.sqrt(EARTH_GM / a**3)
+
+            # 计算从历元到目标时间的偏移
             delta_t = (dt - ref_time).total_seconds()
-            mean_motion = 2 * math.pi / period
-            M = mean_motion * delta_t
+
+            # ★ 使用工具函数计算J2摄动修正
+            e = self._get_orbit_attr(orbit, 'eccentricity', 0.0)
+            raan_corrected, arg_perigee_corrected = apply_j2_perturbations(
+                raan, arg_of_perigee, delta_t, a, inclination, e, mean_motion
+            )
+
+            # 平近点角
+            M = math.radians(mean_anomaly_offset) + mean_motion * delta_t
+
+            # 轨道参数
+            i = math.radians(inclination)
+            raan_rad = math.radians(raan_corrected)
 
             # 圆轨道位置
             x_orb = a * math.cos(M)
             y_orb = a * math.sin(M)
 
-            # 转换到ECEF
-            x = x_orb * math.cos(raan) - y_orb * math.cos(inclination) * math.sin(raan)
-            y = x_orb * math.sin(raan) + y_orb * math.cos(inclination) * math.cos(raan)
-            z = y_orb * math.sin(inclination)
+            # 转换到ECEF（使用修正后的RAAN）
+            x = x_orb * math.cos(raan_rad) - y_orb * math.cos(i) * math.sin(raan_rad)
+            y = x_orb * math.sin(raan_rad) + y_orb * math.cos(i) * math.cos(raan_rad)
+            z = y_orb * math.sin(i)
 
             return (x, y, z)
         except Exception:

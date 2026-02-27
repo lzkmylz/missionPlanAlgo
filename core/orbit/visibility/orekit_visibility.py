@@ -10,7 +10,7 @@ Orekit可见性计算器
 3. 几何计算：地球遮挡判断、仰角计算
 """
 
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Union
 from datetime import datetime, timedelta
 import math
 import logging
@@ -39,6 +39,14 @@ except ImportError:
 
 # 导入配置
 from .orekit_config import merge_config
+
+# 导入轨道工具函数
+from ..utils import (
+    EARTH_J2, EARTH_RADIUS_M, EARTH_GM, EARTH_ROTATION_RATE,
+    clamp, calculate_j2_perturbations, apply_j2_perturbations,
+    calculate_orbital_period, calculate_mean_motion,
+    calculate_orbital_position, eci_to_ecef, calculate_ecef_velocity
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +143,7 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         """
         lon_rad = math.radians(longitude)
         lat_rad = math.radians(latitude)
-        r = self.EARTH_RADIUS + altitude
+        r = EARTH_RADIUS_M + altitude
 
         x = r * math.cos(lat_rad) * math.cos(lon_rad)
         y = r * math.cos(lat_rad) * math.sin(lon_rad)
@@ -163,12 +171,12 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         # 检查卫星是否在地球内部
         r_sat = math.sqrt(sat_pos[0]**2 + sat_pos[1]**2 + sat_pos[2]**2)
-        if r_sat <= self.EARTH_RADIUS:
+        if r_sat <= EARTH_RADIUS_M:
             return True
 
         # 检查目标是否在地球表面或外部
         r_target = math.sqrt(target_pos[0]**2 + target_pos[1]**2 + target_pos[2]**2)
-        if r_target < self.EARTH_RADIUS * 0.999:
+        if r_target < EARTH_RADIUS_M * 0.999:
             # 目标在地球内部，视为被遮挡
             return True
 
@@ -212,7 +220,7 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         # 如果最近点在地球内部，则连线穿过地球
         # 使用0.999因子避免数值误差
-        return closest_to_center < self.EARTH_RADIUS * 0.999
+        return closest_to_center < EARTH_RADIUS_M * 0.999
 
     def _propagate_satellite(self, satellite, dt: datetime) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
         """
@@ -258,86 +266,130 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         # 使用简化轨道模型
         return self._propagate_simplified(satellite, dt)
 
-    def _propagate_simplified(self, satellite, dt: datetime) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    def _propagate_simplified(
+        self,
+        satellite,
+        dt: datetime,
+        scenario_start_time: Optional[datetime] = None
+    ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
         """
-        简化的轨道传播模型（圆轨道近似）
+        简化的轨道传播模型（圆轨道近似，带J2摄动修正）
 
         Args:
             satellite: 卫星模型
-            dt: 目标时间
+            dt: 目标时间（必须是UTC timezone-aware）
+            scenario_start_time: 场景开始时间，作为默认历元
 
         Returns:
             (position, velocity) in meters and m/s
         """
+        from datetime import timezone
+        import warnings
+
+        # ★ 确保dt是UTC时区感知的（向后兼容：自动转换naive datetime）
+        if dt.tzinfo is None:
+            warnings.warn(
+                "dt is naive datetime, assuming UTC. Please provide timezone-aware datetime.",
+                UserWarning,
+                stacklevel=2
+            )
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(timezone.utc)
+
         # 获取轨道参数
         orbit = getattr(satellite, 'orbit', None)
+
         if orbit is None:
             # 默认500km SSO
             altitude = 500000.0
             inclination = 97.4
             raan = 0.0
+            arg_of_perigee = 0.0
             mean_anomaly_offset = 0.0
+            # ★ 使用scenario_start_time作为默认历元
+            from core.models.satellite import ensure_utc_datetime
+            ref_time = ensure_utc_datetime(scenario_start_time) or datetime(2024, 1, 1, tzinfo=timezone.utc)
         else:
             altitude = getattr(orbit, 'altitude', 500000.0)
             inclination = getattr(orbit, 'inclination', 97.4)
             raan = getattr(orbit, 'raan', 0.0)
+            arg_of_perigee = getattr(orbit, 'arg_of_perigee', 0.0)
             mean_anomaly_offset = getattr(orbit, 'mean_anomaly', 0.0)
 
+            # ★ 优先使用卫星epoch，否则使用scenario_start_time
+            if getattr(orbit, 'epoch', None):
+                ref_time = orbit.epoch  # 已经是UTC时区感知
+            elif scenario_start_time:
+                from core.models.satellite import ensure_utc_datetime
+                ref_time = ensure_utc_datetime(scenario_start_time)
+            else:
+                # 最后fallback到固定日期，但必须带时区
+                ref_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+        # 确保ref_time也是UTC
+        if ref_time.tzinfo is None:
+            ref_time = ref_time.replace(tzinfo=timezone.utc)
+
         # 计算轨道半径和周期
-        r = self.EARTH_RADIUS + altitude
-        GM = 3.986004418e14  # 地球引力常数 m^3/s^2
-        period = 2 * math.pi * math.sqrt(r**3 / GM)
+        r = EARTH_RADIUS_M + altitude
+        period = 2 * math.pi * math.sqrt(r**3 / EARTH_GM)
+        mean_motion = 2 * math.pi / period
 
         # 计算平均运动
         mean_motion = 2 * math.pi / period
 
-        # 参考时间
-        ref_time = datetime(2024, 1, 1)
+        # 计算从历元到目标时间的偏移（秒）
         delta_t = (dt - ref_time).total_seconds()
 
-        # 平近点角（考虑初始mean_anomaly）
+        # ★ 新增：J2摄动修正（长期项）
+        # 地球J2项系数
+        J2 = 1.08263e-3
+        R_earth = 6371000.0  # 地球半径（米）
+
+        # 半长轴和偏心率
+        a = r
+        try:
+            e = float(getattr(orbit, 'eccentricity', 0.0)) if orbit else 0.0
+        except (TypeError, ValueError):
+            e = 0.0
+
+        # ★ 使用工具函数计算J2摄动修正
+        raan_corrected, arg_perigee_corrected = apply_j2_perturbations(
+            raan, arg_of_perigee, delta_t, a, inclination, e, mean_motion
+        )
+
+        # ★ 使用工具函数计算轨道位置和速度
+        # 平近点角（考虑初始mean_anomaly和历元偏移）
         mean_anomaly = math.radians(mean_anomaly_offset) + mean_motion * delta_t
 
-        # 轨道参数
-        i = math.radians(inclination)
-        raan_rad = math.radians(raan)
+        # 计算ECI坐标
+        x_eci, y_eci, z_eci = calculate_orbital_position(
+            r, mean_anomaly, inclination, raan_corrected
+        )
 
-        # 圆轨道位置（在轨道平面内）
-        x_orb = r * math.cos(mean_anomaly)
-        y_orb = r * math.sin(mean_anomaly)
+        # 计算地球自转角度
+        theta_0 = math.radians(100.0)  # 初始偏移量（与Orekit对齐）
+        ref_time_fixed = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        delta_t_fixed = (dt - ref_time_fixed).total_seconds()
+        theta = theta_0 + EARTH_ROTATION_RATE * delta_t_fixed
 
-        # 转换到ECI坐标系
-        x_eci = x_orb * math.cos(raan_rad) - y_orb * math.cos(i) * math.sin(raan_rad)
-        y_eci = x_orb * math.sin(raan_rad) + y_orb * math.cos(i) * math.cos(raan_rad)
-        z_eci = y_orb * math.sin(i)
+        # 转换到ECEF坐标
+        x, y, z = eci_to_ecef(x_eci, y_eci, z_eci, theta)
 
-        # 地球自转角速度 (rad/s)
-        omega_earth = 7.2921159e-5
-        # 地球自转角度 (从参考时间开始)
-        # 添加初始偏移量使简化模型与Orekit的ITRF坐标对齐
-        # 在2024-01-01 00:00:00 UTC时刻，Orekit的经度约为-100°
-        # 但简化模型的初始经度为0°，所以需要反向偏移
-        theta_0 = math.radians(100.0)  # 初始偏移量（反向）
-        theta = theta_0 + omega_earth * delta_t
-
-        # 将ECI坐标转换为ECEF坐标（考虑地球自转）
-        x = x_eci * math.cos(theta) + y_eci * math.sin(theta)
-        y = -x_eci * math.sin(theta) + y_eci * math.cos(theta)
-        z = z_eci
-
-        # 计算速度（圆轨道，包含地球自转影响）
-        v = math.sqrt(GM / r)
+        # 计算速度（圆轨道）
+        v = math.sqrt(EARTH_GM / r)
         vx_orb = -v * math.sin(mean_anomaly)
         vy_orb = v * math.cos(mean_anomaly)
 
+        # ECI速度
+        i = math.radians(inclination)
+        raan_rad = math.radians(raan_corrected)
         vx_eci = vx_orb * math.cos(raan_rad) - vy_orb * math.cos(i) * math.sin(raan_rad)
         vy_eci = vx_orb * math.sin(raan_rad) + vy_orb * math.cos(i) * math.cos(raan_rad)
         vz_eci = vy_orb * math.sin(i)
 
-        # 转换速度到ECEF坐标系
-        vx = vx_eci * math.cos(theta) + vy_eci * math.sin(theta) - omega_earth * y
-        vy = -vx_eci * math.sin(theta) + vy_eci * math.cos(theta) + omega_earth * x
-        vz = vz_eci
+        # 转换到ECEF速度（考虑地球自转）
+        vx, vy, vz = calculate_ecef_velocity(vx_eci, vy_eci, vz_eci, x, y, theta)
 
         return ((x, y, z), (vx, vy, vz))
 
@@ -427,12 +479,28 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
             RuntimeError: 如果Java Orekit不可用或传播失败
             ValueError: 如果时间范围无效
         """
+        from datetime import timezone
+        import warnings
+
         # 验证时间范围
         if start_time > end_time:
             return []
 
         if start_time == end_time:
             return []
+
+        # ★ 确保所有时间都是UTC时区感知的（向后兼容）
+        if start_time.tzinfo is None:
+            warnings.warn("start_time is naive datetime, assuming UTC.", UserWarning)
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        else:
+            start_time = start_time.astimezone(timezone.utc)
+
+        if end_time.tzinfo is None:
+            warnings.warn("end_time is naive datetime, assuming UTC.", UserWarning)
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        else:
+            end_time = end_time.astimezone(timezone.utc)
 
         self._ensure_jvm_and_bridge()
 
@@ -454,14 +522,14 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
                 inclination = 97.4
                 raan = 0.0
                 mean_anomaly = 0.0
+                sat_epoch = None
             else:
                 altitude = getattr(orbit, 'altitude', 500000.0)
                 inclination = getattr(orbit, 'inclination', 97.4)
                 raan = getattr(orbit, 'raan', 0.0)
                 mean_anomaly = getattr(orbit, 'mean_anomaly', 0.0)
-
-            # 创建初始轨道（简化实现，实际应该使用完整的轨道元素）
-            # 这里使用近似的轨道参数创建初始状态
+                # ★ 获取卫星指定的历元
+                sat_epoch = getattr(orbit, 'epoch', None)
 
             # 获取Orekit类
             try:
@@ -478,14 +546,28 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
             # 创建时间尺度
             utc = TimeScalesFactory.getUTC()
 
-            # 使用固定历元（任务开始时间）创建轨道
-            # 这样轨道参数（平近点角）是相对于固定时间的
-            # 使用传播开始时间作为历元，避免硬编码
-            epoch_date = AbsoluteDate(
-                start_time.year, start_time.month, start_time.day,
-                start_time.hour, start_time.minute, start_time.second,
-                utc
-            )
+            # ★ 使用卫星指定的历元创建轨道，或默认使用传播开始时间
+            if sat_epoch:
+                # 确保sat_epoch是UTC时区感知的
+                if sat_epoch.tzinfo is None:
+                    sat_epoch = sat_epoch.replace(tzinfo=timezone.utc)
+                else:
+                    sat_epoch = sat_epoch.astimezone(timezone.utc)
+
+                epoch_date = AbsoluteDate(
+                    sat_epoch.year, sat_epoch.month, sat_epoch.day,
+                    sat_epoch.hour, sat_epoch.minute,
+                    sat_epoch.second + sat_epoch.microsecond / 1e6,
+                    utc
+                )
+            else:
+                # 使用传播开始时间作为历元（向后兼容）
+                epoch_date = AbsoluteDate(
+                    start_time.year, start_time.month, start_time.day,
+                    start_time.hour, start_time.minute,
+                    start_time.second + start_time.microsecond / 1e6,
+                    utc
+                )
 
             # 创建传播起止时间的AbsoluteDate
             start_date = AbsoluteDate(
@@ -504,7 +586,7 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
             frame = FramesFactory.getEME2000()
 
             # 计算轨道参数
-            r = self.EARTH_RADIUS + altitude
+            r = EARTH_RADIUS_M + altitude
             GM = 3.986004418e14  # 地球引力常数 m^3/s^2
             import math
 
