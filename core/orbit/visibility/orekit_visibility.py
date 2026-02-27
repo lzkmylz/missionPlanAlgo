@@ -87,6 +87,19 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         else:
             self._adaptive_calculator = None
 
+        # Phase 3: 多线程并行配置
+        self.use_parallel = config.get('use_parallel', True)  # 默认启用
+        self.max_workers = config.get('max_workers', None)  # 线程数
+
+        # 创建并行计算器（如启用）
+        if self.use_parallel:
+            from .parallel_calculator import ParallelVisibilityCalculator
+            self._parallel_calculator = ParallelVisibilityCalculator(
+                max_workers=self.max_workers
+            )
+        else:
+            self._parallel_calculator = None
+
         # Phase 3: Java Orekit集成配置
         self.use_java_orekit = config.get('use_java_orekit', False)
         self.orekit_config = merge_config(config.get('orekit')) if config.get('orekit') else merge_config(None)
