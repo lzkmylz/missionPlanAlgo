@@ -1027,3 +1027,169 @@ class OrekitJavaBridge:
             int(time.getSecond()),
             int((time.getSecond() - int(time.getSecond())) * 1e6)
         )
+
+    @ensure_jvm_attached
+    @translate_java_exception
+    def compute_visibility_batch(
+        self,
+        satellites: List[Dict],
+        targets: List[Dict],
+        ground_stations: List[Dict],
+        start_time: datetime,
+        end_time: datetime,
+        config: Dict
+    ) -> Dict:
+        """
+        批量计算所有可见窗口（高性能版本）
+
+        单次JNI调用完成全部计算，避免多次往返开销。
+
+        Args:
+            satellites: 卫星参数列表
+            targets: 目标参数列表
+            ground_stations: 地面站参数列表
+            start_time: 开始时间
+            end_time: 结束时间
+            config: 计算配置
+                - coarseStep: 粗扫描步长（秒）
+                - fineStep: 精化步长（秒）
+                - minElevation: 最小仰角（度）
+                - useParallel: 是否并行传播
+
+        Returns:
+            Dict: 包含targetWindows、groundStationWindows和stats的结果
+
+        Raises:
+            JavaError: Java计算失败
+        """
+        self._ensure_jvm_started()
+
+        try:
+            # 获取Java类
+            PythonBridge = self._get_java_class(
+                "orekit.visibility.PythonBridge"
+            )
+            SatelliteParameters = self._get_java_class(
+                "orekit.visibility.SatelliteParameters"
+            )
+            GroundPoint = self._get_java_class(
+                "orekit.visibility.GroundPoint"
+            )
+            ComputationConfig = self._get_java_class(
+                "orekit.visibility.ComputationConfig"
+            )
+            ArrayList = self._get_java_class("java.util.ArrayList")
+
+            # 转换卫星参数
+            sat_list = ArrayList()
+            for sat in satellites:
+                sat_param = SatelliteParameters()
+                sat_param.setId(sat['id'])
+                sat_param.setName(sat.get('name', sat['id']))
+                sat_param.setOrbitType(sat.get('orbitType', 'SSO'))
+                sat_param.setSemiMajorAxis(sat.get('semiMajorAxis', 7016000.0))
+                sat_param.setEccentricity(sat.get('eccentricity', 0.001))
+                sat_param.setInclination(sat.get('inclination', 97.9))
+                sat_param.setRaan(sat.get('raan', 0.0))
+                sat_param.setArgOfPerigee(sat.get('argOfPerigee', 90.0))
+                sat_param.setMeanAnomaly(sat.get('meanAnomaly', 0.0))
+                sat_param.setAltitude(sat.get('altitude', 645000.0))
+                sat_param.setEpoch(start_time.isoformat())
+                sat_list.add(sat_param)
+
+            # 转换目标参数
+            target_list = ArrayList()
+            for target in targets:
+                point = GroundPoint()
+                point.setId(target['id'])
+                point.setName(target.get('name', target['id']))
+                point.setLongitude(target['longitude'])
+                point.setLatitude(target['latitude'])
+                point.setAltitude(target.get('altitude', 0.0))
+                point.setMinElevation(0.0)
+                target_list.add(point)
+
+            # 转换地面站参数
+            gs_list = ArrayList()
+            for gs in ground_stations:
+                point = GroundPoint()
+                point.setId(gs['id'])
+                point.setName(gs.get('name', gs['id']))
+                point.setLongitude(gs['longitude'])
+                point.setLatitude(gs['latitude'])
+                point.setAltitude(gs.get('altitude', 0.0))
+                point.setMinElevation(gs.get('minElevation', 5.0))
+                gs_list.add(point)
+
+            # 转换配置
+            java_config = ComputationConfig()
+            java_config.setCoarseStep(config.get('coarseStep', 300.0))
+            java_config.setFineStep(config.get('fineStep', 60.0))
+            java_config.setMinElevation(config.get('minElevation', 0.0))
+            java_config.setUseParallel(config.get('useParallel', True))
+            java_config.setMaxBatchSize(config.get('maxBatchSize', 100))
+
+            # 调用Java批量计算方法
+            result = PythonBridge.computeVisibilityBatch(
+                sat_list,
+                target_list,
+                gs_list,
+                start_time.isoformat(),
+                end_time.isoformat(),
+                java_config
+            )
+
+            # 检查结果是否有错误
+            if result.get('error'):
+                raise RuntimeError(
+                    f"Java computation failed: {result.get('errorMessage')}"
+                )
+
+            # 转换结果为Python原生类型
+            return self._convert_batch_result(result)
+
+        except Exception as e:
+            logger.error(f"Batch computation via Java failed: {e}")
+            raise
+
+    def _convert_batch_result(self, java_result: Any) -> Dict:
+        """将Java返回的批量结果转换为Python原生类型"""
+        result = {
+            'targetWindows': [],
+            'groundStationWindows': [],
+            'stats': {}
+        }
+
+        # 转换目标窗口
+        target_windows = java_result.get('targetWindows', [])
+        for window in target_windows:
+            result['targetWindows'].append({
+                'satelliteId': str(window.get('satelliteId')),
+                'targetId': str(window.get('targetId')),
+                'startTime': str(window.get('startTime')),
+                'endTime': str(window.get('endTime')),
+                'maxElevation': float(window.get('maxElevation', 0.0)),
+                'durationSeconds': float(window.get('durationSeconds', 0.0)),
+            })
+
+        # 转换地面站窗口
+        gs_windows = java_result.get('groundStationWindows', [])
+        for window in gs_windows:
+            result['groundStationWindows'].append({
+                'satelliteId': str(window.get('satelliteId')),
+                'targetId': str(window.get('targetId')),
+                'startTime': str(window.get('startTime')),
+                'endTime': str(window.get('endTime')),
+                'maxElevation': float(window.get('maxElevation', 0.0)),
+                'durationSeconds': float(window.get('durationSeconds', 0.0)),
+            })
+
+        # 转换统计信息
+        stats = java_result.get('stats', {})
+        result['stats'] = {
+            'computationTimeMs': int(stats.get('computationTimeMs', 0)),
+            'nWindows': int(stats.get('nWindows', 0)),
+            'memoryUsageMb': float(stats.get('memoryUsageMb', 0.0)),
+        }
+
+        return result
