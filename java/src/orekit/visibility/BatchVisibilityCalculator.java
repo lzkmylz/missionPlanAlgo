@@ -212,9 +212,9 @@ public class BatchVisibilityCalculator {
                 ElevationDetector detector = new ElevationDetector(
                     DEFAULT_COARSE_STEP,
                     toleranceRad,
-                    topo,
-                    minElevationRad
-                ).withHandler(new ElevationHandler(satId, target.getId(), true, tracker));
+                    topo
+                ).withConstantElevation(minElevationRad)
+                 .withHandler(new ElevationHandler(satId, target.getId(), true, tracker));
 
                 propagator.addEventDetector(detector);
             }
@@ -234,9 +234,9 @@ public class BatchVisibilityCalculator {
                 ElevationDetector detector = new ElevationDetector(
                     DEFAULT_COARSE_STEP,
                     toleranceRad,
-                    topo,
-                    Math.toRadians(gs.getMinElevation())
-                ).withHandler(new ElevationHandler(satId, gs.getId(), false, tracker));
+                    topo
+                ).withConstantElevation(Math.toRadians(gs.getMinElevation()))
+                 .withHandler(new ElevationHandler(satId, gs.getId(), false, tracker));
 
                 propagator.addEventDetector(detector);
             }
@@ -284,9 +284,11 @@ public class BatchVisibilityCalculator {
         for (Future<?> f : futures) {
             try {
                 f.get();
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new OrekitException(e);
+                throw new RuntimeException("Parallel propagation interrupted", e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException("Parallel propagation failed", e.getCause());
             }
         }
 

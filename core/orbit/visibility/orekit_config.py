@@ -20,6 +20,7 @@ DEFAULT_OREKIT_CONFIG = {
             '/usr/local/share/orekit/hipparchus-ode-3.0.jar',
             '/usr/local/share/orekit/hipparchus-filtering-3.0.jar',
             '/usr/local/share/orekit/orekit-helper.jar',
+            '/Users/zhaolin/Documents/职称论文/missionPlanAlgo/java/classes',
         ],
         'max_memory': '2g',
     },
