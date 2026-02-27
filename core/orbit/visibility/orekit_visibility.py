@@ -72,6 +72,21 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         self.time_step = config.get('time_step', 60)
         self._config = config
 
+        # Phase 1: 自适应时间步长配置
+        self.use_adaptive_step = config.get('use_adaptive_step', True)  # 默认启用
+        self.coarse_step = config.get('coarse_step_seconds', 300)  # 粗扫描步长（秒）
+        self.fine_step = config.get('fine_step_seconds', 60)  # 精化步长（秒）
+
+        # 创建自适应步长计算器（如启用）
+        if self.use_adaptive_step:
+            from .adaptive_step_calculator import AdaptiveStepCalculator
+            self._adaptive_calculator = AdaptiveStepCalculator(
+                coarse_step=self.coarse_step,
+                fine_step=self.fine_step
+            )
+        else:
+            self._adaptive_calculator = None
+
         # Phase 3: Java Orekit集成配置
         self.use_java_orekit = config.get('use_java_orekit', False)
         self.orekit_config = merge_config(config.get('orekit')) if config.get('orekit') else merge_config(None)
@@ -632,6 +647,12 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         if start_time >= end_time:
             return []
 
+        # Phase 1: 使用自适应步长（如果启用）
+        if self.use_adaptive_step and self._adaptive_calculator is not None:
+            return self._compute_with_adaptive_step(
+                satellite, target, start_time, end_time
+            )
+
         # 使用传入的time_step或config中的time_step
         if time_step is None:
             time_step = timedelta(seconds=self.time_step)
@@ -675,6 +696,90 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         except Exception:
             # 发生错误时返回空列表
             return []
+
+    def _compute_with_adaptive_step(
+        self,
+        satellite,
+        target,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[VisibilityWindow]:
+        """
+        使用自适应步长计算可见窗口
+
+        Phase 1优化：先用粗步长定位，再用细步长精化
+
+        Args:
+            satellite: 卫星模型
+            target: 目标模型
+            start_time: 开始时间
+            end_time: 结束时间
+
+        Returns:
+            List[VisibilityWindow]: 可见窗口列表
+        """
+        try:
+            # 获取目标ECEF位置
+            if hasattr(target, 'get_ecef_position'):
+                target_pos = target.get_ecef_position()
+            else:
+                lon = getattr(target, 'longitude', 0.0)
+                lat = getattr(target, 'latitude', 0.0)
+                alt = getattr(target, 'altitude', 0.0)
+                target_pos = self._lla_to_ecef(lon, lat, alt)
+
+            target_id = getattr(target, 'id', 'UNKNOWN')
+            sat_id = getattr(satellite, 'id', 'UNKNOWN')
+
+            # 定义可见性检查函数
+            def is_visible_at_time(dt: datetime) -> bool:
+                try:
+                    sat_pos, _ = self._propagate_satellite(satellite, dt)
+                    if self._is_earth_occluded(sat_pos, target_pos):
+                        return False
+                    elevation = self._calculate_elevation(sat_pos, target_pos)
+                    return elevation >= self.min_elevation
+                except Exception:
+                    return False
+
+            # 使用自适应步长计算器
+            window_times = self._adaptive_calculator.compute_windows(
+                is_visible_at_time,
+                start_time,
+                end_time
+            )
+
+            # 转换为VisibilityWindow对象
+            windows = []
+            for window_start, window_end in window_times:
+                # 计算窗口中点的仰角作为质量评分
+                mid_time = window_start + (window_end - window_start) / 2
+                try:
+                    sat_pos, _ = self._propagate_satellite(satellite, mid_time)
+                    elevation = self._calculate_elevation(sat_pos, target_pos)
+                    quality_score = min(1.0, elevation / 90.0)
+                except Exception:
+                    quality_score = 0.5
+
+                windows.append(VisibilityWindow(
+                    satellite_id=sat_id,
+                    target_id=target_id,
+                    start_time=window_start,
+                    end_time=window_end,
+                    duration_seconds=(window_end - window_start).total_seconds(),
+                    max_elevation=elevation if 'elevation' in dir() else 0.0,
+                    quality_score=quality_score
+                ))
+
+            return windows
+
+        except Exception as e:
+            logger.warning(f"Adaptive step calculation failed: {e}. Falling back to fixed step.")
+            # 回退到固定步长
+            return self.compute_satellite_target_windows(
+                satellite, target, start_time, end_time,
+                time_step=timedelta(seconds=self.time_step)
+            )
 
     def compute_satellite_ground_station_windows(
         self,
