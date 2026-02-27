@@ -7,9 +7,6 @@ import math
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
-import sys
-sys.path.insert(0, '/Users/zhaolin/Documents/职称论文/missionPlanAlgo')
-
 from core.models.satellite import Satellite
 from core.models.ground_station import GroundStation
 

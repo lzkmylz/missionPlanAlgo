@@ -6,10 +6,6 @@ import pytest
 import math
 from datetime import datetime, timedelta
 
-# Import from existing modules
-import sys
-sys.path.insert(0, '/Users/zhaolin/Documents/职称论文/missionPlanAlgo')
-
 # Skip if physical constraints module not yet implemented
 pytest.importorskip("simulator.thermal_model", reason="Thermal model not yet implemented")
 pytest.importorskip("simulator.sun_exclusion_calculator", reason="Sun exclusion calculator not yet implemented")

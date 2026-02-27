@@ -8,9 +8,6 @@ import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, MagicMock
 
-import sys
-sys.path.insert(0, '/Users/zhaolin/Documents/职称论文/missionPlanAlgo')
-
 from core.models.satellite import Satellite
 from core.models.ground_station import GroundStation
 from core.network.relay_satellite import RelaySatellite, RelayNetwork
