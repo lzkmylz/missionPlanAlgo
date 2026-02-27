@@ -6892,6 +6892,6 @@
     }
   ],
   "scenario": "scenarios/point_group_scenario.json",
-  "computed_at": "2026-02-27T20:47:58.761147",
+  "computed_at": "2026-02-27T22:53:47.723476",
   "computation_mode": "batch"
 }
