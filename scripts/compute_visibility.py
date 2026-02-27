@@ -19,28 +19,48 @@ from core.models import Mission
 def compute_visibility_windows(scenario_path: str, output_dir: str = "data/visibility_cache"):
     """
     计算场景中所有可见窗口。
-    
+
     Args:
         scenario_path: 场景文件路径
         output_dir: 缓存输出目录
     """
+    import time
+    total_start = time.time()
+
     print("=" * 60)
-    print("可见性计算")
+    print("可见性计算 (Phase 1+2+3 优化)")
     print("=" * 60)
-    
+
     # 1. 加载场景
     print(f"\n1. 加载场景: {scenario_path}")
     mission = Mission.load(scenario_path)
     print(f"   - 卫星: {len(mission.satellites)} 颗")
     print(f"   - 目标: {len(mission.targets)} 个")
     print(f"   - 地面站: {len(mission.ground_stations)} 个")
-    
-    # 2. 创建计算器
-    print("\n2. 初始化可见性计算器")
+
+    # 2. 创建计算器（启用所有优化 Phase 1+2+3）
+    print("\n2. 初始化可见性计算器（Phase 1+2+3 优化）")
     calculator = OrekitVisibilityCalculator(config={
-        'min_elevation': 0.0,      # 最小仰角（地平线以上）
-        'time_step': 1           # 时间步长(秒)
+        'min_elevation': 0.0,           # 最小仰角（地平线以上）
+        # Phase 1: 自适应时间步长
+        'use_adaptive_step': True,
+        'coarse_step_seconds': 300,     # 粗扫描步长(秒)
+        'fine_step_seconds': 60,        # 精化步长(秒)
+        # Phase 2: Java Orekit后端
+        'use_java_orekit': True,
+        # Phase 3: 多线程并行
+        'use_parallel': True,
+        'max_workers': None,            # 默认使用 CPU核心数×2
     })
+
+    # 显示优化配置
+    print(f"   - 后端: Java Orekit (Phase 2)")
+    print(f"   - 自适应步长: {'启用 (Phase 1)' if calculator.use_adaptive_step else '禁用'}")
+    print(f"     - 粗扫描步长: {calculator.coarse_step}秒")
+    print(f"     - 精化步长: {calculator.fine_step}秒")
+    print(f"   - 多线程并行: {'启用 (Phase 3)' if calculator.use_parallel else '禁用'}")
+    if calculator.use_parallel:
+        print(f"     - 工作线程数: {calculator.max_workers or 'CPU×2'}")
     
     # 3. 计算时间范围
     start_time = mission.start_time
@@ -115,13 +135,33 @@ def compute_visibility_windows(scenario_path: str, output_dir: str = "data/visib
     print(f"   缓存已保存: {cache_file}")
     
     # 7. 统计
+    total_elapsed = time.time() - total_start
     print("\n" + "=" * 60)
     print("计算完成")
     print("=" * 60)
     print(f"卫星-目标窗口: {len(target_windows)} 个")
     print(f"卫星-地面站窗口: {len(gs_windows)} 个")
     print(f"总计: {len(target_windows) + len(gs_windows)} 个窗口")
-    
+    print(f"\n总耗时: {total_elapsed:.2f} 秒")
+
+    # 性能对比
+    baseline_time = 400  # 原始基线400秒
+    speedup = baseline_time / total_elapsed if total_elapsed > 0 else 0
+    print(f"性能对比:")
+    print(f"  基线时间: {baseline_time} 秒 (原始实现)")
+    print(f"  优化时间: {total_elapsed:.2f} 秒 (Phase 1+2+3)")
+    print(f"  加速比: {speedup:.1f}x")
+
+    if speedup >= 50:
+        print("  🎉 优秀! 达到50倍+加速!")
+    elif speedup >= 20:
+        print("  ✅ 良好! 达到20倍+加速!")
+    elif speedup >= 10:
+        print("  ✓ 达到10倍+加速")
+    else:
+        print("  ⚠ 加速比未达预期，可能需要进一步优化")
+    print("=" * 60)
+
     return cache_file
 
 

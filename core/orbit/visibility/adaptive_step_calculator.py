@@ -79,7 +79,12 @@ class AdaptiveStepCalculator:
             List[(start, end)]: 可见窗口列表
         """
         # 阶段1: 粗扫描
-        coarse_positions = self._generate_coarse_positions(start_time, end_time)
+        coarse_timestamps = self._generate_coarse_positions(start_time, end_time)
+        # 对每个时间点进行可见性检查
+        coarse_positions = [
+            (timestamp, is_visible_func(timestamp))
+            for timestamp, _ in coarse_timestamps
+        ]
         coarse_windows = self._coarse_scan_from_positions(coarse_positions)
 
         # 阶段2: 精化

@@ -5,12 +5,9 @@ TDD测试 - 修复main.py中使用print()而不是logging的问题
 """
 
 import pytest
-import sys
 import logging
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class TestLoggingConfiguration:

@@ -6,10 +6,6 @@ import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, MagicMock
 
-# Import from existing models
-import sys
-sys.path.insert(0, '/Users/zhaolin/Documents/职称论文/missionPlanAlgo')
-
 from core.models.satellite import Satellite, SatelliteType, Orbit
 from core.models.ground_station import GroundStation, Antenna
 from core.models.target import Target

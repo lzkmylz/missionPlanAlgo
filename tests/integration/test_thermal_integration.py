@@ -9,9 +9,6 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict
 
-import sys
-sys.path.insert(0, '/Users/zhaolin/Documents/职称论文/missionPlanAlgo')
-
 from simulator.thermal_model import ThermalParameters, ThermalIntegrator
 from scheduler.base_scheduler import ScheduleResult, ScheduledTask
 

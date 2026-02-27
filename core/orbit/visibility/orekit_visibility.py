@@ -779,7 +779,6 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
                     target_id=target_id,
                     start_time=window_start,
                     end_time=window_end,
-                    duration_seconds=(window_end - window_start).total_seconds(),
                     max_elevation=elevation if 'elevation' in dir() else 0.0,
                     quality_score=quality_score
                 ))
