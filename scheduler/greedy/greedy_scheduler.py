@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
+from ..frequency_utils import ObservationTask, create_observation_tasks
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 
 
@@ -106,8 +107,8 @@ class GreedyScheduler(BaseScheduler):
             for sat in self.mission.satellites
         }
 
-        # Sort tasks based on heuristic
-        pending_tasks = self._sort_tasks(list(self.mission.targets))
+        # Sort tasks based on heuristic (using frequency-aware tasks)
+        pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
         scheduled_tasks: List[ScheduledTask] = []
         unscheduled: Dict[str, Any] = {}
 
@@ -131,12 +132,13 @@ class GreedyScheduler(BaseScheduler):
             else:
                 # Record failure reason
                 reason = self._determine_failure_reason(task)
+                task_id = task.task_id if isinstance(task, ObservationTask) else task.id
                 self._record_failure(
-                    task_id=task.id,
+                    task_id=task_id,
                     reason=reason,
-                    detail=f"No feasible assignment found for task {task.id}"
+                    detail=f"No feasible assignment found for task {task_id}"
                 )
-                unscheduled[task.id] = self._failure_log[-1]
+                unscheduled[task_id] = self._failure_log[-1]
 
         # Calculate makespan
         makespan = self._calculate_makespan(scheduled_tasks)
@@ -144,6 +146,12 @@ class GreedyScheduler(BaseScheduler):
 
         # Build failure summary
         failure_summary = self._build_failure_summary()
+
+        # Calculate target observation counts for frequency fitness
+        target_obs_count = self._calculate_target_obs_count(scheduled_tasks)
+
+        # Calculate frequency-aware fitness score
+        frequency_fitness = self._calculate_frequency_fitness(target_obs_count, base_score=len(scheduled_tasks))
 
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
@@ -334,13 +342,14 @@ class GreedyScheduler(BaseScheduler):
 
         Args:
             sat: Satellite
-            task: Target task
+            task: Target task (ObservationTask or Target)
 
         Returns:
             List of visibility windows
         """
         if self.window_cache:
-            return self.window_cache.get_windows(sat.id, task.id)
+            target_id = self._get_target_id(task)
+            return self.window_cache.get_windows(sat.id, target_id)
         return []
 
     def _extract_window_times(self, window: Any) -> Tuple[Optional[datetime], Optional[datetime]]:
@@ -709,3 +718,47 @@ class GreedyScheduler(BaseScheduler):
             reason = failure.failure_reason
             summary[reason] = summary.get(reason, 0) + 1
         return summary
+
+    def _calculate_target_obs_count(self, scheduled_tasks: List[ScheduledTask]) -> Dict[str, int]:
+        """
+        Calculate observation count per target
+
+        Args:
+            scheduled_tasks: List of scheduled tasks
+
+        Returns:
+            Dictionary mapping target_id to observation count
+        """
+        target_obs_count: Dict[str, int] = {}
+        for task in scheduled_tasks:
+            target_id = task.target_id
+            target_obs_count[target_id] = target_obs_count.get(target_id, 0) + 1
+        return target_obs_count
+
+    def _get_task_id(self, task: Any) -> str:
+        """
+        Get task ID from either ObservationTask or Target
+
+        Args:
+            task: Task object (ObservationTask or Target)
+
+        Returns:
+            Task ID string
+        """
+        if isinstance(task, ObservationTask):
+            return task.task_id
+        return getattr(task, 'id', '')
+
+    def _get_target_id(self, task: Any) -> str:
+        """
+        Get target ID from either ObservationTask or Target
+
+        Args:
+            task: Task object (ObservationTask or Target)
+
+        Returns:
+            Target ID string
+        """
+        if isinstance(task, ObservationTask):
+            return task.target_id
+        return getattr(task, 'id', '')

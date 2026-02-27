@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
+from ..frequency_utils import ObservationTask
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 
 
@@ -77,10 +78,11 @@ class SPTScheduler(BaseScheduler):
 
         self._validate_initialization()
 
-        # 获取任务列表并按SPT规则排序
-        pending_tasks = self._sort_tasks_by_processing_time(list(self.mission.targets))
+        # 获取任务列表并按SPT规则排序（使用频次感知的任务创建）
+        pending_tasks = self._sort_tasks_by_processing_time(self._create_frequency_aware_tasks())
         scheduled_tasks: List[ScheduledTask] = []
         unscheduled: Dict[str, Any] = {}
+        target_obs_count: Dict[str, int] = {}
 
         # 卫星资源状态跟踪
         sat_resource_usage = {
@@ -119,10 +121,15 @@ class SPTScheduler(BaseScheduler):
                 power_consumed = 0
                 if self.consider_power and sat:
                     power_consumed = sat.capabilities.power_capacity * self._power_profile.get_coefficient_for_mode(imaging_mode) * (self._imaging_calculator.calculate(task, imaging_mode) / 3600)
+
+                # 支持ObservationTask和原始Target
+                task_id = task.task_id if isinstance(task, ObservationTask) else task.id
+                target_id = task.target_id if isinstance(task, ObservationTask) else task.id
+
                 scheduled_task = ScheduledTask(
-                    task_id=task.id,
+                    task_id=task_id,
                     satellite_id=sat_id,
-                    target_id=task.id,
+                    target_id=target_id,
                     imaging_start=actual_start,
                     imaging_end=actual_end,
                     imaging_mode=imaging_mode if isinstance(imaging_mode, str) else str(imaging_mode),
@@ -133,16 +140,20 @@ class SPTScheduler(BaseScheduler):
                 )
                 scheduled_tasks.append(scheduled_task)
 
+                # 更新目标观测计数
+                target_obs_count[target_id] = target_obs_count.get(target_id, 0) + 1
+
                 self._add_convergence_point(len(scheduled_tasks))
             else:
                 # 记录失败原因
                 reason = self._determine_failure_reason(task, sat_resource_usage)
+                task_id = task.task_id if isinstance(task, ObservationTask) else task.id
                 self._record_failure(
-                    task_id=task.id,
+                    task_id=task_id,
                     reason=reason,
-                    detail=f"No feasible assignment found for task {task.id}"
+                    detail=f"No feasible assignment found for task {task_id}"
                 )
-                unscheduled[task.id] = self._failure_log[-1]
+                unscheduled[task_id] = self._failure_log[-1]
 
         # 计算makespan
         makespan = 0.0
@@ -296,7 +307,9 @@ class SPTScheduler(BaseScheduler):
     def _get_feasible_windows(self, sat: Any, task: Any, sat_resource_usage: Dict) -> List[Any]:
         """获取可行的时间窗口"""
         if self.window_cache:
-            return self.window_cache.get_windows(sat.id, task.id)
+            # 支持ObservationTask和原始Target
+            target_id = task.target_id if isinstance(task, ObservationTask) else task.id
+            return self.window_cache.get_windows(sat.id, target_id)
         return []
 
     def _can_satellite_perform_task(self, sat: Any, task: Any) -> bool:

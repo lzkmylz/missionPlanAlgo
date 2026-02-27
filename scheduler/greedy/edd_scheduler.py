@@ -76,10 +76,11 @@ class EDDScheduler(BaseScheduler):
 
         self._validate_initialization()
 
-        # 获取任务列表并按EDD规则排序
-        pending_tasks = self._sort_tasks_by_due_date(list(self.mission.targets))
+        # 获取任务列表并按EDD规则排序（使用频次感知的任务创建）
+        pending_tasks = self._sort_tasks_by_due_date(self._create_frequency_aware_tasks())
         scheduled_tasks: List[ScheduledTask] = []
         unscheduled: Dict[str, Any] = {}
+        target_obs_count: Dict[str, int] = {}
 
         # 卫星资源状态跟踪
         sat_resource_usage = {
@@ -94,11 +95,6 @@ class EDDScheduler(BaseScheduler):
 
         # EDD调度主循环
         for task in pending_tasks:
-            # 检查任务是否有截止时间
-            if not task.time_window_end:
-                # 没有截止时间的任务放在最后处理
-                pass
-
             best_assignment = self._find_best_assignment(
                 task, sat_resource_usage
             )
@@ -128,9 +124,9 @@ class EDDScheduler(BaseScheduler):
                 if self.consider_power and task_sat:
                     power_consumed = task_sat.capabilities.power_capacity * self._power_profile.get_coefficient_for_mode(imaging_mode) * (self._imaging_calculator.calculate(task, imaging_mode) / 3600)
                 scheduled_task = ScheduledTask(
-                    task_id=task.id,
+                    task_id=task.task_id,
                     satellite_id=sat_id,
-                    target_id=task.id,
+                    target_id=task.target_id,
                     imaging_start=actual_start,
                     imaging_end=actual_end,
                     imaging_mode=imaging_mode if isinstance(imaging_mode, str) else str(imaging_mode),
@@ -141,16 +137,19 @@ class EDDScheduler(BaseScheduler):
                 )
                 scheduled_tasks.append(scheduled_task)
 
+                # 更新目标观测计数
+                target_obs_count[task.target_id] = target_obs_count.get(task.target_id, 0) + 1
+
                 self._add_convergence_point(len(scheduled_tasks))
             else:
                 # 记录失败原因
                 reason = self._determine_failure_reason(task, sat_resource_usage)
                 self._record_failure(
-                    task_id=task.id,
+                    task_id=task.task_id,
                     reason=reason,
-                    detail=f"No feasible assignment found for task {task.id}"
+                    detail=f"No feasible assignment found for task {task.task_id}"
                 )
-                unscheduled[task.id] = self._failure_log[-1]
+                unscheduled[task.task_id] = self._failure_log[-1]
 
         # 计算makespan
         makespan = 0.0
@@ -159,6 +158,9 @@ class EDDScheduler(BaseScheduler):
             makespan = (last_end - self.mission.start_time).total_seconds()
 
         computation_time = self._stop_timer()
+
+        # 计算频次适应度
+        frequency_fitness = self._calculate_frequency_fitness(target_obs_count, len(scheduled_tasks))
 
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
@@ -289,7 +291,10 @@ class EDDScheduler(BaseScheduler):
     def _get_feasible_windows(self, sat: Any, task: Any, sat_resource_usage: Dict) -> List[Any]:
         """获取可行的时间窗口"""
         if self.window_cache:
-            return self.window_cache.get_windows(sat.id, task.id)
+            # 支持ObservationTask和原始Target
+            from ..frequency_utils import ObservationTask
+            target_id = task.target_id if isinstance(task, ObservationTask) else task.id
+            return self.window_cache.get_windows(sat.id, target_id)
         return []
 
     def _can_satellite_perform_task(self, sat: Any, task: Any) -> bool:

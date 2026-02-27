@@ -123,8 +123,8 @@ class TabuScheduler(BaseScheduler):
 
         self._validate_initialization()
 
-        # 准备数据
-        self.tasks = list(self.mission.targets)
+        # 准备数据 - 使用频次感知的任务列表
+        self.tasks = self._create_frequency_aware_tasks()
         self.satellites = list(self.mission.satellites)
         self.task_count = len(self.tasks)
         self.sat_count = len(self.satellites)
@@ -269,10 +269,14 @@ class TabuScheduler(BaseScheduler):
         - 基础：成功调度的任务数量 × 10
         - 奖励：窗口质量、资源均衡
         - 惩罚：约束违反
+        - 频次满足度奖励
         """
+        from ..frequency_utils import ObservationTask
+
         score = 0.0
         scheduled_count = 0
         unscheduled_count = 0
+        target_obs_count: Dict[str, int] = {}  # 记录每个目标的实际观测次数
         sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
             i: [] for i in range(self.sat_count)
         }
@@ -288,9 +292,10 @@ class TabuScheduler(BaseScheduler):
 
             sat = self.satellites[sat_idx]
 
-            # 检查是否有可见窗口
+            # 检查是否有可见窗口 (ObservationTask使用target_id)
+            target_id = task.target_id if isinstance(task, ObservationTask) else task.id
             if self.window_cache:
-                windows = self.window_cache.get_windows(sat.id, task.id)
+                windows = self.window_cache.get_windows(sat.id, target_id)
             else:
                 windows = []
 
@@ -319,6 +324,10 @@ class TabuScheduler(BaseScheduler):
                 sat_task_times[sat_idx].append(
                     (feasible_window.start_time, feasible_window.end_time)
                 )
+
+                # 记录目标观测次数
+                target_id = task.target_id if isinstance(task, ObservationTask) else task.id
+                target_obs_count[target_id] = target_obs_count.get(target_id, 0) + 1
             else:
                 unscheduled_count += 1
 
@@ -332,6 +341,9 @@ class TabuScheduler(BaseScheduler):
 
         # 惩罚未调度的任务
         score -= unscheduled_count * 0.5
+
+        # 添加频次满足度奖励
+        score = self._calculate_frequency_fitness(target_obs_count, score)
 
         solution.unscheduled_count = unscheduled_count
         return score
@@ -409,6 +421,8 @@ class TabuScheduler(BaseScheduler):
         solution: TabuSolution
     ) -> Tuple[List[ScheduledTask], Dict[str, Any]]:
         """将解解码为调度方案"""
+        from ..frequency_utils import ObservationTask
+
         scheduled_tasks = []
         unscheduled = {}
 
@@ -422,30 +436,34 @@ class TabuScheduler(BaseScheduler):
 
             task = self.tasks[task_idx]
 
+            # 支持ObservationTask和原始Target
+            task_id = task.task_id if isinstance(task, ObservationTask) else task.id
+            target_id = task.target_id if isinstance(task, ObservationTask) else task.id
+
             if sat_idx >= self.sat_count:
                 self._record_failure(
-                    task_id=task.id,
+                    task_id=task_id,
                     reason=TaskFailureReason.UNKNOWN,
                     detail=f"Invalid satellite index: {sat_idx}"
                 )
-                unscheduled[task.id] = self._failure_log[-1]
+                unscheduled[task_id] = self._failure_log[-1]
                 continue
 
             sat = self.satellites[sat_idx]
 
-            # 获取可见窗口
+            # 获取可见窗口 (ObservationTask使用target_id)
             if self.window_cache:
-                windows = self.window_cache.get_windows(sat.id, task.id)
+                windows = self.window_cache.get_windows(sat.id, target_id)
             else:
                 windows = []
 
             if not windows:
                 self._record_failure(
-                    task_id=task.id,
+                    task_id=task_id,
                     reason=TaskFailureReason.NO_VISIBLE_WINDOW,
                     detail=f"No visibility window for satellite {sat.id}"
                 )
-                unscheduled[task.id] = self._failure_log[-1]
+                unscheduled[task_id] = self._failure_log[-1]
                 continue
 
             # 查找可行窗口
@@ -457,9 +475,9 @@ class TabuScheduler(BaseScheduler):
 
             if feasible_window:
                 scheduled_task = ScheduledTask(
-                    task_id=task.id,
+                    task_id=task_id,
                     satellite_id=sat.id,
-                    target_id=task.id,
+                    target_id=target_id,
                     imaging_start=feasible_window.start_time,
                     imaging_end=feasible_window.end_time,
                     imaging_mode="push_broom"
@@ -470,11 +488,11 @@ class TabuScheduler(BaseScheduler):
                 )
             else:
                 self._record_failure(
-                    task_id=task.id,
+                    task_id=task_id,
                     reason=TaskFailureReason.TIME_CONFLICT,
                     detail=f"No feasible time window for satellite {sat.id}"
                 )
-                unscheduled[task.id] = self._failure_log[-1]
+                unscheduled[task_id] = self._failure_log[-1]
 
         return scheduled_tasks, unscheduled
 

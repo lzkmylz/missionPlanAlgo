@@ -1,6 +1,6 @@
 {
   "name": "点群目标观测场景",
-  "description": "Walker星座实验场景: 基于光学卫星1型模板生成15颗卫星(5面×3颗)",
+  "description": "多目标观测场景: 包含不同观测频次需求的目标（6个目标，频次需求1-6次或不限）",
   "start_time": "2024-01-01T00:00:00",
   "end_time": "2024-01-02T00:00:00",
   "satellites": [
@@ -30,7 +30,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 0.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -114,7 +115,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 120.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -198,7 +200,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 240.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -282,7 +285,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 24.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -366,7 +370,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 144.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -450,7 +455,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 264.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -534,7 +540,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 48.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -618,7 +625,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 168.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -702,7 +710,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 288.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -786,7 +795,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 72.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -870,7 +880,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 192.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -954,7 +965,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 312.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -1038,7 +1050,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 96.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -1122,7 +1135,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 216.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -1206,7 +1220,8 @@
         "arg_of_perigee_comment": "近地点幅角 90度",
         "mean_anomaly": 336.0,
         "mean_anomaly_comment": "平近点角 0度 - 历元时刻的轨道位置",
-        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）"
+        "altitude_comment": "轨道高度 645km（可选，如不提供则从半长轴计算）",
+        "altitude": 645000.0
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
@@ -1268,13 +1283,69 @@
   "targets": [
     {
       "id": "TARGET-001",
-      "name": "目标001",
+      "name": "北京-高频观测",
       "target_type": "point",
       "longitude": 116.4,
       "latitude": 39.9,
-      "priority": 8,
+      "priority": 9,
+      "required_observations": 6,
+      "resolution_required": 10.0,
+      "description": "首都重点区域，需要高频观测6次"
+    },
+    {
+      "id": "TARGET-002",
+      "name": "上海-不限频次",
+      "target_type": "point",
+      "longitude": 121.5,
+      "latitude": 31.2,
+      "priority": 7,
+      "required_observations": -1,
+      "resolution_required": 10.0,
+      "description": "上海区域，每次可见都进行观测"
+    },
+    {
+      "id": "TARGET-003",
+      "name": "广州-中频观测",
+      "target_type": "point",
+      "longitude": 113.3,
+      "latitude": 23.1,
+      "priority": 6,
+      "required_observations": 3,
+      "resolution_required": 10.0,
+      "description": "广州区域，需要3次观测"
+    },
+    {
+      "id": "TARGET-004",
+      "name": "成都-低频观测",
+      "target_type": "point",
+      "longitude": 104.1,
+      "latitude": 30.6,
+      "priority": 5,
       "required_observations": 1,
-      "resolution_required": 10.0
+      "resolution_required": 10.0,
+      "description": "成都区域，只需1次观测"
+    },
+    {
+      "id": "TARGET-005",
+      "name": "西安-不限频次",
+      "target_type": "point",
+      "longitude": 108.9,
+      "latitude": 34.3,
+      "priority": 6,
+      "required_observations": -1,
+      "resolution_required": 10.0,
+      "description": "西安区域，每次可见都进行观测"
+    },
+    {
+      "id": "TARGET-006",
+      "name": "武汉-高频观测",
+      "target_type": "point",
+      "longitude": 114.3,
+      "latitude": 30.6,
+      "priority": 7,
+      "required_observations": 5,
+      "resolution_required": 10.0,
+      "description": "武汉区域，需要5次观测"
     }
   ],
   "ground_stations": [
@@ -1330,6 +1401,334 @@
       "id": "GS-CHENGDU-CLI",
       "_template_source": "chengdu_gs",
       "_template_version": "1.0"
+    },
+    {
+      "_comment": "上海地面站 - 华东区域数据接收中心",
+      "template_id": "shanghai_gs",
+      "name": "上海地面站",
+      "longitude": 121.4737,
+      "longitude_comment": "经度 121.4737° - 上海市中心",
+      "latitude": 31.2304,
+      "latitude_comment": "纬度 31.2304° - 上海市中心",
+      "altitude": 0,
+      "altitude_comment": "海拔 0米 - 海平面基准",
+      "antennas": [
+        {
+          "id": "SH-ANT-01",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "SH-ANT-02",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "SH-ANT-03",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "SH-ANT-04",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        }
+      ],
+      "antennas_comment": "4副天线 - 支持多星同时接收",
+      "id": "GS-SHANGHAI",
+      "_template_source": "shanghai_gs",
+      "_template_version": "1.0"
+    },
+    {
+      "_comment": "广州地面站 - 华南区域数据接收中心",
+      "template_id": "guangzhou_gs",
+      "name": "广州地面站",
+      "longitude": 113.2644,
+      "longitude_comment": "经度 113.2644° - 广州市中心",
+      "latitude": 23.1291,
+      "latitude_comment": "纬度 23.1291° - 广州市中心",
+      "altitude": 0,
+      "altitude_comment": "海拔 0米 - 海平面基准",
+      "antennas": [
+        {
+          "id": "GZ-ANT-01",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "GZ-ANT-02",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "GZ-ANT-03",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "GZ-ANT-04",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        }
+      ],
+      "antennas_comment": "4副天线 - 支持多星同时接收",
+      "id": "GS-GUANGZHOU",
+      "_template_source": "guangzhou_gs",
+      "_template_version": "1.0"
+    },
+    {
+      "_comment": "西安地面站 - 西北区域数据接收中心",
+      "template_id": "xian_gs",
+      "name": "西安地面站",
+      "longitude": 108.9398,
+      "longitude_comment": "经度 108.9398° - 西安市中心",
+      "latitude": 34.3416,
+      "latitude_comment": "纬度 34.3416° - 西安市中心",
+      "altitude": 0,
+      "altitude_comment": "海拔 0米 - 海平面基准",
+      "antennas": [
+        {
+          "id": "XA-ANT-01",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "XA-ANT-02",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "XA-ANT-03",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "XA-ANT-04",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        }
+      ],
+      "antennas_comment": "4副天线 - 支持多星同时接收",
+      "id": "GS-XIAN",
+      "_template_source": "xian_gs",
+      "_template_version": "1.0"
+    },
+    {
+      "_comment": "三亚地面站 - 南海区域数据接收中心",
+      "template_id": "sanya_gs",
+      "name": "三亚地面站",
+      "longitude": 109.5082,
+      "longitude_comment": "经度 109.5082° - 三亚市中心",
+      "latitude": 18.2479,
+      "latitude_comment": "纬度 18.2479° - 三亚市中心",
+      "altitude": 0,
+      "altitude_comment": "海拔 0米 - 海平面基准",
+      "antennas": [
+        {
+          "id": "SY-ANT-01",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "SY-ANT-02",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "SY-ANT-03",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        },
+        {
+          "id": "SY-ANT-04",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 天线最低工作角度",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
+          "data_rate": 450.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+        }
+      ],
+      "antennas_comment": "4副天线 - 支持多星同时接收",
+      "id": "GS-SANYA",
+      "_template_source": "sanya_gs",
+      "_template_version": "1.0"
+    },
+    {
+      "_comment": "北京地面站配置 - 主要地面接收站，位于北京市区",
+      "id": "GS-BEIJING",
+      "name": "北京地面站",
+      "longitude": 116.4074,
+      "longitude_comment": "经度 116.4074度 - 北京所在经度",
+      "latitude": 39.9042,
+      "latitude_comment": "纬度 39.9042度 - 北京所在纬度",
+      "altitude": 0,
+      "altitude_comment": "海拔高度 0米 - 相对海平面",
+      "antennas": [
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "BJ-ANT-01",
+          "id_comment": "天线编号 - 北京站1号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+        },
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "BJ-ANT-02",
+          "id_comment": "天线编号 - 北京站2号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+        },
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "BJ-ANT-03",
+          "id_comment": "天线编号 - 北京站3号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+        },
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "BJ-ANT-04",
+          "id_comment": "天线编号 - 北京站4号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+        }
+      ],
+      "_template_source": "gs_beijing"
+    },
+    {
+      "_comment": "喀什地面站配置 - 西部地面接收站，位于新疆喀什地区",
+      "id": "GS-KASHI",
+      "name": "喀什地面站",
+      "longitude": 75.9896,
+      "longitude_comment": "经度 75.9896度 - 喀什所在经度",
+      "latitude": 39.4704,
+      "latitude_comment": "纬度 39.4704度 - 喀什所在纬度",
+      "altitude": 0,
+      "altitude_comment": "海拔高度 0米 - 相对海平面",
+      "antennas": [
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "KS-ANT-01",
+          "id_comment": "天线编号 - 喀什站1号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+        },
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "KS-ANT-02",
+          "id_comment": "天线编号 - 喀什站2号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+        },
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "KS-ANT-03",
+          "id_comment": "天线编号 - 喀什站3号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+        },
+        {
+          "_comment": "天线配置 - 负责接收卫星下传数据",
+          "id": "KS-ANT-04",
+          "id_comment": "天线编号 - 喀什站4号天线",
+          "elevation_min": 5.0,
+          "elevation_min_comment": "最小仰角 5度 - 低于此角度信号受遮挡",
+          "elevation_max": 90.0,
+          "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
+          "data_rate": 1500.0,
+          "data_rate_comment": "数据传输速率 300Mbps - 该天线的最大接收速率"
+        }
+      ],
+      "_template_source": "gs_kashi"
     }
   ]
 }

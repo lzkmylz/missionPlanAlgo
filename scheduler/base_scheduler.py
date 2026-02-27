@@ -11,6 +11,12 @@ from datetime import datetime, timedelta
 from enum import Enum
 import time
 
+from .frequency_utils import (
+    ObservationTask,
+    create_observation_tasks,
+    calculate_frequency_fitness,
+)
+
 
 class TaskFailureReason(Enum):
     """任务失败原因枚举 - Chapter 12.4完整实现"""
@@ -254,3 +260,18 @@ class BaseScheduler(ABC):
                     return False
 
         return True
+
+    def _create_frequency_aware_tasks(self):
+        """创建频次感知的观测任务列表"""
+        if not self.mission or not self.mission.targets:
+            return []
+        return create_observation_tasks(self.mission.targets)
+
+    def _calculate_frequency_fitness(self, target_obs_count, base_score=0.0):
+        """计算频次满足度的适应度分数"""
+        if not self.mission or not self.mission.targets:
+            return base_score
+        return calculate_frequency_fitness(
+            target_obs_count, self.mission.targets, base_score
+        )
+
