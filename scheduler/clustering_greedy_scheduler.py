@@ -101,16 +101,23 @@ class ClusteringGreedyScheduler(GreedyScheduler):
         Returns:
             ScheduleResult with all scheduled tasks and cluster information
         """
-        from scheduler.frequency_utils import ObservationTask
-
         self._start_timer()
         self._validate_initialization()
+        self._reset_scheduler_state()
 
-        # Reset tracking
+        scheduled_tasks = self._schedule_clusters()
+        scheduled_tasks.extend(self._schedule_remaining_individual_targets())
+
+        return self._build_schedule_result(scheduled_tasks)
+
+    def _reset_scheduler_state(self) -> None:
+        """Reset scheduler state before scheduling."""
         self.cluster_schedules = []
         self._scheduled_target_ids = set()
+        self._init_resource_tracking()
 
-        # Initialize resource tracking for each satellite
+    def _init_resource_tracking(self) -> None:
+        """Initialize resource tracking for each satellite."""
         self._sat_resource_usage = {
             sat.id: {
                 'power': sat.current_power if hasattr(sat, 'current_power') and sat.current_power > 0
@@ -122,77 +129,79 @@ class ClusteringGreedyScheduler(GreedyScheduler):
             for sat in self.mission.satellites
         }
 
+    def _schedule_clusters(self) -> List[ScheduledTask]:
+        """Schedule all clusters and return scheduled tasks."""
         scheduled_tasks: List[ScheduledTask] = []
-        unscheduled: Dict[str, Any] = {}
-
-        # Step 1: Cluster targets
         clusters = self._cluster_targets()
-
-        # Step 2: Sort clusters by priority density (higher first)
         sorted_clusters = self._sort_clusters_by_priority_density(clusters)
 
-        # Step 3: Schedule clusters
         for cluster in sorted_clusters:
             if self._are_all_targets_scheduled(cluster.targets):
                 continue
 
-            best_assignment = self._find_best_window_for_cluster(cluster)
-
-            if best_assignment:
-                sat_id, window, look_angle = best_assignment
-
-                # Create scheduled task for the cluster
-                scheduled_task = self._create_cluster_scheduled_task(
-                    cluster, sat_id, window, look_angle
-                )
-                scheduled_tasks.append(scheduled_task)
-
-                # Update resource usage
-                self._update_resource_usage_for_cluster(sat_id, cluster, scheduled_task)
-
-                # Track cluster schedule
-                priority_satisfied = self._count_high_priority_targets(cluster.targets)
-                cluster_schedule = ClusterSchedule(
-                    cluster_id=cluster.cluster_id,
-                    targets=cluster.targets.copy(),
-                    satellite_id=sat_id,
-                    imaging_start=scheduled_task.imaging_start,
-                    imaging_end=scheduled_task.imaging_end,
-                    look_angle=look_angle,
-                    priority_satisfied=priority_satisfied
-                )
-                self.cluster_schedules.append(cluster_schedule)
-
-                # Mark targets as scheduled
-                for target in cluster.targets:
-                    self._scheduled_target_ids.add(target.id)
-
+            task = self._try_schedule_cluster(cluster)
+            if task:
+                scheduled_tasks.append(task)
                 self._add_convergence_point(len(scheduled_tasks))
 
-        # Step 4: Fall back to individual scheduling for remaining targets
+        return scheduled_tasks
+
+    def _try_schedule_cluster(self, cluster: TargetCluster) -> Optional[ScheduledTask]:
+        """Try to schedule a single cluster."""
+        best_assignment = self._find_best_window_for_cluster(cluster)
+        if not best_assignment:
+            return None
+
+        sat_id, window, look_angle = best_assignment
+        scheduled_task = self._create_cluster_scheduled_task(
+            cluster, sat_id, window, look_angle
+        )
+
+        self._update_resource_usage_for_cluster(sat_id, cluster, scheduled_task)
+        self._track_cluster_schedule(cluster, sat_id, scheduled_task, look_angle)
+
+        for target in cluster.targets:
+            self._scheduled_target_ids.add(target.id)
+
+        return scheduled_task
+
+    def _track_cluster_schedule(
+        self,
+        cluster: TargetCluster,
+        sat_id: str,
+        scheduled_task: ScheduledTask,
+        look_angle: float
+    ) -> None:
+        """Track cluster schedule information."""
+        priority_satisfied = self._count_high_priority_targets(cluster.targets)
+        cluster_schedule = ClusterSchedule(
+            cluster_id=cluster.cluster_id,
+            targets=cluster.targets.copy(),
+            satellite_id=sat_id,
+            imaging_start=scheduled_task.imaging_start,
+            imaging_end=scheduled_task.imaging_end,
+            look_angle=look_angle,
+            priority_satisfied=priority_satisfied
+        )
+        self.cluster_schedules.append(cluster_schedule)
+
+    def _schedule_remaining_individual_targets(self) -> List[ScheduledTask]:
+        """Schedule remaining targets individually."""
         remaining_targets = self._get_unscheduled_targets()
         if remaining_targets:
-            individual_tasks = self._schedule_individual_targets(remaining_targets)
-            scheduled_tasks.extend(individual_tasks)
+            return self._schedule_individual_targets(remaining_targets)
+        return []
 
-        # Calculate makespan
-        makespan = self._calculate_makespan(scheduled_tasks)
-        computation_time = self._stop_timer()
-
-        # Build failure summary
-        failure_summary = self._build_failure_summary()
-
-        # Calculate target observation counts
-        target_obs_count = self._calculate_target_obs_count(scheduled_tasks)
-
+    def _build_schedule_result(self, scheduled_tasks: List[ScheduledTask]) -> ScheduleResult:
+        """Build the final schedule result."""
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
-            unscheduled_tasks=unscheduled,
-            makespan=makespan,
-            computation_time=computation_time,
+            unscheduled_tasks={},
+            makespan=self._calculate_makespan(scheduled_tasks),
+            computation_time=self._stop_timer(),
             iterations=self._iterations,
             convergence_curve=self._convergence_curve,
-            failure_summary=failure_summary
+            failure_summary=self._build_failure_summary()
         )
 
     def _cluster_targets(self) -> List[TargetCluster]:
@@ -242,63 +251,74 @@ class ClusteringGreedyScheduler(GreedyScheduler):
         best_assignment = None
         best_score = None
 
-        # Calculate cluster centroid
-        centroid = cluster.centroid
-
         for sat in self.mission.satellites:
-            # Check if satellite can perform imaging
             if not sat.capabilities.imaging_modes:
                 continue
 
-            # Get visibility windows for the cluster centroid
-            # We use the centroid as a representative point
             windows = self._get_windows_for_cluster(sat, cluster)
-
             if not windows:
                 continue
 
             for window in windows:
-                # Check if window is valid for all targets in cluster
-                window_start, window_end = self._extract_window_times(window)
-                if window_start is None or window_end is None:
+                result = self._evaluate_window_for_cluster(sat, cluster, window)
+                if result is None:
                     continue
 
-                # Check off-nadir constraint for the cluster
-                can_cover, look_angle = self._check_cluster_coverage(
-                    sat, cluster, window
-                )
-
-                if not can_cover:
-                    continue
-
-                # Check if look angle is within satellite's max off-nadir
-                if abs(look_angle) > sat.capabilities.max_off_nadir:
-                    continue
-
-                # Check resource constraints
-                imaging_mode = self._select_imaging_mode(sat, None)
-                if not self._check_cluster_resource_constraints(sat, cluster, imaging_mode):
-                    continue
-
-                # Check time conflicts
-                if self.consider_time_conflicts:
-                    imaging_duration = self._calculate_cluster_imaging_time(cluster, imaging_mode)
-                    actual_start, actual_end = self._calculate_task_time(
-                        sat.id, window_start, imaging_duration
-                    )
-                    if self._has_time_conflict(sat.id, actual_start, actual_end):
-                        continue
-
-                # Calculate score
-                score = self._calculate_cluster_assignment_score(
-                    sat, cluster, window, look_angle
-                )
-
+                score, look_angle = result
                 if best_score is None or score > best_score:
                     best_score = score
                     best_assignment = (sat.id, window, look_angle)
 
         return best_assignment
+
+    def _evaluate_window_for_cluster(
+        self,
+        sat,
+        cluster: TargetCluster,
+        window: VisibilityWindow
+    ) -> Optional[Tuple[float, float]]:
+        """Evaluate a window for cluster scheduling.
+
+        Args:
+            sat: Satellite
+            cluster: Target cluster
+            window: Visibility window
+
+        Returns:
+            Tuple of (score, look_angle) or None if window is not valid
+        """
+        window_start, window_end = self._extract_window_times(window)
+        if window_start is None or window_end is None:
+            return None
+
+        can_cover, look_angle = self._check_cluster_coverage(sat, cluster, window)
+        if not can_cover or abs(look_angle) > sat.capabilities.max_off_nadir:
+            return None
+
+        imaging_mode = self._select_imaging_mode(sat, None)
+        if not self._check_cluster_resource_constraints(sat, cluster, imaging_mode):
+            return None
+
+        if self.consider_time_conflicts:
+            if self._has_cluster_time_conflict(sat, cluster, window_start, imaging_mode):
+                return None
+
+        score = self._calculate_cluster_assignment_score(sat, cluster, window, look_angle)
+        return (score, look_angle)
+
+    def _has_cluster_time_conflict(
+        self,
+        sat,
+        cluster: TargetCluster,
+        window_start,
+        imaging_mode
+    ) -> bool:
+        """Check if scheduling cluster would cause time conflict."""
+        imaging_duration = self._calculate_cluster_imaging_time(cluster, imaging_mode)
+        actual_start, actual_end = self._calculate_task_time(
+            sat.id, window_start, imaging_duration
+        )
+        return self._has_time_conflict(sat.id, actual_start, actual_end)
 
     def _get_windows_for_cluster(
         self, sat, cluster: TargetCluster
@@ -547,47 +567,23 @@ class ClusteringGreedyScheduler(GreedyScheduler):
         Returns:
             ScheduledTask object
         """
-        window_start, window_end = self._extract_window_times(window)
-
-        # Get satellite
-        sat = None
-        for s in self.mission.satellites:
-            if s.id == sat_id:
-                sat = s
-                break
-
+        window_start, _ = self._extract_window_times(window)
+        sat = self._get_satellite_by_id(sat_id)
         imaging_mode = self._select_imaging_mode(sat, None) if sat else None
         imaging_duration = self._calculate_cluster_imaging_time(cluster, imaging_mode)
 
-        # Calculate actual timing
         actual_start, actual_end = self._calculate_task_time(
             sat_id, window_start, imaging_duration
         )
 
-        # Get current resource levels
         usage = self._sat_resource_usage.get(sat_id, {})
         power_before = usage.get('power', 0)
         storage_before = usage.get('storage', 0)
 
-        # Calculate resource consumption
-        power_consumed = 0.0
-        storage_used = 0.0
+        power_consumed, storage_used = self._calculate_cluster_resource_consumption(
+            sat, cluster, imaging_mode, imaging_duration
+        )
 
-        if sat:
-            if self.consider_power:
-                from payload.imaging_time_calculator import PowerProfile
-                power_profile = PowerProfile()
-                power_coefficient = power_profile.get_coefficient_for_mode(imaging_mode)
-                power_consumed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
-
-            if self.consider_storage:
-                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
-                for target in cluster.targets:
-                    storage_used += self._imaging_calculator.get_storage_consumption(
-                        target, imaging_mode, data_rate
-                    )
-
-        # Use first target ID as primary, but include all in context
         primary_target_id = cluster.targets[0].id if cluster.targets else "cluster"
 
         return ScheduledTask(
@@ -603,6 +599,46 @@ class ClusteringGreedyScheduler(GreedyScheduler):
             power_before=power_before,
             power_after=power_before - power_consumed
         )
+
+    def _get_satellite_by_id(self, sat_id: str) -> Optional[Any]:
+        """Get satellite by ID."""
+        for sat in self.mission.satellites:
+            if sat.id == sat_id:
+                return sat
+        return None
+
+    def _calculate_cluster_resource_consumption(
+        self,
+        sat,
+        cluster: TargetCluster,
+        imaging_mode,
+        imaging_duration: float
+    ) -> Tuple[float, float]:
+        """Calculate resource consumption for cluster imaging.
+
+        Returns:
+            Tuple of (power_consumed, storage_used)
+        """
+        power_consumed = 0.0
+        storage_used = 0.0
+
+        if not sat:
+            return (power_consumed, storage_used)
+
+        if self.consider_power:
+            from payload.imaging_time_calculator import PowerProfile
+            power_profile = PowerProfile()
+            power_coefficient = power_profile.get_coefficient_for_mode(imaging_mode)
+            power_consumed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
+
+        if self.consider_storage:
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            for target in cluster.targets:
+                storage_used += self._imaging_calculator.get_storage_consumption(
+                    target, imaging_mode, data_rate
+                )
+
+        return (power_consumed, storage_used)
 
     def _update_resource_usage_for_cluster(
         self, sat_id: str, cluster: TargetCluster, scheduled_task: ScheduledTask
@@ -681,12 +717,17 @@ class ClusteringGreedyScheduler(GreedyScheduler):
         """
         from scheduler.frequency_utils import ObservationTask
 
-        scheduled_tasks = []
+        observation_tasks = self._create_observation_tasks(targets)
+        observation_tasks = self._sort_tasks(observation_tasks)
 
-        # Create observation tasks for remaining targets
-        observation_tasks = []
-        for target in targets:
-            task = ObservationTask(
+        return self._schedule_observation_tasks(observation_tasks)
+
+    def _create_observation_tasks(self, targets: List[Target]) -> List:
+        """Create observation tasks from targets."""
+        from scheduler.frequency_utils import ObservationTask
+
+        return [
+            ObservationTask(
                 task_id=target.id,
                 target_id=target.id,
                 target_name=target.name,
@@ -701,35 +742,45 @@ class ClusteringGreedyScheduler(GreedyScheduler):
                 resolution_required=target.resolution_required,
                 data_size_gb=1.0
             )
-            observation_tasks.append(task)
+            for target in targets
+        ]
 
-        # Sort by priority
-        observation_tasks = self._sort_tasks(observation_tasks)
+    def _schedule_observation_tasks(self, observation_tasks: List) -> List[ScheduledTask]:
+        """Schedule observation tasks and return scheduled tasks."""
+        scheduled_tasks = []
 
-        # Schedule each task
         for task in observation_tasks:
-            best_assignment = self._find_best_assignment(task)
-
-            if best_assignment:
-                sat_id, window, imaging_mode = best_assignment
-
-                scheduled_task = self._create_scheduled_task(
-                    task, sat_id, window, imaging_mode
-                )
+            scheduled_task = self._try_schedule_observation_task(task)
+            if scheduled_task:
                 scheduled_tasks.append(scheduled_task)
-
-                self._update_resource_usage(sat_id, task, window, scheduled_task)
-                self._scheduled_target_ids.add(task.target_id)
                 self._add_convergence_point(len(scheduled_tasks))
             else:
-                reason = self._determine_failure_reason(task)
-                self._record_failure(
-                    task_id=task.task_id,
-                    reason=reason,
-                    detail=f"No feasible assignment found for task {task.task_id}"
-                )
+                self._record_task_failure(task)
 
         return scheduled_tasks
+
+    def _try_schedule_observation_task(self, task) -> Optional[ScheduledTask]:
+        """Try to schedule a single observation task."""
+        best_assignment = self._find_best_assignment(task)
+        if not best_assignment:
+            return None
+
+        sat_id, window, imaging_mode = best_assignment
+        scheduled_task = self._create_scheduled_task(task, sat_id, window, imaging_mode)
+
+        self._update_resource_usage(sat_id, task, window, scheduled_task)
+        self._scheduled_target_ids.add(task.target_id)
+
+        return scheduled_task
+
+    def _record_task_failure(self, task) -> None:
+        """Record failure for a task that couldn't be scheduled."""
+        reason = self._determine_failure_reason(task)
+        self._record_failure(
+            task_id=task.task_id,
+            reason=reason,
+            detail=f"No feasible assignment found for task {task.task_id}"
+        )
 
     def _count_high_priority_targets(self, targets: List[Target]) -> int:
         """
@@ -754,51 +805,53 @@ class ClusteringGreedyScheduler(GreedyScheduler):
                 - avg_targets_per_task: 平均每任务目标数
         """
         if not self.mission or not self.mission.targets:
-            return {
-                'task_reduction_ratio': 0.0,
-                'high_priority_coverage': 0.0,
-                'avg_targets_per_task': 0.0
-            }
+            return self._empty_efficiency_metrics()
 
         total_targets = len(self.mission.targets)
         total_tasks = len(self.cluster_schedules)
+        clustered_targets = self._get_clustered_target_ids()
 
-        # Count targets covered by clusters
+        return {
+            'task_reduction_ratio': self._calculate_task_reduction_ratio(total_targets, total_tasks),
+            'high_priority_coverage': self._calculate_high_priority_coverage(clustered_targets),
+            'avg_targets_per_task': self._calculate_avg_targets_per_task(total_tasks)
+        }
+
+    def _empty_efficiency_metrics(self) -> Dict[str, float]:
+        """Return empty efficiency metrics."""
+        return {
+            'task_reduction_ratio': 0.0,
+            'high_priority_coverage': 0.0,
+            'avg_targets_per_task': 0.0
+        }
+
+    def _get_clustered_target_ids(self) -> set:
+        """Get IDs of all targets covered by clusters."""
         clustered_targets = set()
         for cs in self.cluster_schedules:
             for target in cs.targets:
                 clustered_targets.add(target.id)
+        return clustered_targets
 
-        # Task reduction ratio
-        # If we have N targets and M cluster tasks, reduction = 1 - M/N
+    def _calculate_task_reduction_ratio(self, total_targets: int, total_tasks: int) -> float:
+        """Calculate task reduction ratio."""
         if total_targets > 0:
-            task_reduction_ratio = 1.0 - (total_tasks / total_targets)
-        else:
-            task_reduction_ratio = 0.0
+            return max(0.0, 1.0 - (total_tasks / total_targets))
+        return 0.0
 
-        # High priority coverage
-        high_priority_targets = [
-            t for t in self.mission.targets if t.priority >= 8
-        ]
-        covered_high_priority = [
-            t for t in high_priority_targets
-            if t.id in clustered_targets
-        ]
+    def _calculate_high_priority_coverage(self, clustered_targets: set) -> float:
+        """Calculate high priority target coverage ratio."""
+        high_priority_targets = [t for t in self.mission.targets if t.priority >= 8]
 
-        if high_priority_targets:
-            high_priority_coverage = len(covered_high_priority) / len(high_priority_targets)
-        else:
-            high_priority_coverage = 1.0  # No high priority targets = full coverage
+        if not high_priority_targets:
+            return 1.0
 
-        # Average targets per task
+        covered_count = sum(1 for t in high_priority_targets if t.id in clustered_targets)
+        return covered_count / len(high_priority_targets)
+
+    def _calculate_avg_targets_per_task(self, total_tasks: int) -> float:
+        """Calculate average targets per task."""
         if total_tasks > 0:
             total_clustered = sum(len(cs.targets) for cs in self.cluster_schedules)
-            avg_targets_per_task = total_clustered / total_tasks
-        else:
-            avg_targets_per_task = 0.0
-
-        return {
-            'task_reduction_ratio': max(0.0, task_reduction_ratio),
-            'high_priority_coverage': high_priority_coverage,
-            'avg_targets_per_task': avg_targets_per_task
-        }
+            return total_clustered / total_tasks
+        return 0.0

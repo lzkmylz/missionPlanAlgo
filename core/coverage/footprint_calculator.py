@@ -177,61 +177,98 @@ class FootprintCalculator:
             return True, 0.0
 
         if len(targets) == 1:
-            # 单目标：检查是否在最大侧摆角内
-            angle = self.calculate_off_nadir_angle(
-                satellite_position,
-                targets[0].get_center()
-            )
-            can_cover = abs(angle) <= max_off_nadir
-            return can_cover, angle
+            return self._check_single_target(targets[0], satellite_position, max_off_nadir)
 
-        # 多目标：计算包含所有目标的最优观测角度
+        return self._check_multiple_targets(
+            targets, satellite_position, max_off_nadir, swath_width_km
+        )
+
+    def _check_single_target(
+        self,
+        target: Target,
+        satellite_position: Tuple[float, float, float],
+        max_off_nadir: float
+    ) -> Tuple[bool, float]:
+        """Check if a single target is within coverage."""
+        angle = self.calculate_off_nadir_angle(
+            satellite_position,
+            target.get_center()
+        )
+        can_cover = abs(angle) <= max_off_nadir
+        return can_cover, angle
+
+    def _check_multiple_targets(
+        self,
+        targets: List[Target],
+        satellite_position: Tuple[float, float, float],
+        max_off_nadir: float,
+        swath_width_km: float
+    ) -> Tuple[bool, float]:
+        """Check if multiple targets can be covered together."""
         target_centers = [t.get_center() for t in targets]
+        center_lon, center_lat = self._calculate_target_centroid(target_centers)
 
-        # 计算目标分布范围
-        lons = [c[0] for c in target_centers]
-        lats = [c[1] for c in target_centers]
-
-        # 计算目标跨度
-        lon_span = max(lons) - min(lons)
-        lat_span = max(lats) - min(lats)
-
-        # 将跨度转换为地面距离（公里）
-        avg_lat = sum(lats) / len(lats)
-        lon_distance = self._lon_to_km(lon_span, avg_lat)
-        lat_distance = self._lat_to_km(lat_span)
-
-        # 计算目标分布的最大距离
-        max_target_distance = math.sqrt(lon_distance**2 + lat_distance**2)
-
-        # 如果目标分布超过幅宽，无法同时覆盖
-        if max_target_distance > swath_width_km:
+        if not self._are_targets_within_swath(target_centers, center_lon, center_lat, swath_width_km):
             return False, 0.0
-
-        # 计算覆盖所有目标所需的中心角度
-        # 使用目标中心作为观测中心
-        center_lon = sum(lons) / len(lons)
-        center_lat = sum(lats) / len(lats)
 
         required_angle = self.calculate_off_nadir_angle(
             satellite_position,
             (center_lon, center_lat)
         )
 
-        # 检查是否超过最大侧摆角
         if abs(required_angle) > max_off_nadir:
             return False, required_angle
 
-        # 验证所有目标是否都在幅宽内
+        if not self._all_targets_in_swath(target_centers, center_lon, center_lat, swath_width_km):
+            return False, required_angle
+
+        return True, required_angle
+
+    def _calculate_target_centroid(
+        self,
+        target_centers: List[Tuple[float, float]]
+    ) -> Tuple[float, float]:
+        """Calculate the centroid of target centers."""
+        lons = [c[0] for c in target_centers]
+        lats = [c[1] for c in target_centers]
+        return sum(lons) / len(lons), sum(lats) / len(lats)
+
+    def _are_targets_within_swath(
+        self,
+        target_centers: List[Tuple[float, float]],
+        center_lon: float,
+        center_lat: float,
+        swath_width_km: float
+    ) -> bool:
+        """Check if target span is within swath width."""
+        lons = [c[0] for c in target_centers]
+        lats = [c[1] for c in target_centers]
+
+        lon_span = max(lons) - min(lons)
+        lat_span = max(lats) - min(lats)
+
+        lon_distance = self._lon_to_km(lon_span, center_lat)
+        lat_distance = self._lat_to_km(lat_span)
+
+        max_target_distance = math.sqrt(lon_distance**2 + lat_distance**2)
+        return max_target_distance <= swath_width_km
+
+    def _all_targets_in_swath(
+        self,
+        target_centers: List[Tuple[float, float]],
+        center_lon: float,
+        center_lat: float,
+        swath_width_km: float
+    ) -> bool:
+        """Verify all targets are within half swath from center."""
         half_swath = swath_width_km / 2
         for center in target_centers:
             distance = self._calculate_ground_distance_between(
                 (center_lon, center_lat), center
             )
             if distance > half_swath:
-                return False, required_angle
-
-        return True, required_angle
+                return False
+        return True
 
     def _calculate_footprint_center(
         self,
