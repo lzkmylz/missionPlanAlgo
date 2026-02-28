@@ -326,3 +326,39 @@ class ImagingTimeCalculator:
         coefficient = profile.get_coefficient_for_mode(mode)
 
         return power_capacity * coefficient * duration_hours
+
+    def get_storage_consumption(self,
+                                 target: Target,
+                                 mode: ImagingMode,
+                                 data_rate_mbps: float = 300.0) -> float:
+        """
+        计算成像固存消耗
+
+        固存消耗根据成像时长和数据率动态计算：
+        storage_gb = data_rate_mbps * duration_sec / 8 / 1024
+
+        Args:
+            target: 目标对象
+            mode: 成像模式
+            data_rate_mbps: 数据率（Mbps），默认300
+
+        Returns:
+            float: 固存消耗（GB）
+        """
+        duration_sec = self.calculate(target, mode)
+
+        # 根据成像模式调整数据量（高分辨率模式产生更多数据）
+        mode_multipliers = {
+            ImagingMode.FRAME: 0.8,              # 框幅模式数据量较小
+            ImagingMode.PUSH_BROOM: 1.0,         # 推扫模式基准
+            ImagingMode.STRIPMAP: 1.2,           # 条带模式数据量增加20%
+            ImagingMode.SLIDING_SPOTLIGHT: 1.5,  # 滑动聚束增加50%
+            ImagingMode.SPOTLIGHT: 2.0,          # 聚束模式增加100%
+        }
+
+        multiplier = mode_multipliers.get(mode, 1.0)
+
+        # 计算固存消耗: Mbps * sec / 8 = MByte, / 1024 = GByte
+        storage_gb = (data_rate_mbps * duration_sec * multiplier) / 8 / 1024
+
+        return storage_gb

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
+from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 
 
 @dataclass
@@ -48,6 +49,8 @@ class GAScheduler(BaseScheduler):
                 - elitism: 精英保留数量（默认5）
                 - tournament_size: 锦标赛选择大小（默认3）
                 - random_seed: 随机种子（可选）
+                - consider_power: 是否考虑电量约束（默认True）
+                - consider_storage: 是否考虑存储约束（默认True）
         """
         super().__init__("GA", config)
         config = config or {}
@@ -68,6 +71,10 @@ class GAScheduler(BaseScheduler):
         self.elitism = config.get('elitism', 5)
         self.tournament_size = config.get('tournament_size', 3)
 
+        # 资源约束配置
+        self.consider_power = config.get('consider_power', True)
+        self.consider_storage = config.get('consider_storage', True)
+
         # 设置随机种子
         self.random_seed = config.get('random_seed')
         if self.random_seed is not None:
@@ -78,6 +85,14 @@ class GAScheduler(BaseScheduler):
         self.satellites: List[Any] = []
         self.task_count = 0
         self.sat_count = 0
+
+        # 初始化成像时间计算器和功率配置文件
+        self._imaging_calculator = ImagingTimeCalculator(
+            min_duration=config.get('min_imaging_duration', 60),
+            max_duration=config.get('max_imaging_duration', 1800),
+            default_duration=config.get('default_imaging_duration', 300)
+        )
+        self._power_profile = PowerProfile(config.get('power_coefficients'))
 
     def _validate_positive_int(self, value: int, name: str) -> int:
         """验证正整数参数"""
@@ -101,6 +116,8 @@ class GAScheduler(BaseScheduler):
             'elitism': self.elitism,
             'tournament_size': self.tournament_size,
             'random_seed': self.random_seed,
+            'consider_power': self.consider_power,
+            'consider_storage': self.consider_storage,
         }
 
     def schedule(self) -> ScheduleResult:
@@ -206,7 +223,7 @@ class GAScheduler(BaseScheduler):
         适应度函数：
         - 基础：完成的任务数量 × 10
         - 奖励：窗口质量、资源均衡
-        - 惩罚：时间冲突、资源超限
+        - 惩罚：时间冲突、资源约束违反
         - 频次满足度奖励
         """
         score = 0.0
@@ -214,6 +231,14 @@ class GAScheduler(BaseScheduler):
         target_obs_count: Dict[str, int] = {}  # 记录每个目标的实际观测次数
         sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
             i: [] for i in range(self.sat_count)
+        }
+        # 跟踪资源使用情况
+        sat_resources: Dict[int, Dict[str, float]] = {
+            i: {
+                'power': sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0,
+                'storage': 0.0
+            }
+            for i, sat in enumerate(self.satellites)
         }
 
         for task_idx, sat_idx in enumerate(individual.chromosome):
@@ -235,15 +260,17 @@ class GAScheduler(BaseScheduler):
             if not windows:
                 continue
 
-            # 检查时间冲突
+            # 检查时间冲突和资源约束
             feasible_window = None
             for window in windows:
                 start_time = window.start_time
                 end_time = window.end_time
 
                 if self._is_time_feasible(sat_idx, start_time, end_time, sat_task_times):
-                    feasible_window = window
-                    break
+                    # 检查资源约束
+                    if self._check_resource_constraints(sat_idx, sat, task, sat_resources):
+                        feasible_window = window
+                        break
 
             if feasible_window:
                 scheduled_count += 1
@@ -256,6 +283,9 @@ class GAScheduler(BaseScheduler):
                 sat_task_times[sat_idx].append(
                     (feasible_window.start_time, feasible_window.end_time)
                 )
+
+                # 更新资源使用
+                self._update_resource_usage(sat_idx, sat, task, sat_resources)
 
                 # 记录目标观测次数
                 target_obs_count[task.target_id] = target_obs_count.get(task.target_id, 0) + 1
@@ -272,6 +302,68 @@ class GAScheduler(BaseScheduler):
         score = self._calculate_frequency_fitness(target_obs_count, score)
 
         return score
+
+    def _check_resource_constraints(
+        self, sat_idx: int, sat: Any, task: Any, sat_resources: Dict[int, Dict[str, float]]
+    ) -> bool:
+        """检查资源约束"""
+        resources = sat_resources[sat_idx]
+
+        # 电量约束
+        if self.consider_power:
+            imaging_mode = self._select_imaging_mode(sat)
+            duration = self._imaging_calculator.calculate(task, imaging_mode)
+            power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
+            power_capacity = sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0
+            power_needed = power_capacity * power_coefficient * (duration / 3600)
+            if resources['power'] < power_needed:
+                return False
+
+        # 存储约束 - 动态计算基于成像时长
+        if self.consider_storage:
+            imaging_mode = self._select_imaging_mode(sat)
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            storage_needed = self._imaging_calculator.get_storage_consumption(
+                task, imaging_mode, data_rate
+            )
+            storage_capacity = sat.capabilities.storage_capacity if hasattr(sat.capabilities, 'storage_capacity') else 128.0
+            if resources['storage'] + storage_needed > storage_capacity:
+                return False
+
+        return True
+
+    def _update_resource_usage(
+        self, sat_idx: int, sat: Any, task: Any, sat_resources: Dict[int, Dict[str, float]]
+    ) -> None:
+        """更新资源使用"""
+        resources = sat_resources[sat_idx]
+
+        # 更新电量
+        if self.consider_power:
+            imaging_mode = self._select_imaging_mode(sat)
+            duration = self._imaging_calculator.calculate(task, imaging_mode)
+            power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
+            power_capacity = sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0
+            power_consumed = power_capacity * power_coefficient * (duration / 3600)
+            resources['power'] -= power_consumed
+
+        # 更新存储 - 动态计算基于成像时长
+        if self.consider_storage:
+            imaging_mode = self._select_imaging_mode(sat)
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            storage_used = self._imaging_calculator.get_storage_consumption(
+                task, imaging_mode, data_rate
+            )
+            resources['storage'] += storage_used
+
+    def _select_imaging_mode(self, sat: Any):
+        """选择成像模式"""
+        from core.models import ImagingMode
+        modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
+        if not modes:
+            return ImagingMode.PUSH_BROOM
+        mode = modes[0]
+        return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
 
     def _is_time_feasible(
         self,
@@ -368,6 +460,14 @@ class GAScheduler(BaseScheduler):
         sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
             i: [] for i in range(self.sat_count)
         }
+        # 跟踪资源使用情况
+        sat_resources: Dict[int, Dict[str, float]] = {
+            i: {
+                'power': sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0,
+                'storage': 0.0
+            }
+            for i, sat in enumerate(self.satellites)
+        }
 
         for task_idx, sat_idx in enumerate(individual.chromosome):
             if task_idx >= len(self.tasks):
@@ -405,30 +505,55 @@ class GAScheduler(BaseScheduler):
                 unscheduled[task_id] = self._failure_log[-1]
                 continue
 
-            # 查找可行窗口
+            # 查找可行窗口（考虑时间和资源约束）
             feasible_window = None
             for window in windows:
                 if self._is_time_feasible(sat_idx, window.start_time, window.end_time, sat_task_times):
-                    feasible_window = window
-                    break
+                    if self._check_resource_constraints(sat_idx, sat, task, sat_resources):
+                        feasible_window = window
+                        break
 
             if feasible_window:
+                # 计算资源消耗
+                imaging_mode = self._select_imaging_mode(sat)
+
+                power_before = sat_resources[sat_idx]['power']
+                storage_before = sat_resources[sat_idx]['storage']
+
+                # 更新资源使用
+                self._update_resource_usage(sat_idx, sat, task, sat_resources)
+
                 scheduled_task = ScheduledTask(
                     task_id=task_id,
                     satellite_id=sat.id,
                     target_id=target_id,
                     imaging_start=feasible_window.start_time,
                     imaging_end=feasible_window.end_time,
-                    imaging_mode="push_broom"
+                    imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
+                    power_before=power_before,
+                    power_after=sat_resources[sat_idx]['power'],
+                    storage_before=storage_before,
+                    storage_after=sat_resources[sat_idx]['storage']
                 )
                 scheduled_tasks.append(scheduled_task)
                 sat_task_times[sat_idx].append(
                     (feasible_window.start_time, feasible_window.end_time)
                 )
             else:
+                # 确定失败原因
+                has_window = any(
+                    self._is_time_feasible(sat_idx, w.start_time, w.end_time, sat_task_times)
+                    for w in windows
+                )
+                if has_window:
+                    # 有窗口但无法调度，可能是资源约束
+                    reason = TaskFailureReason.POWER_CONSTRAINT
+                else:
+                    reason = TaskFailureReason.TIME_CONFLICT
+
                 self._record_failure(
                     task_id=task_id,
-                    reason=TaskFailureReason.TIME_CONFLICT,
+                    reason=reason,
                     detail=f"No feasible time window for satellite {sat.id}"
                 )
                 unscheduled[task_id] = self._failure_log[-1]

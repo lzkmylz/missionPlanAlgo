@@ -82,6 +82,12 @@ class ScheduledTask:
     storage_after: float = 0.0
     power_before: float = 0.0
     power_after: float = 0.0
+    # 地面站数传相关字段
+    ground_station_id: Optional[str] = None
+    antenna_id: Optional[str] = None  # 具体使用的天线
+    downlink_start: Optional[datetime] = None
+    downlink_end: Optional[datetime] = None
+    data_transferred: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -92,6 +98,11 @@ class ScheduledTask:
             'imaging_end': self.imaging_end.isoformat() if self.imaging_end else None,
             'imaging_mode': self.imaging_mode,
             'slew_angle': self.slew_angle,
+            'ground_station_id': self.ground_station_id,
+            'antenna_id': self.antenna_id,
+            'downlink_start': self.downlink_start.isoformat() if self.downlink_start else None,
+            'downlink_end': self.downlink_end.isoformat() if self.downlink_end else None,
+            'data_transferred': self.data_transferred,
         }
 
 
