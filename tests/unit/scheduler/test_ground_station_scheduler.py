@@ -732,6 +732,196 @@ class TestGroundStationSchedulerIntegration:
         assert "SAT-02" in sat_ids
 
 
+class TestDataRateValidation:
+    """测试数据速率验证 - Issue 1"""
+
+    @pytest.fixture
+    def ground_station_pool(self):
+        """创建测试用的地面站池"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[
+                Antenna(id="ANT-01", data_rate=300.0),
+                Antenna(id="ANT-02", data_rate=0.0),  # 零数据率天线
+                Antenna(id="ANT-03", data_rate=-100.0),  # 负数据率天线
+            ]
+        )
+        return GroundStationPool([gs])
+
+    @pytest.fixture
+    def scheduler(self, ground_station_pool):
+        """创建测试用的调度器"""
+        return GroundStationScheduler(
+            ground_station_pool=ground_station_pool,
+            data_rate_mbps=500.0  # 默认数据率
+        )
+
+    def test_find_available_antenna_with_positive_data_rate(self, scheduler):
+        """测试正常正数据率天线返回自身数据率"""
+        now = datetime.now()
+        time_window = (now, now + timedelta(minutes=10))
+
+        result = scheduler.find_available_antenna("GS-01", time_window)
+
+        assert result is not None
+        antenna_id, data_rate = result
+        assert antenna_id == "ANT-01"
+        assert data_rate == 300.0  # 使用天线自身的数据率
+
+    def test_find_available_antenna_with_zero_data_rate_uses_default(self, scheduler):
+        """测试零数据率天线应回退到调度器默认值"""
+        now = datetime.now()
+        time_window = (now, now + timedelta(minutes=10))
+
+        # 先分配ANT-01，使其不可用
+        scheduler.allocate_downlink_window("SAT-01", "GS-01", "ANT-01", time_window)
+
+        # 现在应该找到ANT-02，但其数据率为0，应回退到默认值500.0
+        result = scheduler.find_available_antenna("GS-01", time_window)
+
+        assert result is not None
+        antenna_id, data_rate = result
+        assert antenna_id == "ANT-02"
+        assert data_rate == 500.0  # 应使用调度器默认值，而不是0
+
+    def test_find_available_antenna_with_negative_data_rate_uses_default(self, scheduler):
+        """测试负数据率天线应回退到调度器默认值"""
+        now = datetime.now()
+        time_window = (now, now + timedelta(minutes=10))
+
+        # 先分配ANT-01和ANT-02，使它们不可用
+        scheduler.allocate_downlink_window("SAT-01", "GS-01", "ANT-01", time_window)
+        scheduler.allocate_downlink_window("SAT-02", "GS-01", "ANT-02", time_window)
+
+        # 现在应该找到ANT-03，但其数据率为-100，应回退到默认值500.0
+        result = scheduler.find_available_antenna("GS-01", time_window)
+
+        assert result is not None
+        antenna_id, data_rate = result
+        assert antenna_id == "ANT-03"
+        assert data_rate == 500.0  # 应使用调度器默认值，而不是-100
+
+
+class TestDataTransferredTracking:
+    """测试数据传输量跟踪 - Issue 2"""
+
+    @pytest.fixture
+    def ground_station_pool(self):
+        """创建测试用的地面站池"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[Antenna(id="ANT-01", data_rate=300.0)]
+        )
+        return GroundStationPool([gs])
+
+    @pytest.fixture
+    def scheduler(self, ground_station_pool):
+        """创建测试用的调度器"""
+        return GroundStationScheduler(
+            ground_station_pool=ground_station_pool,
+            data_rate_mbps=300.0
+        )
+
+    def test_get_antenna_utilization_tracks_data_transferred(self, scheduler):
+        """测试get_antenna_utilization应返回实际传输数据量"""
+        base_time = datetime(2026, 2, 28, 12, 0, 0)
+
+        # 创建并分配多个数传任务
+        downlink_tasks = [
+            DownlinkTask(
+                task_id="DL-001",
+                satellite_id="SAT-01",
+                ground_station_id="GS-01",
+                start_time=base_time,
+                end_time=base_time + timedelta(minutes=10),
+                data_size_gb=15.0,
+                antenna_id="ANT-01",
+                related_imaging_task_id="IMG-001"
+            ),
+            DownlinkTask(
+                task_id="DL-002",
+                satellite_id="SAT-01",
+                ground_station_id="GS-01",
+                start_time=base_time + timedelta(minutes=20),
+                end_time=base_time + timedelta(minutes=30),
+                data_size_gb=25.0,
+                antenna_id="ANT-01",
+                related_imaging_task_id="IMG-002"
+            ),
+        ]
+
+        # 分配这些任务
+        for task in downlink_tasks:
+            scheduler.allocate_downlink_window(
+                task.satellite_id,
+                task.ground_station_id,
+                task.antenna_id,
+                (task.start_time, task.end_time),
+                data_size_gb=task.data_size_gb
+            )
+
+        # 获取利用率统计
+        utilization = scheduler.get_antenna_utilization("GS-01", "ANT-01")
+
+        # 验证总传输数据量
+        assert utilization['total_data_transferred'] == 40.0  # 15 + 25 = 40 GB
+
+    def test_get_antenna_utilization_with_time_range_filters_data(self, scheduler):
+        """测试带时间范围的利用率统计应正确过滤数据"""
+        base_time = datetime(2026, 2, 28, 12, 0, 0)
+
+        # 创建并分配多个数传任务（不同时间段）
+        downlink_tasks = [
+            DownlinkTask(
+                task_id="DL-001",
+                satellite_id="SAT-01",
+                ground_station_id="GS-01",
+                start_time=base_time,
+                end_time=base_time + timedelta(minutes=10),
+                data_size_gb=10.0,
+                antenna_id="ANT-01",
+            ),
+            DownlinkTask(
+                task_id="DL-002",
+                satellite_id="SAT-01",
+                ground_station_id="GS-01",
+                start_time=base_time + timedelta(minutes=30),
+                end_time=base_time + timedelta(minutes=40),
+                data_size_gb=20.0,
+                antenna_id="ANT-01",
+            ),
+        ]
+
+        # 分配这些任务
+        for task in downlink_tasks:
+            scheduler.allocate_downlink_window(
+                task.satellite_id,
+                task.ground_station_id,
+                task.antenna_id,
+                (task.start_time, task.end_time),
+                data_size_gb=task.data_size_gb
+            )
+
+        # 获取特定时间范围的利用率统计
+        time_range = (base_time, base_time + timedelta(minutes=20))
+        utilization = scheduler.get_antenna_utilization("GS-01", "ANT-01", time_range)
+
+        # 只有第一个任务在时间范围内
+        assert utilization['total_data_transferred'] == 10.0
+
+    def test_get_antenna_utilization_no_allocations(self, scheduler):
+        """测试无分配记录时的利用率统计"""
+        utilization = scheduler.get_antenna_utilization("GS-01", "ANT-01")
+
+        assert utilization['total_data_transferred'] == 0.0
+
+
 class TestEdgeCases:
     """测试边界情况"""
 
@@ -787,3 +977,149 @@ class TestEdgeCases:
         # 应该优雅处理 None 输入
         result = scheduler.plan_downlink_for_task(None, (datetime.now(), datetime.now()))
         assert result is None
+
+    def test_find_available_antenna_invalid_station(self):
+        """测试查找不存在的地面站"""
+        scheduler = GroundStationScheduler(
+            ground_station_pool=GroundStationPool([]),
+            data_rate_mbps=300.0
+        )
+
+        now = datetime.now()
+        result = scheduler.find_available_antenna("NON-EXISTENT", (now, now + timedelta(minutes=10)))
+        assert result is None
+
+    def test_get_antenna_utilization_invalid_key(self):
+        """测试获取不存在的天线利用率"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[Antenna(id="ANT-01", data_rate=300.0)]
+        )
+        scheduler = GroundStationScheduler(
+            ground_station_pool=GroundStationPool([gs]),
+            data_rate_mbps=300.0
+        )
+
+        # 查询不存在的天线
+        result = scheduler.get_antenna_utilization("GS-01", "NON-EXISTENT")
+        assert result['total_tasks'] == 0
+        assert result['total_data_transferred'] == 0.0
+
+    def test_get_antenna_data_rate_fallback(self):
+        """测试获取天线数据率回退到默认值"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[Antenna(id="ANT-01", data_rate=300.0)]
+        )
+        scheduler = GroundStationScheduler(
+            ground_station_pool=GroundStationPool([gs]),
+            data_rate_mbps=500.0
+        )
+
+        # 获取存在的天线数据率
+        rate = scheduler.get_antenna_data_rate("GS-01", "ANT-01")
+        assert rate == 300.0
+
+        # 获取不存在的天线应回退到默认值
+        rate = scheduler.get_antenna_data_rate("GS-01", "NON-EXISTENT")
+        assert rate == 500.0
+
+        # 获取不存在的地面站应回退到默认值
+        rate = scheduler.get_antenna_data_rate("NON-EXISTENT", "ANT-01")
+        assert rate == 500.0
+
+    def test_get_total_available_antennas(self):
+        """测试获取地面站总天线数"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[
+                Antenna(id="ANT-01", data_rate=300.0),
+                Antenna(id="ANT-02", data_rate=300.0),
+            ]
+        )
+        scheduler = GroundStationScheduler(
+            ground_station_pool=GroundStationPool([gs]),
+            data_rate_mbps=300.0
+        )
+
+        assert scheduler.get_total_available_antennas("GS-01") == 2
+        assert scheduler.get_total_available_antennas("NON-EXISTENT") == 0
+
+    def test_storage_state_usage_ratio_zero_capacity(self):
+        """测试固存使用率在容量为0时"""
+        state = StorageState(capacity_gb=0.0, current_gb=0.0)
+        assert state.get_usage_ratio() == 0.0
+
+    def test_get_all_antennas_utilization_report(self):
+        """测试获取所有天线利用率报告"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[
+                Antenna(id="ANT-01", data_rate=300.0),
+                Antenna(id="ANT-02", data_rate=300.0),
+            ]
+        )
+        scheduler = GroundStationScheduler(
+            ground_station_pool=GroundStationPool([gs]),
+            data_rate_mbps=300.0
+        )
+
+        # 分配一些任务
+        now = datetime.now()
+        scheduler.allocate_downlink_window(
+            "SAT-01", "GS-01", "ANT-01",
+            (now, now + timedelta(minutes=10)),
+            data_size_gb=15.0
+        )
+
+        report = scheduler.get_all_antennas_utilization_report()
+        assert "GS-01" in report
+        assert "ANT-01" in report["GS-01"]
+        assert report["GS-01"]["ANT-01"]["total_data_transferred"] == 15.0
+
+    def test_get_ground_station_summary(self):
+        """测试获取地面站摘要"""
+        gs = GroundStation(
+            id="GS-01",
+            name="Test Station",
+            longitude=116.4,
+            latitude=39.9,
+            antennas=[
+                Antenna(id="ANT-01", data_rate=300.0),
+                Antenna(id="ANT-02", data_rate=300.0),
+            ]
+        )
+        scheduler = GroundStationScheduler(
+            ground_station_pool=GroundStationPool([gs]),
+            data_rate_mbps=300.0
+        )
+
+        # 分配一些任务
+        now = datetime.now()
+        scheduler.allocate_downlink_window(
+            "SAT-01", "GS-01", "ANT-01",
+            (now, now + timedelta(minutes=10)),
+            data_size_gb=15.0
+        )
+
+        summary = scheduler.get_ground_station_summary("GS-01")
+        assert summary['total_antennas'] == 2
+        assert summary['active_antennas'] == 1
+        assert summary['total_tasks'] == 1
+
+        # 测试不存在的地面站
+        summary = scheduler.get_ground_station_summary("NON-EXISTENT")
+        assert summary['total_antennas'] == 0
+        assert summary['total_tasks'] == 0
