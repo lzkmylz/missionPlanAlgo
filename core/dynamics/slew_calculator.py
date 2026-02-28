@@ -10,7 +10,7 @@
 """
 
 from dataclasses import dataclass
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import math
 
 from core.models.target import Target, TargetType
@@ -103,7 +103,28 @@ class SlewCalculator:
         Raises:
             ValueError: 如果输入参数无效
         """
-        # 验证输入
+        self._validate_slew_inputs(satellite_position, target1_position, target2_position)
+
+        total_angle = self._calculate_total_slew_angle(
+            satellite_position, target1_position, target2_position
+        )
+        roll_delta, pitch_delta = self._calculate_angle_components(
+            target1_position, target2_position, total_angle
+        )
+
+        return (roll_delta, pitch_delta, total_angle)
+
+    def _validate_slew_inputs(
+        self,
+        satellite_position: Tuple[float, float, float],
+        target1_position: Tuple[float, float],
+        target2_position: Tuple[float, float]
+    ) -> None:
+        """Validate inputs for slew angle calculation.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
         if len(satellite_position) != 3:
             raise ValueError(f"satellite_position must have 3 components, got {len(satellite_position)}")
         if len(target1_position) != 2:
@@ -111,13 +132,27 @@ class SlewCalculator:
         if len(target2_position) != 2:
             raise ValueError(f"target2_position must have 2 components, got {len(target2_position)}")
 
+    def _calculate_total_slew_angle(
+        self,
+        satellite_position: Tuple[float, float, float],
+        target1_position: Tuple[float, float],
+        target2_position: Tuple[float, float]
+    ) -> float:
+        """Calculate total slew angle between two targets.
+
+        Args:
+            satellite_position: Satellite ECEF position.
+            target1_position: First target (lon, lat).
+            target2_position: Second target (lon, lat).
+
+        Returns:
+            Total angle in degrees.
+        """
         sat_x, sat_y, sat_z = satellite_position
 
-        # 将目标位置转换为ECEF坐标
         target1_ecef = self._geodetic_to_ecef(target1_position[0], target1_position[1])
         target2_ecef = self._geodetic_to_ecef(target2_position[0], target2_position[1])
 
-        # 计算从卫星到目标的视线向量
         los1 = (
             target1_ecef[0] - sat_x,
             target1_ecef[1] - sat_y,
@@ -129,19 +164,30 @@ class SlewCalculator:
             target2_ecef[2] - sat_z
         )
 
-        # 归一化视线向量
         los1_norm = self._normalize_vector(los1)
         los2_norm = self._normalize_vector(los2)
 
-        # 计算夹角
-        total_angle = self._vector_angle(los1_norm, los2_norm)
+        return self._vector_angle(los1_norm, los2_norm)
 
-        # 计算roll和pitch分量
-        # 使用简化的分解：假设roll对应经度方向，pitch对应纬度方向
-        roll_delta = target2_position[0] - target1_position[0]  # 经度差
-        pitch_delta = target2_position[1] - target1_position[1]  # 纬度差
+    def _calculate_angle_components(
+        self,
+        target1_position: Tuple[float, float],
+        target2_position: Tuple[float, float],
+        total_angle: float
+    ) -> Tuple[float, float]:
+        """Calculate roll and pitch components.
 
-        # 根据总角度调整分量比例
+        Args:
+            target1_position: First target (lon, lat).
+            target2_position: Second target (lon, lat).
+            total_angle: Total slew angle.
+
+        Returns:
+            (roll_delta, pitch_delta) in degrees.
+        """
+        roll_delta = target2_position[0] - target1_position[0]
+        pitch_delta = target2_position[1] - target1_position[1]
+
         if abs(total_angle) > 0.001:
             component_total = math.sqrt(roll_delta**2 + pitch_delta**2)
             if component_total > 0:
@@ -149,7 +195,7 @@ class SlewCalculator:
                 roll_delta *= scale
                 pitch_delta *= scale
 
-        return (roll_delta, pitch_delta, total_angle)
+        return (roll_delta, pitch_delta)
 
     def calculate_slew_time(
         self,
@@ -200,33 +246,21 @@ class SlewCalculator:
         Raises:
             ValueError: 如果目标是区域目标或None
         """
-        if target1 is None or target2 is None:
-            raise ValueError("Targets cannot be None")
+        self._validate_maneuver_targets(target1, target2)
 
-        if target1.target_type == TargetType.AREA:
-            raise ValueError(f"Target {target1.id} is an area target, point targets required")
-        if target2.target_type == TargetType.AREA:
-            raise ValueError(f"Target {target2.id} is an area target, point targets required")
-
-        # 获取目标位置
         target1_pos = (target1.longitude, target1.latitude)
         target2_pos = (target2.longitude, target2.latitude)
 
-        # 计算机动角度
         roll_delta, pitch_delta, total_angle = self.calculate_slew_angles(
             satellite_position, target1_pos, target2_pos
         )
 
-        # 计算机动时间
         slew_time = self.calculate_slew_time(
             total_angle,
             from_target_id=target1.id,
             to_target_id=target2.id
         )
 
-        # 判断可行性
-        # 使用一个默认的可用时间（这里假设有足够时间）
-        # 实际调度时会传入具体的可用时间
         feasible = total_angle <= self.max_slew_angle
 
         return SlewManeuver(
@@ -238,6 +272,24 @@ class SlewCalculator:
             slew_time=slew_time,
             feasible=feasible
         )
+
+    def _validate_maneuver_targets(self, target1: Target, target2: Target) -> None:
+        """Validate targets for maneuver calculation.
+
+        Args:
+            target1: First target.
+            target2: Second target.
+
+        Raises:
+            ValueError: If targets are invalid.
+        """
+        if target1 is None or target2 is None:
+            raise ValueError("Targets cannot be None")
+
+        if target1.target_type == TargetType.AREA:
+            raise ValueError(f"Target {target1.id} is an area target, point targets required")
+        if target2.target_type == TargetType.AREA:
+            raise ValueError(f"Target {target2.id} is an area target, point targets required")
 
     def is_maneuver_feasible(
         self,
@@ -356,21 +408,31 @@ class ClusterSlewCalculator(SlewCalculator):
         Returns:
             (total_sweep_angle, total_slew_time)
         """
-        if not cluster.targets:
+        if not cluster.targets or len(cluster.targets) == 1:
             return (0.0, 0.0)
 
-        if len(cluster.targets) == 1:
-            # 单目标不需要机动扫描
-            return (0.0, 0.0)
+        total_sweep_angle = self._calculate_sweep_angle(satellite_position, cluster)
+        total_slew_time = self.calculate_slew_time(total_sweep_angle)
 
-        # 获取聚类边界框
+        return (total_sweep_angle, total_slew_time)
+
+    def _calculate_sweep_angle(
+        self,
+        satellite_position: Tuple[float, float, float],
+        cluster: TargetCluster
+    ) -> float:
+        """Calculate sweep angle from cluster bounding box corners.
+
+        Args:
+            satellite_position: Satellite ECEF position.
+            cluster: Target cluster.
+
+        Returns:
+            Sweep angle in degrees.
+        """
         min_lon, max_lon, min_lat, max_lat = cluster.bounding_box
-
-        # 计算边界框的对角线角度
-        # 使用聚类质心作为参考点
         centroid_lon, centroid_lat = cluster.centroid
 
-        # 计算从质心到边界框各角的视线角度
         corners = [
             (min_lon, min_lat),
             (min_lon, max_lat),
@@ -378,7 +440,31 @@ class ClusterSlewCalculator(SlewCalculator):
             (max_lon, max_lat),
         ]
 
-        # 计算各角相对于质心的角度
+        angles = self._calculate_corner_angles(
+            satellite_position, centroid_lon, centroid_lat, corners
+        )
+
+        sweep_angle = max(angles) - min(angles)
+        return min(sweep_angle, self.max_slew_angle)
+
+    def _calculate_corner_angles(
+        self,
+        satellite_position: Tuple[float, float, float],
+        centroid_lon: float,
+        centroid_lat: float,
+        corners: List[Tuple[float, float]]
+    ) -> List[float]:
+        """Calculate angles to each corner from centroid.
+
+        Args:
+            satellite_position: Satellite ECEF position.
+            centroid_lon: Centroid longitude.
+            centroid_lat: Centroid latitude.
+            corners: List of corner coordinates.
+
+        Returns:
+            List of angles in degrees.
+        """
         angles = []
         for corner in corners:
             _, _, angle = self.calculate_slew_angles(
@@ -387,17 +473,7 @@ class ClusterSlewCalculator(SlewCalculator):
                 corner
             )
             angles.append(angle)
-
-        # 总扫描角度为最大角度差
-        total_sweep_angle = max(angles) - min(angles)
-
-        # 应用最大角度限制
-        total_sweep_angle = min(total_sweep_angle, self.max_slew_angle)
-
-        # 计算机动时间
-        total_slew_time = self.calculate_slew_time(total_sweep_angle)
-
-        return (total_sweep_angle, total_slew_time)
+        return angles
 
     def can_cover_cluster_in_time(
         self,

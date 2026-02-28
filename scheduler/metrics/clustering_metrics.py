@@ -135,65 +135,60 @@ class ClusteringMetricsCollector:
             ClusteringEfficiencyMetrics with calculated values
         """
         if not self.all_targets or not self.cluster_schedules:
-            return ClusteringEfficiencyMetrics(
-                task_reduction_ratio=0.0,
-                task_reduction_count=0,
-                time_savings_seconds=0.0,
-                avg_targets_per_task=0.0,
-                max_targets_in_single_task=0,
-                cluster_utilization_ratio=0.0
-            )
+            return self._empty_efficiency_metrics()
 
         total_targets = len(self.all_targets)
         cluster_task_count = len(self.cluster_schedules)
 
-        # Count targets covered by clusters
-        clustered_target_ids: Set[str] = set()
-        for cs in self.cluster_schedules:
-            for target in cs.targets:
-                clustered_target_ids.add(target.id)
-
+        clustered_target_ids = self._get_clustered_target_ids()
         clustered_count = len(clustered_target_ids)
-
-        # Individual tasks = targets not in any cluster
         individual_count = total_targets - clustered_count
 
-        # Total tasks with clustering
         total_clustering_tasks = cluster_task_count + individual_count
-
-        # Traditional approach: one task per target
         traditional_task_count = total_targets
 
-        # Task reduction calculations
         task_reduction_count = traditional_task_count - total_clustering_tasks
-        task_reduction_ratio = task_reduction_count / traditional_task_count if traditional_task_count > 0 else 0.0
-
-        # Average targets per cluster task
-        avg_targets_per_task = clustered_count / cluster_task_count if cluster_task_count > 0 else 0.0
-
-        # Max targets in a single task
-        max_targets_in_single_task = max(
-            (len(cs.targets) for cs in self.cluster_schedules),
-            default=0
-        )
-
-        # Cluster utilization ratio
-        cluster_utilization_ratio = clustered_count / total_targets if total_targets > 0 else 0.0
-
-        # Time savings calculation
-        # Each saved task saves setup time + imaging time difference
-        time_savings_seconds = self._calculate_time_savings(
-            task_reduction_count, avg_targets_per_task
-        )
+        task_reduction_ratio = self._calculate_ratio(task_reduction_count, traditional_task_count)
+        avg_targets_per_task = self._calculate_ratio(clustered_count, cluster_task_count)
 
         return ClusteringEfficiencyMetrics(
             task_reduction_ratio=max(0.0, task_reduction_ratio),
             task_reduction_count=max(0, task_reduction_count),
-            time_savings_seconds=time_savings_seconds,
+            time_savings_seconds=self._calculate_time_savings(task_reduction_count, avg_targets_per_task),
             avg_targets_per_task=avg_targets_per_task,
-            max_targets_in_single_task=max_targets_in_single_task,
-            cluster_utilization_ratio=cluster_utilization_ratio
+            max_targets_in_single_task=self._get_max_targets_in_task(),
+            cluster_utilization_ratio=self._calculate_ratio(clustered_count, total_targets)
         )
+
+    def _empty_efficiency_metrics(self) -> ClusteringEfficiencyMetrics:
+        """Return empty efficiency metrics."""
+        return ClusteringEfficiencyMetrics(
+            task_reduction_ratio=0.0,
+            task_reduction_count=0,
+            time_savings_seconds=0.0,
+            avg_targets_per_task=0.0,
+            max_targets_in_single_task=0,
+            cluster_utilization_ratio=0.0
+        )
+
+    def _get_clustered_target_ids(self) -> Set[str]:
+        """Get set of all target IDs covered by clusters."""
+        clustered_target_ids: Set[str] = set()
+        for cs in self.cluster_schedules:
+            for target in cs.targets:
+                clustered_target_ids.add(target.id)
+        return clustered_target_ids
+
+    def _get_max_targets_in_task(self) -> int:
+        """Get maximum number of targets in any single cluster task."""
+        return max(
+            (len(cs.targets) for cs in self.cluster_schedules),
+            default=0
+        )
+
+    def _calculate_ratio(self, numerator: int, denominator: int) -> float:
+        """Calculate ratio with zero check."""
+        return numerator / denominator if denominator > 0 else 0.0
 
     def _calculate_time_savings(
         self,
@@ -326,45 +321,16 @@ class ClusteringMetricsCollector:
             ClusteringQualityScore with all component scores
         """
         if not self.all_targets:
-            return ClusteringQualityScore(
-                overall_score=0.0,
-                efficiency_score=0.0,
-                coverage_score=0.0,
-                priority_score=0.0,
-                balance_score=0.0
-            )
+            return self._empty_quality_score()
 
         efficiency_metrics = self.collect_efficiency_metrics()
         coverage_metrics = self.collect_coverage_metrics()
 
-        # Efficiency Score: base on task reduction ratio
-        efficiency_score = efficiency_metrics.task_reduction_ratio * 100
-        # Bonus for good average targets per task (> 2)
-        if efficiency_metrics.avg_targets_per_task > 2:
-            efficiency_score += 10
-        efficiency_score = min(100, efficiency_score)
-
-        # Coverage Score: base on target coverage
-        coverage_score = coverage_metrics.target_coverage_ratio * 100
-        # Bonus for high high-priority coverage (> 0.9)
-        if coverage_metrics.high_priority_coverage > 0.9:
-            coverage_score += 5
-        coverage_score = min(100, coverage_score)
-
-        # Priority Score: based on high priority coverage
-        priority_score = coverage_metrics.high_priority_coverage * 100
-        # Penalty for low high-priority coverage (< 0.8)
-        if coverage_metrics.high_priority_coverage < 0.8:
-            priority_score -= 10
-        # Bonus for complete high-priority coverage
-        if coverage_metrics.high_priority_coverage == 1.0:
-            priority_score += 5
-        priority_score = max(0, min(100, priority_score))
-
-        # Balance Score: based on cluster size distribution
+        efficiency_score = self._calculate_efficiency_score(efficiency_metrics)
+        coverage_score = self._calculate_coverage_score(coverage_metrics)
+        priority_score = self._calculate_priority_score(coverage_metrics)
         balance_score = self._calculate_balance_score()
 
-        # Overall Score: weighted average
         overall_score = (
             efficiency_score * self.EFFICIENCY_WEIGHT +
             coverage_score * self.COVERAGE_WEIGHT +
@@ -379,6 +345,39 @@ class ClusteringMetricsCollector:
             priority_score=round(priority_score, 1),
             balance_score=round(balance_score, 1)
         )
+
+    def _empty_quality_score(self) -> ClusteringQualityScore:
+        """Return empty quality score."""
+        return ClusteringQualityScore(
+            overall_score=0.0,
+            efficiency_score=0.0,
+            coverage_score=0.0,
+            priority_score=0.0,
+            balance_score=0.0
+        )
+
+    def _calculate_efficiency_score(self, metrics: ClusteringEfficiencyMetrics) -> float:
+        """Calculate efficiency score with bonus."""
+        score = metrics.task_reduction_ratio * 100
+        if metrics.avg_targets_per_task > 2:
+            score += 10
+        return min(100, score)
+
+    def _calculate_coverage_score(self, metrics: ClusteringCoverageMetrics) -> float:
+        """Calculate coverage score with bonus."""
+        score = metrics.target_coverage_ratio * 100
+        if metrics.high_priority_coverage > 0.9:
+            score += 5
+        return min(100, score)
+
+    def _calculate_priority_score(self, metrics: ClusteringCoverageMetrics) -> float:
+        """Calculate priority score with penalties and bonuses."""
+        score = metrics.high_priority_coverage * 100
+        if metrics.high_priority_coverage < 0.8:
+            score -= 10
+        if metrics.high_priority_coverage == 1.0:
+            score += 5
+        return max(0, min(100, score))
 
     def _calculate_balance_score(self) -> float:
         """
@@ -440,57 +439,63 @@ class ClusteringMetricsCollector:
                 - fuel_saved_estimate_kg: Estimated fuel saved in kg
         """
         if not self.all_targets:
-            return {
-                'traditional_task_count': 0,
-                'clustering_task_count': 0,
-                'improvement_ratio': 0.0,
-                'time_saved_minutes': 0.0,
-                'fuel_saved_estimate_kg': 0.0,
-            }
+            return self._empty_comparison()
 
         total_targets = len(self.all_targets)
-
-        # Traditional: one task per target
         traditional_task_count = total_targets
 
-        # Clustering: cluster tasks + individual tasks
-        clustered_target_ids: Set[str] = set()
-        for cs in self.cluster_schedules:
-            for target in cs.targets:
-                clustered_target_ids.add(target.id)
-
-        clustered_count = len(clustered_target_ids)
+        clustered_count = self._get_clustered_target_count()
         individual_count = total_targets - clustered_count
         cluster_task_count = len(self.cluster_schedules)
 
         clustering_task_count = cluster_task_count + individual_count
-
-        # Improvement ratio
-        if traditional_task_count > 0:
-            improvement_ratio = (traditional_task_count - clustering_task_count) / traditional_task_count
-        else:
-            improvement_ratio = 0.0
-
-        # Time saved
         tasks_saved = traditional_task_count - clustering_task_count
-        time_saved_seconds = tasks_saved * (self.SETUP_TIME_SECONDS + self.IMAGING_TIME_PER_TARGET_SECONDS)
-        time_saved_minutes = time_saved_seconds / 60.0
-
-        # Fuel saved estimate
-        # Each saved task saves fuel for setup and reduced imaging
-        fuel_per_task_saved = (
-            self.FUEL_PER_SETUP_KG +
-            self.FUEL_PER_IMAGING_KG * self.IMAGING_TIME_PER_TARGET_SECONDS
-        )
-        fuel_saved_estimate_kg = tasks_saved * fuel_per_task_saved
 
         return {
             'traditional_task_count': traditional_task_count,
             'clustering_task_count': clustering_task_count,
-            'improvement_ratio': round(max(0.0, improvement_ratio), 3),
-            'time_saved_minutes': round(max(0.0, time_saved_minutes), 2),
-            'fuel_saved_estimate_kg': round(max(0.0, fuel_saved_estimate_kg), 3),
+            'improvement_ratio': self._calculate_improvement_ratio(traditional_task_count, clustering_task_count),
+            'time_saved_minutes': self._calculate_time_saved(tasks_saved),
+            'fuel_saved_estimate_kg': self._calculate_fuel_saved(tasks_saved),
         }
+
+    def _empty_comparison(self) -> Dict[str, Any]:
+        """Return empty comparison result."""
+        return {
+            'traditional_task_count': 0,
+            'clustering_task_count': 0,
+            'improvement_ratio': 0.0,
+            'time_saved_minutes': 0.0,
+            'fuel_saved_estimate_kg': 0.0,
+        }
+
+    def _get_clustered_target_count(self) -> int:
+        """Get count of targets covered by clusters."""
+        clustered_target_ids: Set[str] = set()
+        for cs in self.cluster_schedules:
+            for target in cs.targets:
+                clustered_target_ids.add(target.id)
+        return len(clustered_target_ids)
+
+    def _calculate_improvement_ratio(self, traditional: int, clustering: int) -> float:
+        """Calculate improvement ratio."""
+        if traditional > 0:
+            ratio = (traditional - clustering) / traditional
+            return round(max(0.0, ratio), 3)
+        return 0.0
+
+    def _calculate_time_saved(self, tasks_saved: int) -> float:
+        """Calculate time saved in minutes."""
+        time_saved_seconds = tasks_saved * (self.SETUP_TIME_SECONDS + self.IMAGING_TIME_PER_TARGET_SECONDS)
+        return round(max(0.0, time_saved_seconds / 60.0), 2)
+
+    def _calculate_fuel_saved(self, tasks_saved: int) -> float:
+        """Calculate estimated fuel saved in kg."""
+        fuel_per_task_saved = (
+            self.FUEL_PER_SETUP_KG +
+            self.FUEL_PER_IMAGING_KG * self.IMAGING_TIME_PER_TARGET_SECONDS
+        )
+        return round(max(0.0, tasks_saved * fuel_per_task_saved), 3)
 
     def generate_report(self) -> Dict[str, Any]:
         """
@@ -512,52 +517,60 @@ class ClusteringMetricsCollector:
         quality_score = self.calculate_quality_score()
         comparison = self.compare_with_traditional()
 
-        # Calculate summary statistics
-        clustered_target_ids: Set[str] = set()
-        for cs in self.cluster_schedules:
-            for target in cs.targets:
-                clustered_target_ids.add(target.id)
+        return {
+            'efficiency': self._format_efficiency_metrics(efficiency),
+            'coverage': self._format_coverage_metrics(coverage),
+            'quality_score': self._format_quality_score(quality_score),
+            'comparison': comparison,
+            'summary': self._generate_summary(comparison),
+            'timestamp': datetime.now(),
+        }
 
-        total_clustered = len(clustered_target_ids)
+    def _format_efficiency_metrics(self, metrics: ClusteringEfficiencyMetrics) -> Dict[str, Any]:
+        """Format efficiency metrics for report."""
+        return {
+            'task_reduction_ratio': metrics.task_reduction_ratio,
+            'task_reduction_count': metrics.task_reduction_count,
+            'time_savings_seconds': metrics.time_savings_seconds,
+            'avg_targets_per_task': metrics.avg_targets_per_task,
+            'max_targets_in_single_task': metrics.max_targets_in_single_task,
+            'cluster_utilization_ratio': metrics.cluster_utilization_ratio,
+        }
+
+    def _format_coverage_metrics(self, metrics: ClusteringCoverageMetrics) -> Dict[str, Any]:
+        """Format coverage metrics for report."""
+        return {
+            'target_coverage_ratio': metrics.target_coverage_ratio,
+            'targets_covered': metrics.targets_covered,
+            'targets_total': metrics.targets_total,
+            'high_priority_coverage': metrics.high_priority_coverage,
+            'high_priority_covered': metrics.high_priority_covered,
+            'high_priority_total': metrics.high_priority_total,
+            'area_coverage_km2': metrics.area_coverage_km2,
+        }
+
+    def _format_quality_score(self, score: ClusteringQualityScore) -> Dict[str, float]:
+        """Format quality score for report."""
+        return {
+            'overall_score': score.overall_score,
+            'efficiency_score': score.efficiency_score,
+            'coverage_score': score.coverage_score,
+            'priority_score': score.priority_score,
+            'balance_score': score.balance_score,
+        }
+
+    def _generate_summary(self, comparison: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate summary statistics."""
+        total_clustered = self._get_clustered_target_count()
         total_individual = len(self.all_targets) - total_clustered
 
-        summary = {
+        return {
             'total_targets': len(self.all_targets),
             'total_clustered_targets': total_clustered,
             'total_individual_targets': total_individual,
             'total_tasks': comparison['clustering_task_count'],
             'cluster_task_count': len(self.cluster_schedules),
             'individual_task_count': total_individual,
-        }
-
-        return {
-            'efficiency': {
-                'task_reduction_ratio': efficiency.task_reduction_ratio,
-                'task_reduction_count': efficiency.task_reduction_count,
-                'time_savings_seconds': efficiency.time_savings_seconds,
-                'avg_targets_per_task': efficiency.avg_targets_per_task,
-                'max_targets_in_single_task': efficiency.max_targets_in_single_task,
-                'cluster_utilization_ratio': efficiency.cluster_utilization_ratio,
-            },
-            'coverage': {
-                'target_coverage_ratio': coverage.target_coverage_ratio,
-                'targets_covered': coverage.targets_covered,
-                'targets_total': coverage.targets_total,
-                'high_priority_coverage': coverage.high_priority_coverage,
-                'high_priority_covered': coverage.high_priority_covered,
-                'high_priority_total': coverage.high_priority_total,
-                'area_coverage_km2': coverage.area_coverage_km2,
-            },
-            'quality_score': {
-                'overall_score': quality_score.overall_score,
-                'efficiency_score': quality_score.efficiency_score,
-                'coverage_score': quality_score.coverage_score,
-                'priority_score': quality_score.priority_score,
-                'balance_score': quality_score.balance_score,
-            },
-            'comparison': comparison,
-            'summary': summary,
-            'timestamp': datetime.now(),
         }
 
 
@@ -609,58 +622,58 @@ class ClusteringVisualizer:
                 - clusters: List of cluster data with center, targets, color
                 - unclustered_targets: List of targets not in any cluster
         """
-        clusters_data = []
-
-        for i, cs in enumerate(self.cluster_schedules):
-            if not cs.targets:
-                continue
-
-            # Calculate cluster center
-            center_lon = sum(t.longitude or 0 for t in cs.targets) / len(cs.targets)
-            center_lat = sum(t.latitude or 0 for t in cs.targets) / len(cs.targets)
-
-            cluster_data = {
-                'cluster_id': cs.cluster_id,
-                'center': (center_lon, center_lat),
-                'targets': [
-                    {
-                        'target_id': t.id,
-                        'name': t.name,
-                        'longitude': t.longitude,
-                        'latitude': t.latitude,
-                        'priority': t.priority,
-                    }
-                    for t in cs.targets
-                ],
-                'color': self.CLUSTER_COLORS[i % len(self.CLUSTER_COLORS)],
-                'scheduled': True,
-                'satellite_id': cs.satellite_id,
-                'imaging_time': cs.imaging_start.isoformat() if cs.imaging_start else None,
-            }
-            clusters_data.append(cluster_data)
-
-        # Find unclustered targets
-        clustered_target_ids: Set[str] = set()
-        for cs in self.cluster_schedules:
-            for target in cs.targets:
-                clustered_target_ids.add(target.id)
-
-        unclustered_targets = [
-            {
-                'target_id': t.id,
-                'name': t.name,
-                'longitude': t.longitude,
-                'latitude': t.latitude,
-                'priority': t.priority,
-            }
-            for t in self.all_targets
-            if t.id not in clustered_target_ids
+        clusters_data = [
+            self._format_cluster_for_map(i, cs)
+            for i, cs in enumerate(self.cluster_schedules)
+            if cs.targets
         ]
 
         return {
             'clusters': clusters_data,
-            'unclustered_targets': unclustered_targets,
+            'unclustered_targets': self._get_unclustered_targets_for_map(),
         }
+
+    def _format_cluster_for_map(self, index: int, cs) -> Dict[str, Any]:
+        """Format a cluster schedule for map visualization."""
+        center_lon = sum(t.longitude or 0 for t in cs.targets) / len(cs.targets)
+        center_lat = sum(t.latitude or 0 for t in cs.targets) / len(cs.targets)
+
+        return {
+            'cluster_id': cs.cluster_id,
+            'center': (center_lon, center_lat),
+            'targets': [self._format_target_for_map(t) for t in cs.targets],
+            'color': self.CLUSTER_COLORS[index % len(self.CLUSTER_COLORS)],
+            'scheduled': True,
+            'satellite_id': cs.satellite_id,
+            'imaging_time': cs.imaging_start.isoformat() if cs.imaging_start else None,
+        }
+
+    def _format_target_for_map(self, target) -> Dict[str, Any]:
+        """Format a target for map visualization."""
+        return {
+            'target_id': target.id,
+            'name': target.name,
+            'longitude': target.longitude,
+            'latitude': target.latitude,
+            'priority': target.priority,
+        }
+
+    def _get_clustered_target_ids(self) -> Set[str]:
+        """Get IDs of all targets in clusters."""
+        clustered_target_ids: Set[str] = set()
+        for cs in self.cluster_schedules:
+            for target in cs.targets:
+                clustered_target_ids.add(target.id)
+        return clustered_target_ids
+
+    def _get_unclustered_targets_for_map(self) -> List[Dict[str, Any]]:
+        """Get list of unclustered targets formatted for map."""
+        clustered_ids = self._get_clustered_target_ids()
+        return [
+            self._format_target_for_map(t)
+            for t in self.all_targets
+            if t.id not in clustered_ids
+        ]
 
     def prepare_coverage_heatmap_data(self) -> Dict[str, Any]:
         """
@@ -674,55 +687,57 @@ class ClusteringVisualizer:
         """
         coverage_points = []
 
-        # Add points for clustered targets (higher intensity)
         for cs in self.cluster_schedules:
             if not cs.targets:
                 continue
+            coverage_points.extend(self._get_cluster_heatmap_points(cs))
 
-            center_lon = sum(t.longitude or 0 for t in cs.targets) / len(cs.targets)
-            center_lat = sum(t.latitude or 0 for t in cs.targets) / len(cs.targets)
+        clustered_ids = self._get_clustered_target_ids()
+        coverage_points.extend(self._get_unclustered_heatmap_points(clustered_ids))
 
-            # Intensity based on cluster size and priority
-            avg_priority = sum(t.priority for t in cs.targets) / len(cs.targets)
-            intensity = min(1.0, (len(cs.targets) / 5.0) * (avg_priority / 10.0))
+        return {'coverage_points': coverage_points}
 
-            coverage_points.append({
-                'longitude': center_lon,
-                'latitude': center_lat,
-                'intensity': round(intensity, 2),
-                'type': 'cluster',
-                'cluster_id': cs.cluster_id,
+    def _get_cluster_heatmap_points(self, cs) -> List[Dict[str, Any]]:
+        """Generate heatmap points for a cluster."""
+        points = []
+        center_lon = sum(t.longitude or 0 for t in cs.targets) / len(cs.targets)
+        center_lat = sum(t.latitude or 0 for t in cs.targets) / len(cs.targets)
+
+        avg_priority = sum(t.priority for t in cs.targets) / len(cs.targets)
+        intensity = min(1.0, (len(cs.targets) / 5.0) * (avg_priority / 10.0))
+
+        points.append({
+            'longitude': center_lon,
+            'latitude': center_lat,
+            'intensity': round(intensity, 2),
+            'type': 'cluster',
+            'cluster_id': cs.cluster_id,
+        })
+
+        for target in cs.targets:
+            points.append({
+                'longitude': target.longitude or 0,
+                'latitude': target.latitude or 0,
+                'intensity': round(0.3 + (target.priority / 20.0), 2),
+                'type': 'target',
+                'target_id': target.id,
             })
 
-            # Also add individual target points
-            for target in cs.targets:
-                coverage_points.append({
-                    'longitude': target.longitude or 0,
-                    'latitude': target.latitude or 0,
-                    'intensity': round(0.3 + (target.priority / 20.0), 2),
-                    'type': 'target',
-                    'target_id': target.id,
-                })
+        return points
 
-        # Add points for unclustered targets
-        clustered_target_ids: Set[str] = set()
-        for cs in self.cluster_schedules:
-            for target in cs.targets:
-                clustered_target_ids.add(target.id)
-
-        for target in self.all_targets:
-            if target.id not in clustered_target_ids:
-                coverage_points.append({
-                    'longitude': target.longitude or 0,
-                    'latitude': target.latitude or 0,
-                    'intensity': round(0.2 + (target.priority / 20.0), 2),
-                    'type': 'unclustered_target',
-                    'target_id': target.id,
-                })
-
-        return {
-            'coverage_points': coverage_points,
-        }
+    def _get_unclustered_heatmap_points(self, clustered_ids: Set[str]) -> List[Dict[str, Any]]:
+        """Generate heatmap points for unclustered targets."""
+        return [
+            {
+                'longitude': target.longitude or 0,
+                'latitude': target.latitude or 0,
+                'intensity': round(0.2 + (target.priority / 20.0), 2),
+                'type': 'unclustered_target',
+                'target_id': target.id,
+            }
+            for target in self.all_targets
+            if target.id not in clustered_ids
+        ]
 
     def prepare_efficiency_chart_data(self) -> Dict[str, Any]:
         """
