@@ -232,42 +232,15 @@ class ClusteringMetricsCollector:
             ClusteringCoverageMetrics with calculated values
         """
         if not self.all_targets:
-            return ClusteringCoverageMetrics(
-                target_coverage_ratio=0.0,
-                targets_covered=0,
-                targets_total=0,
-                high_priority_coverage=0.0,
-                high_priority_covered=0,
-                high_priority_total=0,
-                area_coverage_km2=0.0
-            )
+            return self._empty_coverage_metrics()
 
+        covered_target_ids = self._get_covered_target_ids()
+        targets_covered = len(covered_target_ids)
         total_targets = len(self.all_targets)
 
-        # Get covered target IDs from cluster schedules
-        covered_target_ids: Set[str] = set()
-        for cs in self.cluster_schedules:
-            for target in cs.targets:
-                covered_target_ids.add(target.id)
-
-        targets_covered = len(covered_target_ids)
-        target_coverage_ratio = targets_covered / total_targets if total_targets > 0 else 0.0
-
-        # High priority targets (priority >= 8)
-        high_priority_targets = [t for t in self.all_targets if t.priority >= 8]
-        high_priority_total = len(high_priority_targets)
-
-        high_priority_covered = sum(
-            1 for t in high_priority_targets
-            if t.id in covered_target_ids
-        )
-
-        if high_priority_total > 0:
-            high_priority_coverage = high_priority_covered / high_priority_total
-        else:
-            high_priority_coverage = 1.0  # No high priority targets = full coverage
-
-        # Area coverage calculation
+        target_coverage_ratio = self._calculate_ratio(targets_covered, total_targets)
+        high_priority_coverage, high_priority_covered, high_priority_total = \
+            self._calculate_high_priority_coverage(covered_target_ids)
         area_coverage_km2 = self._calculate_area_coverage(covered_target_ids)
 
         return ClusteringCoverageMetrics(
@@ -279,6 +252,49 @@ class ClusteringMetricsCollector:
             high_priority_total=high_priority_total,
             area_coverage_km2=area_coverage_km2
         )
+
+    def _empty_coverage_metrics(self) -> ClusteringCoverageMetrics:
+        """Return empty coverage metrics when no targets."""
+        return ClusteringCoverageMetrics(
+            target_coverage_ratio=0.0,
+            targets_covered=0,
+            targets_total=0,
+            high_priority_coverage=0.0,
+            high_priority_covered=0,
+            high_priority_total=0,
+            area_coverage_km2=0.0
+        )
+
+    def _get_covered_target_ids(self) -> Set[str]:
+        """Get set of all covered target IDs from cluster schedules."""
+        covered_target_ids: Set[str] = set()
+        for cs in self.cluster_schedules:
+            for target in cs.targets:
+                covered_target_ids.add(target.id)
+        return covered_target_ids
+
+    def _calculate_high_priority_coverage(
+        self, covered_target_ids: Set[str]
+    ) -> Tuple[float, int, int]:
+        """
+        Calculate high priority target coverage.
+
+        Returns:
+            Tuple of (coverage_ratio, covered_count, total_count)
+        """
+        high_priority_targets = [t for t in self.all_targets if t.priority >= 8]
+        high_priority_total = len(high_priority_targets)
+
+        high_priority_covered = sum(
+            1 for t in high_priority_targets if t.id in covered_target_ids
+        )
+
+        if high_priority_total > 0:
+            coverage = high_priority_covered / high_priority_total
+        else:
+            coverage = 1.0  # No high priority targets = full coverage
+
+        return coverage, high_priority_covered, high_priority_total
 
     def _calculate_area_coverage(self, covered_target_ids: Set[str]) -> float:
         """
