@@ -96,6 +96,7 @@ class DownlinkTask:
     data_size_gb: float
     antenna_id: Optional[str] = None
     related_imaging_task_id: Optional[str] = None
+    effective_data_rate: float = 300.0  # 实际使用的数据率 (Mbps)
 
     def get_duration_seconds(self) -> float:
         """获取数传时长（秒）"""
@@ -151,9 +152,9 @@ class GroundStationScheduler:
         # 跟踪每个卫星的固存状态
         self._storage_states: Dict[str, StorageState] = {}
 
-        # 跟踪已分配的数传窗口: (ground_station_id, antenna_id) -> list of (start, end, satellite_id)
+        # 跟踪已分配的数传窗口: (ground_station_id, antenna_id) -> list of (start, end, satellite_id, data_size_gb)
         # 每个天线独立工作，可以同时进行数传
-        self._downlink_allocations: Dict[Tuple[str, str], List[Tuple[datetime, datetime, str]]] = {}
+        self._downlink_allocations: Dict[Tuple[str, str], List[Tuple[datetime, datetime, str, float]]] = {}
 
         # 初始化所有天线的分配记录
         for gs_id, gs in ground_station_pool.stations.items():
@@ -220,7 +221,7 @@ class GroundStationScheduler:
         start_time, end_time = time_window
 
         # 检查与现有分配的冲突（同一特定天线）
-        for alloc_start, alloc_end, _ in self._downlink_allocations[key]:
+        for alloc_start, alloc_end, _, _ in self._downlink_allocations[key]:
             # 检查时间重叠
             if start_time < alloc_end and end_time > alloc_start:
                 return True
@@ -231,18 +232,19 @@ class GroundStationScheduler:
         self,
         ground_station_id: str,
         time_window: Tuple[datetime, datetime]
-    ) -> Optional[str]:
+    ) -> Optional[Tuple[str, float]]:
         """
         查找地面站中可用的天线
 
         遍历地面站的所有天线，找到在指定时间窗口内没有冲突的天线。
+        返回天线ID和其数据率。
 
         Args:
             ground_station_id: 地面站ID
             time_window: (start_time, end_time) 时间窗口
 
         Returns:
-            可用天线的ID，如果没有可用天线则返回None
+            (antenna_id, data_rate_mbps) 元组，如果没有可用天线则返回None
         """
         gs = self.ground_station_pool.get_station(ground_station_id)
         if not gs:
@@ -250,9 +252,32 @@ class GroundStationScheduler:
 
         for antenna in gs.antennas:
             if not self.has_antenna_conflict(ground_station_id, antenna.id, time_window):
-                return antenna.id
+                # Validate antenna data_rate is positive, fallback to scheduler default if not
+                effective_data_rate = antenna.data_rate if antenna.data_rate > 0 else self.data_rate_mbps
+                return (antenna.id, effective_data_rate)
 
         return None
+
+    def get_antenna_data_rate(self, ground_station_id: str, antenna_id: str) -> float:
+        """
+        获取指定天线的数据率
+
+        Args:
+            ground_station_id: 地面站ID
+            antenna_id: 天线ID
+
+        Returns:
+            天线数据率 (Mbps)，如果找不到则返回默认值
+        """
+        gs = self.ground_station_pool.get_station(ground_station_id)
+        if not gs:
+            return self.data_rate_mbps
+
+        for antenna in gs.antennas:
+            if antenna.id == antenna_id:
+                return antenna.data_rate
+
+        return self.data_rate_mbps
 
     def get_total_available_antennas(self, ground_station_id: str) -> int:
         """获取地面站的总天线数量"""
@@ -261,12 +286,210 @@ class GroundStationScheduler:
             return 0
         return len(gs.antennas)
 
+    def get_antenna_utilization(
+        self,
+        ground_station_id: str,
+        antenna_id: str,
+        time_range: Optional[Tuple[datetime, datetime]] = None
+    ) -> Dict[str, Any]:
+        """
+        计算指定天线的利用率统计
+
+        Args:
+            ground_station_id: 地面站ID
+            antenna_id: 天线ID
+            time_range: 时间范围 (start, end)，如果为None则使用所有分配记录
+
+        Returns:
+            {
+                'total_tasks': int,          # 总任务数
+                'total_downlink_time': float, # 总数传时间（秒）
+                'total_data_transferred': float, # 总传输数据量（GB）
+                'utilization_ratio': float,   # 利用率（0-1）
+                'average_task_duration': float, # 平均任务时长（秒）
+            }
+        """
+        key = (ground_station_id, antenna_id)
+        if key not in self._downlink_allocations:
+            return {
+                'total_tasks': 0,
+                'total_downlink_time': 0.0,
+                'total_data_transferred': 0.0,
+                'utilization_ratio': 0.0,
+                'average_task_duration': 0.0,
+            }
+
+        allocations = self._downlink_allocations[key]
+        total_tasks = len(allocations)
+        total_downlink_time = 0.0
+        total_data_transferred = 0.0
+
+        # 计算总工作时间和数据量
+        for start_time, end_time, satellite_id, data_size_gb in allocations:
+            if time_range:
+                # 只统计在指定时间范围内的部分
+                range_start, range_end = time_range
+                effective_start = max(start_time, range_start)
+                effective_end = min(end_time, range_end)
+                if effective_start < effective_end:
+                    duration = (effective_end - effective_start).total_seconds()
+                    total_downlink_time += duration
+                    # 按比例计算数据量
+                    full_duration = (end_time - start_time).total_seconds()
+                    if full_duration > 0:
+                        ratio = duration / full_duration
+                        total_data_transferred += data_size_gb * ratio
+            else:
+                duration = (end_time - start_time).total_seconds()
+                total_downlink_time += duration
+                total_data_transferred += data_size_gb
+
+        # 计算利用率（基于时间范围或总任务时长）
+        utilization_ratio = 0.0
+        if time_range:
+            range_duration = (time_range[1] - time_range[0]).total_seconds()
+            if range_duration > 0:
+                utilization_ratio = total_downlink_time / range_duration
+        else:
+            # 如果没有指定时间范围，基于平均任务时长估算
+            if total_tasks > 0:
+                avg_duration = total_downlink_time / total_tasks
+                # 假设任务分布在24小时内
+                utilization_ratio = total_downlink_time / (24 * 3600)
+
+        average_task_duration = total_downlink_time / total_tasks if total_tasks > 0 else 0.0
+
+        return {
+            'total_tasks': total_tasks,
+            'total_downlink_time': total_downlink_time,
+            'total_data_transferred': total_data_transferred,
+            'utilization_ratio': min(utilization_ratio, 1.0),  # 最大为100%
+            'average_task_duration': average_task_duration,
+        }
+
+    def get_all_antennas_utilization_report(
+        self,
+        time_range: Optional[Tuple[datetime, datetime]] = None
+    ) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """
+        获取所有天线的利用率报告
+
+        Args:
+            time_range: 时间范围 (start, end)，如果为None则使用所有分配记录
+
+        Returns:
+            {
+                ground_station_id: {
+                    antenna_id: utilization_stats,
+                    ...
+                },
+                ...
+            }
+        """
+        report = {}
+
+        for (gs_id, ant_id), allocations in self._downlink_allocations.items():
+            if not allocations:
+                continue
+
+            if gs_id not in report:
+                report[gs_id] = {}
+
+            report[gs_id][ant_id] = self.get_antenna_utilization(
+                gs_id, ant_id, time_range
+            )
+
+        return report
+
+    def get_ground_station_summary(
+        self,
+        ground_station_id: str,
+        time_range: Optional[Tuple[datetime, datetime]] = None
+    ) -> Dict[str, Any]:
+        """
+        获取地面站总体统计摘要
+
+        Args:
+            ground_station_id: 地面站ID
+            time_range: 时间范围 (start, end)
+
+        Returns:
+            {
+                'total_antennas': int,
+                'active_antennas': int,  # 有任务的天线数
+                'total_tasks': int,
+                'total_downlink_time': float,
+                'average_utilization': float,  # 所有天线的平均利用率
+            }
+        """
+        gs = self.ground_station_pool.get_station(ground_station_id)
+        if not gs:
+            return {
+                'total_antennas': 0,
+                'active_antennas': 0,
+                'total_tasks': 0,
+                'total_downlink_time': 0.0,
+                'average_utilization': 0.0,
+            }
+
+        total_antennas = len(gs.antennas)
+        active_antennas = 0
+        total_tasks = 0
+        total_downlink_time = 0.0
+        total_utilization = 0.0
+
+        for antenna in gs.antennas:
+            stats = self.get_antenna_utilization(
+                ground_station_id, antenna.id, time_range
+            )
+
+            if stats['total_tasks'] > 0:
+                active_antennas += 1
+                total_tasks += stats['total_tasks']
+                total_downlink_time += stats['total_downlink_time']
+                total_utilization += stats['utilization_ratio']
+
+        average_utilization = (
+            total_utilization / total_antennas if total_antennas > 0 else 0.0
+        )
+
+        return {
+            'total_antennas': total_antennas,
+            'active_antennas': active_antennas,
+            'total_tasks': total_tasks,
+            'total_downlink_time': total_downlink_time,
+            'average_utilization': average_utilization,
+        }
+
+    def _get_data_size_for_allocation(
+        self,
+        satellite_id: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> float:
+        """
+        从已存储的downlink_tasks中查找对应分配的数据量
+
+        Args:
+            satellite_id: 卫星ID
+            start_time: 开始时间
+            end_time: 结束时间
+
+        Returns:
+            数据量 (GB)，如果找不到则返回0.0
+        """
+        # This is a helper method that can be overridden or extended
+        # For now, return 0.0 as default - the actual data_size will be
+        # tracked via the updated allocation structure
+        return 0.0
+
     def allocate_downlink_window(
         self,
         satellite_id: str,
         ground_station_id: str,
         antenna_id: str,
-        time_window: Tuple[datetime, datetime]
+        time_window: Tuple[datetime, datetime],
+        data_size_gb: float = 0.0
     ) -> bool:
         """
         分配数传窗口到指定天线上
@@ -276,6 +499,7 @@ class GroundStationScheduler:
             ground_station_id: 地面站ID
             antenna_id: 天线ID
             time_window: (start_time, end_time) 时间窗口
+            data_size_gb: 传输数据量 (GB)，用于利用率统计
 
         Returns:
             True 如果分配成功
@@ -286,7 +510,7 @@ class GroundStationScheduler:
 
         start_time, end_time = time_window
         self._downlink_allocations[key].append(
-            (start_time, end_time, satellite_id)
+            (start_time, end_time, satellite_id, data_size_gb)
         )
         return True
 
@@ -347,31 +571,46 @@ class GroundStationScheduler:
         # 选择地面站和可用天线
         selected_gs = ground_station_id
         selected_antenna = None
+        selected_data_rate = self.data_rate_mbps  # 默认使用调度器的数据率
 
         if selected_gs:
             # 在指定地面站查找可用天线
-            selected_antenna = self.find_available_antenna(selected_gs, (downlink_start, downlink_end))
+            antenna_info = self.find_available_antenna(selected_gs, (downlink_start, downlink_end))
+            if antenna_info:
+                selected_antenna, selected_data_rate = antenna_info
         else:
             # 自动选择第一个有可用的地面站和天线
             for gs_id in self.ground_station_pool.stations:
-                antenna_id = self.find_available_antenna(gs_id, (downlink_start, downlink_end))
-                if antenna_id:
+                antenna_info = self.find_available_antenna(gs_id, (downlink_start, downlink_end))
+                if antenna_info:
                     selected_gs = gs_id
-                    selected_antenna = antenna_id
+                    selected_antenna, selected_data_rate = antenna_info
                     break
 
         if not selected_gs or not selected_antenna:
             return None
+
+        # 重新计算数传时长（使用天线的实际数据率）
+        downlink_duration = calculate_downlink_duration(data_size_gb, selected_data_rate)
+        downlink_end = downlink_start + timedelta(seconds=downlink_duration)
+
+        # 检查是否在可见性窗口内
+        if downlink_end > vis_end:
+            downlink_end = vis_end
+            downlink_start = downlink_end - timedelta(seconds=downlink_duration)
+            if downlink_start < imaging_task.imaging_end:
+                return None
 
         # 分配数传窗口到具体天线
         self.allocate_downlink_window(
             imaging_task.satellite_id,
             selected_gs,
             selected_antenna,
-            (downlink_start, downlink_end)
+            (downlink_start, downlink_end),
+            data_size_gb=data_size_gb
         )
 
-        # 创建数传任务（包含天线信息）
+        # 创建数传任务（包含天线信息和实际数据率）
         downlink_task = DownlinkTask(
             task_id=f"DL-{imaging_task.task_id}",
             satellite_id=imaging_task.satellite_id,
@@ -380,7 +619,8 @@ class GroundStationScheduler:
             end_time=downlink_end,
             data_size_gb=data_size_gb,
             antenna_id=selected_antenna,  # 记录具体使用的天线
-            related_imaging_task_id=imaging_task.task_id
+            related_imaging_task_id=imaging_task.task_id,
+            effective_data_rate=selected_data_rate  # 记录实际使用的数据率
         )
 
         return downlink_task
