@@ -450,9 +450,14 @@ class GreedyScheduler(BaseScheduler):
             if usage.get('power', 0) < power_needed:
                 return False
 
-        # Check storage constraint
+        # Check storage constraint - 动态计算基于成像时长
         if self.consider_storage:
-            storage_needed = getattr(task, 'data_size_gb', 1.0)
+            # 获取卫星数据率，默认300 Mbps
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            # 动态计算固存消耗
+            storage_needed = self._imaging_calculator.get_storage_consumption(
+                task, imaging_mode, data_rate
+            )
             current_storage = usage.get('storage', 0)
             capacity = sat.capabilities.storage_capacity
 
@@ -577,7 +582,13 @@ class GreedyScheduler(BaseScheduler):
         if sat and self.consider_power:
             power_consumed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
 
-        storage_used = getattr(task, 'data_size_gb', 1.0) if self.consider_storage else 0.0
+        # 动态计算固存消耗
+        storage_used = 0.0
+        if sat and self.consider_storage:
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            storage_used = self._imaging_calculator.get_storage_consumption(
+                task, imaging_mode, data_rate
+            )
 
         return ScheduledTask(
             task_id=task.id,
@@ -639,11 +650,15 @@ class GreedyScheduler(BaseScheduler):
         Returns:
             TaskFailureReason enum value
         """
-        # Check storage constraint
+        # Check storage constraint - 使用动态固存消耗
         if self.consider_storage:
             for sat in self.mission.satellites:
                 usage = self._sat_resource_usage.get(sat.id, {})
-                storage_needed = getattr(task, 'data_size_gb', 1.0)
+                imaging_mode = self._select_imaging_mode(sat, task)
+                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                storage_needed = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, data_rate
+                )
                 current_storage = usage.get('storage', 0)
                 if current_storage + storage_needed > sat.capabilities.storage_capacity:
                     return TaskFailureReason.STORAGE_CONSTRAINT

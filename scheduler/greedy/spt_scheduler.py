@@ -337,9 +337,13 @@ class SPTScheduler(BaseScheduler):
             if usage['power'] < power_needed:
                 return False
 
-        # 存储约束
+        # 存储约束 - 动态计算基于成像时长
         if self.consider_storage:
-            storage_needed = getattr(task, 'data_size_gb', 1.0)
+            imaging_mode = self._select_imaging_mode(sat, task)
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            storage_needed = self._imaging_calculator.get_storage_consumption(
+                task, imaging_mode, data_rate
+            )
             if usage['storage'] + storage_needed > sat.capabilities.storage_capacity:
                 return False
 
@@ -393,9 +397,13 @@ class SPTScheduler(BaseScheduler):
                 power_consumed = sat.capabilities.power_capacity * power_coefficient * (duration / 3600)
                 usage['power'] -= power_consumed
 
-            # 更新存储
+            # 更新存储 - 动态计算基于成像时长
             if self.consider_storage:
-                storage_used = getattr(task, 'data_size_gb', 1.0)
+                imaging_mode = self._select_imaging_mode(sat, task)
+                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                storage_used = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, data_rate
+                )
                 usage['storage'] += storage_used
 
             # 更新时间
@@ -416,11 +424,15 @@ class SPTScheduler(BaseScheduler):
         sat_resource_usage: Dict
     ) -> TaskFailureReason:
         """确定任务失败原因"""
-        # 检查是否是资源约束
+        # 检查是否是资源约束 - 使用动态固存消耗
         for sat_id, usage in sat_resource_usage.items():
             sat = self.mission.get_satellite_by_id(sat_id)
             if sat:
-                storage_needed = getattr(task, 'data_size_gb', 1.0)
+                imaging_mode = self._select_imaging_mode(sat, task)
+                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                storage_needed = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, data_rate
+                )
                 if usage['storage'] + storage_needed > sat.capabilities.storage_capacity:
                     return TaskFailureReason.STORAGE_CONSTRAINT
 
