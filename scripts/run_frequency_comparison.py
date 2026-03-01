@@ -250,6 +250,28 @@ def run_algorithm_with_frequency(
     total_actual = sum(target_obs_count.values())
     observation_completion = total_actual / total_required if total_required > 0 else 0
 
+    # 计算卫星利用率
+    # 创建模拟的 ScheduleResult 对象用于 MetricsCalculator
+    class MockScheduleResult:
+        def __init__(self, tasks, comp_time):
+            self.scheduled_tasks = tasks
+            self.computation_time = comp_time
+            self.unscheduled_tasks = {}
+            self.makespan = 0
+            if tasks:
+                self.makespan = (max(t.imaging_end for t in tasks) - min(t.imaging_start for t in tasks)).total_seconds()
+
+    mock_result = MockScheduleResult(result.scheduled_tasks, computation_time)
+
+    # 使用 MetricsCalculator 计算卫星利用率
+    try:
+        metrics_calc = MetricsCalculator(mission)
+        metrics = metrics_calc.calculate_all(mock_result)
+        satellite_utilization = metrics.satellite_utilization
+    except Exception as e:
+        print(f"    警告: 卫星利用率计算失败: {e}")
+        satellite_utilization = 0.0
+
     return {
         'algorithm': algorithm_name,
         'scheduled_count': len(result.scheduled_tasks),
@@ -258,6 +280,7 @@ def run_algorithm_with_frequency(
         'computation_time': computation_time,
         'frequency_satisfaction_rate': frequency_satisfaction,
         'observation_completion_rate': observation_completion,
+        'satellite_utilization': satellite_utilization,
         'total_required': total_required,
         'total_actual': total_actual,
     }
@@ -362,15 +385,17 @@ def print_comparison(all_results: Dict[str, List[Dict]]):
     print("算法对比结果")
     print("=" * 70)
 
-    print(f"\n{'算法':<15} {'任务数':<10} {'频次满足':<12} {'观测完成':<12} {'计算时间':<10}")
-    print("-" * 70)
+    print(f"\n{'算法':<15} {'任务数':<10} {'频次满足':<12} {'观测完成':<12} {'卫星利用率':<12} {'计算时间':<10}")
+    print("-" * 85)
 
     for alg_name, results in all_results.items():
         if results:
             r = results[0]  # 取第一次重复结果
+            util = r.get('satellite_utilization', 0.0)
             print(f"{alg_name:<15} {r['scheduled_count']:<10} "
                   f"{r['frequency_satisfaction_rate']:<12.1%} "
                   f"{r['observation_completion_rate']:<12.1%} "
+                  f"{util:<12.2%} "
                   f"{r['computation_time']:<10.2f}s")
 
     print("\n" + "=" * 70)
@@ -393,7 +418,7 @@ def main():
     )
     parser.add_argument(
         '--algorithms', '-a',
-        default='FCFS,Greedy-EDF,Greedy-MaxVal',
+        default='FCFS,Greedy-EDF,Greedy-MaxVal,GA,SA',
         help='算法列表，逗号分隔'
     )
     parser.add_argument(

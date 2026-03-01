@@ -4,6 +4,7 @@
 包含:
 - slew_calculator: 姿态机动角度和时间计算
 - attitude_calculator: 卫星成像姿态角计算
+- orbit_batch_propagator: Orekit批量轨道传播器
 """
 
 from .slew_calculator import (
@@ -16,6 +17,11 @@ from .attitude_calculator import (
     AttitudeAngles,
     PropagatorType,
 )
+from .orbit_batch_propagator import (
+    OrekitBatchPropagator,
+    SatelliteOrbitCache,
+    get_batch_propagator,
+)
 
 __all__ = [
     'SlewManeuver',
@@ -24,4 +30,7 @@ __all__ = [
     'AttitudeCalculator',
     'AttitudeAngles',
     'PropagatorType',
+    'OrekitBatchPropagator',
+    'SatelliteOrbitCache',
+    'get_batch_propagator',
 ]

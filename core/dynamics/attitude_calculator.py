@@ -24,7 +24,7 @@
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Tuple, Optional, Dict, Any
 import math
@@ -106,12 +106,12 @@ class AttitudeCalculator:
     J2 = 1.08263e-3
     EARTH_RADIUS_KM = 6378.137  # km
 
-    def __init__(self, propagator_type: PropagatorType = PropagatorType.SGP4, use_orekit: bool = False):
+    def __init__(self, propagator_type: PropagatorType = PropagatorType.SGP4, use_orekit: bool = True):
         """初始化姿态角计算器
 
         Args:
             propagator_type: 轨道传播器类型，默认为SGP4
-            use_orekit: 是否优先使用Orekit（如果可用），默认False
+            use_orekit: 是否优先使用Orekit（如果可用），默认True
         """
         self.propagator_type = propagator_type
         self._use_orekit = use_orekit
@@ -210,12 +210,12 @@ class AttitudeCalculator:
         Returns:
             (position, velocity) in ECEF coordinates (meters, m/s)
         """
-        # 1. 如果启用Orekit且可用，优先使用（最高精度）
+        # 1. 如果启用Orekit批量传播，优先使用（最高精度+高性能）
         if self._use_orekit and self._orekit_available:
             try:
-                return self._propagate_with_orekit(satellite, timestamp)
+                return self._get_state_from_batch_propagator(satellite, timestamp)
             except Exception as e:
-                logger.warning(f"Orekit propagation failed: {e}, falling back to other methods")
+                logger.warning(f"Orekit batch propagation failed: {e}, falling back to other methods")
 
         # 2. 优先使用TLE（如果可用）
         if satellite.tle_line1 and satellite.tle_line2:
@@ -225,15 +225,69 @@ class AttitudeCalculator:
                 return self._propagate_with_sgp4(satellite, timestamp)
 
         # 3. 没有TLE时，尝试其他方法
-            # 没有TLE时，优先使用HPOP，其次使用J2模型，最后使用二体模型
-            if self._hpop_available:
-                try:
-                    return self._propagate_with_hpop(satellite, timestamp)
-                except Exception as e:
-                    logger.warning(f"HPOP propagation failed: {e}, falling back to J2 model")
+        # 优先使用HPOP，其次使用J2模型，最后使用二体模型
+        if self._hpop_available:
+            try:
+                return self._propagate_with_hpop(satellite, timestamp)
+            except Exception as e:
+                logger.warning(f"HPOP propagation failed: {e}, falling back to J2 model")
 
-            # 使用J2摄动模型（比二体更精确）
-            return self._propagate_with_j2_model(satellite, timestamp)
+        # 使用J2摄动模型（比二体更精确）
+        return self._propagate_with_j2_model(satellite, timestamp)
+
+    def _get_state_from_batch_propagator(
+        self,
+        satellite: Satellite,
+        timestamp: datetime
+    ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+        """从批量传播器获取卫星状态
+
+        使用 OrekitBatchPropagator 进行高性能批量传播，
+        通过缓存和插值快速获取任意时刻状态。
+
+        Args:
+            satellite: 卫星对象
+            timestamp: 目标时刻
+
+        Returns:
+            (position, velocity) in ECEF (meters, m/s)
+
+        Raises:
+            RuntimeError: 如果批量传播器不可用或获取失败
+        """
+        from .orbit_batch_propagator import get_batch_propagator
+
+        propagator = get_batch_propagator()
+        if propagator is None:
+            raise RuntimeError("Orekit batch propagator not available")
+
+        # 尝试从缓存获取
+        state = propagator.get_state_at_time(satellite.id, timestamp)
+
+        if state is None:
+            # 缓存未命中，需要预计算
+            # 计算时间窗口（前后各扩展30分钟）
+            start_time = timestamp - timedelta(minutes=30)
+            end_time = timestamp + timedelta(minutes=30)
+
+            # 预计算轨道（使用1秒步长保证精度）
+            success = propagator.precompute_satellite_orbit(
+                satellite=satellite,
+                start_time=start_time,
+                end_time=end_time,
+                time_step=timedelta(seconds=1)  # 1秒步长
+            )
+
+            if not success:
+                raise RuntimeError(f"Failed to precompute orbit for {satellite.id}")
+
+            # 再次尝试获取
+            state = propagator.get_state_at_time(satellite.id, timestamp)
+
+            if state is None:
+                raise RuntimeError(f"Still cannot get state for {satellite.id} at {timestamp}")
+
+        return state
 
     def _propagate_with_j2_model(
         self,
