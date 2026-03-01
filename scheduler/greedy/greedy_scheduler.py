@@ -279,7 +279,7 @@ class GreedyScheduler(BaseScheduler):
 
                 # Calculate required imaging time
                 imaging_mode = self._select_imaging_mode(sat, task)
-                imaging_duration = self._calculate_imaging_time(task, imaging_mode)
+                imaging_duration = self._calculate_imaging_time(task, imaging_mode, sat)
 
                 # Check if window is long enough
                 window_duration = (window_end - window_start).total_seconds()
@@ -393,18 +393,19 @@ class GreedyScheduler(BaseScheduler):
 
         return True
 
-    def _calculate_imaging_time(self, task: Any, imaging_mode: Any) -> float:
+    def _calculate_imaging_time(self, task: Any, imaging_mode: Any, sat: Any = None) -> float:
         """
         Calculate imaging time for a task
 
         Args:
             task: Target task
             imaging_mode: Imaging mode to use
+            sat: Optional satellite for satellite-specific constraints
 
         Returns:
             Imaging duration in seconds
         """
-        return self._imaging_calculator.calculate(task, imaging_mode)
+        return self._imaging_calculator.calculate(task, imaging_mode, satellite=sat)
 
     def _select_imaging_mode(self, sat: Any, task: Any) -> Any:
         """
@@ -443,7 +444,7 @@ class GreedyScheduler(BaseScheduler):
 
         # Check power constraint
         if self.consider_power:
-            duration = self._calculate_imaging_time(task, imaging_mode)
+            duration = self._calculate_imaging_time(task, imaging_mode, sat)
             power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
             power_needed = sat.capabilities.power_capacity * power_coefficient * (duration / 3600)
 
@@ -563,7 +564,10 @@ class GreedyScheduler(BaseScheduler):
             ScheduledTask object
         """
         window_start, window_end = self._extract_window_times(window)
-        imaging_duration = self._calculate_imaging_time(task, imaging_mode)
+
+        # Get satellite for satellite-specific constraints
+        sat = self.mission.get_satellite_by_id(sat_id)
+        imaging_duration = self._calculate_imaging_time(task, imaging_mode, sat)
 
         # Calculate actual timing
         actual_start, actual_end = self._calculate_task_time(
@@ -690,7 +694,7 @@ class GreedyScheduler(BaseScheduler):
                 if window_start and window_end:
                     window_duration = (window_end - window_start).total_seconds()
                     imaging_mode = self._select_imaging_mode(sat, task)
-                    imaging_duration = self._calculate_imaging_time(task, imaging_mode)
+                    imaging_duration = self._calculate_imaging_time(task, imaging_mode, sat)
                     if window_duration < imaging_duration:
                         return TaskFailureReason.WINDOW_TOO_SHORT
 

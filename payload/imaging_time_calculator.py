@@ -115,13 +115,72 @@ class ImagingTimeCalculator:
         self.max_duration = max_duration or self.DEFAULT_MAX_DURATION
         self.default_duration = default_duration or self.DEFAULT_DEFAULT_DURATION
 
-    def calculate(self, target: Target, mode: ImagingMode) -> float:
+    def get_constraints_for_satellite(
+        self,
+        satellite: Optional[Any],
+        mode: ImagingMode
+    ) -> Optional[Dict[str, float]]:
+        """
+        获取卫星特定成像模式的约束
+
+        Args:
+            satellite: 卫星对象（可选）
+            mode: 成像模式
+
+        Returns:
+            约束字典或None（如果没有卫星特定约束）
+        """
+        if satellite is None:
+            return None
+
+        if not hasattr(satellite, 'capabilities'):
+            return None
+
+        capabilities = satellite.capabilities
+        if not hasattr(capabilities, 'get_imaging_constraints'):
+            return None
+
+        return capabilities.get_imaging_constraints(mode)
+
+    def _get_effective_constraints(
+        self,
+        mode: ImagingMode,
+        satellite: Optional[Any]
+    ) -> tuple:
+        """
+        获取有效的min/max约束
+
+        优先使用卫星特定的约束，如果没有则使用全局默认值
+
+        Args:
+            mode: 成像模式
+            satellite: 可选的卫星对象
+
+        Returns:
+            Tuple of (min_duration, max_duration)
+        """
+        sat_constraints = self.get_constraints_for_satellite(satellite, mode)
+
+        if sat_constraints is not None:
+            min_dur = sat_constraints.get('min_duration', self.min_duration)
+            max_dur = sat_constraints.get('max_duration', self.max_duration)
+            return (min_dur, max_dur)
+
+        return (self.min_duration, self.max_duration)
+
+    def calculate(
+        self,
+        target: Target,
+        mode: ImagingMode,
+        satellite: Optional[Any] = None
+    ) -> float:
         """
         计算成像时长
 
         Args:
             target: 目标对象
             mode: 成像模式
+            satellite: 可选的卫星对象，用于获取卫星特定的约束
 
         Returns:
             float: 成像时长（秒）
@@ -132,6 +191,9 @@ class ImagingTimeCalculator:
         if not isinstance(mode, ImagingMode):
             raise ValueError(f"Invalid imaging mode: {mode}")
 
+        # 获取约束（卫星特定或全局）
+        min_duration, max_duration = self._get_effective_constraints(mode, satellite)
+
         # 根据目标类型和成像模式计算时长
         if target.target_type == TargetType.POINT:
             duration = self._calculate_point_target(target, mode)
@@ -141,7 +203,7 @@ class ImagingTimeCalculator:
             duration = self.default_duration
 
         # 应用限制
-        return max(self.min_duration, min(duration, self.max_duration))
+        return max(min_duration, min(duration, max_duration))
 
     def _calculate_point_target(self, target: Target, mode: ImagingMode) -> float:
         """
