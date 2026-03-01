@@ -37,6 +37,14 @@ except ImportError:
     OrekitJavaBridge = None
     OrbitPropagationError = Exception
 
+# 尝试导入OrekitBatchPropagator（高性能批量传播）
+try:
+    from core.dynamics.orbit_batch_propagator import OrekitBatchPropagator, get_batch_propagator, OREKIT_AVAILABLE as BATCH_PROPAGATOR_AVAILABLE
+except ImportError:
+    BATCH_PROPAGATOR_AVAILABLE = False
+    OrekitBatchPropagator = None
+    get_batch_propagator = None
+
 # 导入配置
 from .orekit_config import merge_config
 
@@ -69,7 +77,8 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         Args:
             config: 配置参数
                 - min_elevation: 最小仰角（度，默认5.0）
-                - time_step: 计算时间步长（秒，默认60）
+                - time_step: 计算时间步长（秒，默认1）
+                - use_batch_propagator: 是否使用OrekitBatchPropagator（默认True）
                 - use_java_orekit: 是否使用Java Orekit（默认False）
                 - orekit: Orekit配置字典
         """
@@ -77,13 +86,26 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         min_elevation = config.get('min_elevation', 5.0)
         super().__init__(min_elevation=min_elevation)
 
-        self.time_step = config.get('time_step', 60)
+        # 默认使用1秒步长（HPOP高精度）
+        self.time_step = config.get('time_step', 1)
         self._config = config
 
+        # 是否使用OrekitBatchPropagator（默认启用，最高精度）
+        self.use_batch_propagator = config.get('use_batch_propagator', True)
+        self._batch_propagator = None
+        if self.use_batch_propagator and BATCH_PROPAGATOR_AVAILABLE:
+            try:
+                self._batch_propagator = get_batch_propagator()
+                logger.info("OrekitBatchPropagator initialized for visibility calculation")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OrekitBatchPropagator: {e}")
+                self._batch_propagator = None
+
         # Phase 1: 自适应时间步长配置
-        self.use_adaptive_step = config.get('use_adaptive_step', True)  # 默认启用
-        self.coarse_step = config.get('coarse_step_seconds', 300)  # 粗扫描步长（秒）
-        self.fine_step = config.get('fine_step_seconds', 60)  # 精化步长（秒）
+        # 默认启用自适应步长以提高性能，同时保持精度
+        self.use_adaptive_step = config.get('use_adaptive_step', True)
+        self.coarse_step = config.get('coarse_step_seconds', 5)  # 粗扫描步长（秒）- 使用5秒
+        self.fine_step = config.get('fine_step_seconds', 1)  # 精化步长（秒）- 使用1秒保证精度
 
         # 创建自适应步长计算器（如启用）
         if self.use_adaptive_step:
@@ -414,6 +436,68 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
             except Exception as e:
                 raise RuntimeError(f"JVM not running and failed to start: {e}")
 
+    def _propagate_range_with_batch_propagator(
+        self,
+        satellite,
+        start_time: datetime,
+        end_time: datetime,
+        time_step: timedelta
+    ) -> List[Tuple[Tuple[float, float, float], Tuple[float, float, float], datetime]]:
+        """
+        使用OrekitBatchPropagator进行批量轨道传播（HPOP高精度）
+
+        使用core.dynamics.orbit_batch_propagator中的批量传播器，
+        支持1秒步长的高精度轨道计算，带缓存和插值。
+
+        Args:
+            satellite: 卫星模型
+            start_time: 开始时间
+            end_time: 结束时间
+            time_step: 时间步长
+
+        Returns:
+            List of (position, velocity, timestamp)
+
+        Raises:
+            RuntimeError: 如果传播失败
+        """
+        if self._batch_propagator is None:
+            raise RuntimeError("OrekitBatchPropagator not available")
+
+        # 确保时区一致
+        from datetime import timezone
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+
+        # 预计算轨道（使用1秒步长保证精度）
+        # 可见性计算通常需要整个时间窗口，所以预计算整个范围
+        success = self._batch_propagator.precompute_satellite_orbit(
+            satellite=satellite,
+            start_time=start_time,
+            end_time=end_time,
+            time_step=timedelta(seconds=1),  # 1秒步长保证精度
+            force_recompute=False
+        )
+
+        if not success:
+            raise RuntimeError(f"Failed to precompute orbit for {satellite.id}")
+
+        # 从缓存获取所有时间点的状态
+        positions = []
+        current_time = start_time
+        step_seconds = time_step.total_seconds()
+
+        while current_time <= end_time:
+            state = self._batch_propagator.get_state_at_time(satellite.id, current_time)
+            if state is not None:
+                pos, vel = state
+                positions.append((pos, vel, current_time))
+            current_time += timedelta(seconds=step_seconds)
+
+        return positions
+
     def _propagate_with_java_orekit(self, satellite, dt: datetime) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
         """
         使用Java Orekit进行单点轨道传播
@@ -432,8 +516,23 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         """
         self._ensure_jvm_and_bridge()
 
-        # 使用批量传播获取单个时间点的数据
-        # 为了获取单个时间点的精确位置，我们传播一个很短的时间范围
+        # 优先使用BatchPropagator（如果可用）
+        if self._batch_propagator is not None:
+            try:
+                # 预计算单个点（前后各扩展30秒保证插值精度）
+                self._batch_propagator.precompute_satellite_orbit(
+                    satellite=satellite,
+                    start_time=dt - timedelta(seconds=30),
+                    end_time=dt + timedelta(seconds=30),
+                    time_step=timedelta(seconds=1)
+                )
+                state = self._batch_propagator.get_state_at_time(satellite.id, dt)
+                if state is not None:
+                    return state
+            except Exception as e:
+                logger.debug(f"BatchPropagator single point query failed: {e}")
+
+        # 回退：使用Java Orekit批量传播
         start_time = dt - timedelta(seconds=1)
         end_time = dt + timedelta(seconds=1)
 
@@ -687,8 +786,16 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         if satellite is None:
             return []
 
-        # Phase 1: 批量传播优化
-        # 当启用Java Orekit时，直接使用批量传播API
+        # 优先使用OrekitBatchPropagator（HPOP高精度，1秒步长）
+        if self.use_batch_propagator and self._batch_propagator is not None:
+            try:
+                return self._propagate_range_with_batch_propagator(
+                    satellite, start_time, end_time, time_step
+                )
+            except Exception as e:
+                logger.warning(f"OrekitBatchPropagator failed: {e}. Falling back to other methods.")
+
+        # 回退：使用Java Orekit批量传播
         if self.use_java_orekit and OREKIT_BRIDGE_AVAILABLE and self._orekit_bridge is not None:
             try:
                 return self._propagate_range_with_java_orekit(
@@ -696,7 +803,6 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
                 )
             except Exception as e:
                 logger.warning(f"Java Orekit batch propagation failed: {e}. Falling back to simplified model.")
-                # 回退到简化模型（继续执行下面的代码）
 
         # 原始实现：逐点传播（简化模型或SGP4）
         # 验证时间步长为正数，避免无限循环

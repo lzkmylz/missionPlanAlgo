@@ -44,6 +44,9 @@ class VisibilityCalculatorFactory:
         Args:
             preferred: 首选后端 ('auto', 'stk', 'orekit')
             config: 配置参数
+                - time_step: 计算时间步长（秒，默认1）
+                - use_batch_propagator: 是否使用OrekitBatchPropagator（默认True）
+                - min_elevation: 最小仰角（度，默认5.0）
 
         Returns:
             VisibilityCalculator: 可见性计算器实例
@@ -51,7 +54,18 @@ class VisibilityCalculatorFactory:
         Raises:
             ValueError: 如果指定了无效的后端类型
         """
-        config = config or {}
+        # 默认配置：1秒步长，启用BatchPropagator
+        default_config = {
+            'time_step': 1,  # 1秒步长（HPOP高精度）
+            'use_batch_propagator': True,  # 默认启用OrekitBatchPropagator
+            'min_elevation': 5.0,
+        }
+
+        # 合并用户配置
+        if config:
+            default_config.update(config)
+
+        config = default_config
 
         if preferred == 'auto':
             if cls._check_stk_available() and STKVisibilityCalculator is not None:

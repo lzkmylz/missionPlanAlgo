@@ -128,30 +128,11 @@ class VisibilityCalculator(ABC):
         # 地面站位置向量
         gx, gy, gz = ground_pos
 
-        # 首先检查卫星是否被地球遮挡
-        # 计算地面站-卫星连线到地心的最短距离
-        dot_t_d = gx*dx + gy*dy + gz*dz
-        d_squared = dx*dx + dy*dy + dz*dz
-
-        if d_squared > 1e-6:
-            t = -dot_t_d / d_squared
-
-            # 如果最近点在线段内，检查是否穿过地球
-            if 0 < t < 1:
-                closest_x = gx + t * dx
-                closest_y = gy + t * dy
-                closest_z = gz + t * dz
-                closest_dist = math.sqrt(closest_x**2 + closest_y**2 + closest_z**2)
-
-                if closest_dist < self.EARTH_RADIUS * 0.999:
-                    # 连线穿过地球内部，卫星不可见
-                    return -90.0
-
-        # 地面站到天顶的单位向量（地心反方向）
+        # 地面站到天顶的单位向量（从地心指向外的方向）
         g_norm = math.sqrt(gx**2 + gy**2 + gz**2)
-        up_x = -gx / g_norm
-        up_y = -gy / g_norm
-        up_z = -gz / g_norm
+        up_x = gx / g_norm
+        up_y = gy / g_norm
+        up_z = gz / g_norm
 
         # 归一化卫星方向向量
         d_norm = math.sqrt(dx**2 + dy**2 + dz**2)
@@ -164,6 +145,31 @@ class VisibilityCalculator(ABC):
 
         # 仰角 = 90° - 天顶角
         elevation = math.degrees(math.asin(max(-1, min(1, cos_zenith))))
+
+        # 地球遮挡检查：只有仰角大于0时才需要检查
+        if elevation > 0:
+            # 检查视线是否穿过地球
+            # 视线参数方程: P = G + t * D, t >= 0
+            # 与地球相交: |P|^2 = R^2
+            # 解二次方程求交点
+            G_dot_G = gx**2 + gy**2 + gz**2
+            G_dot_D = gx*dx + gy*dy + gz*dz
+            D_dot_D = dx**2 + dy**2 + dz**2
+
+            a = D_dot_D
+            b = 2 * G_dot_D
+            c = G_dot_G - self.EARTH_RADIUS**2
+
+            discriminant = b*b - 4*a*c
+
+            if discriminant >= 0:
+                sqrt_disc = math.sqrt(discriminant)
+                t1 = (-b - sqrt_disc) / (2*a)
+                t2 = (-b + sqrt_disc) / (2*a)
+
+                # 如果存在 t > 0.001 的解（除地面站本身外），视线穿过地球
+                if t1 > 0.001 or t2 > 0.001:
+                    elevation = -90.0
 
         return elevation
 

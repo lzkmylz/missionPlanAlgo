@@ -51,10 +51,11 @@ class SPTScheduler(BaseScheduler):
         self.allow_tardiness = config.get('allow_tardiness', False)
 
         # 初始化成像时间计算器和功率配置文件
+        # 使用ImagingTimeCalculator的默认值（基于实际卫星数据）
         self._imaging_calculator = ImagingTimeCalculator(
-            min_duration=config.get('min_imaging_duration', 60),
-            max_duration=config.get('max_imaging_duration', 1800),
-            default_duration=config.get('default_imaging_duration', 300)
+            min_duration=config.get('min_imaging_duration'),
+            max_duration=config.get('max_imaging_duration'),
+            default_duration=config.get('default_imaging_duration')
         )
         self._power_profile = PowerProfile(config.get('power_coefficients'))
 

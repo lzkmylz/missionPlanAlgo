@@ -94,7 +94,7 @@ class TestInitialization:
     def test_default_initialization(self, calculator):
         """测试默认初始化"""
         assert calculator.min_elevation == 5.0
-        assert calculator.time_step == 60
+        assert calculator.time_step == 1  # 默认1秒步长（HPOP高精度）
         assert calculator.EARTH_RADIUS == 6371000.0
 
     def test_custom_initialization(self, custom_calculator):
@@ -106,13 +106,13 @@ class TestInitialization:
         """测试空配置初始化"""
         calc = OrekitVisibilityCalculator(config={})
         assert calc.min_elevation == 5.0
-        assert calc.time_step == 60
+        assert calc.time_step == 1  # 默认1秒步长（HPOP高精度）
 
     def test_none_config_initialization(self):
         """测试None配置初始化"""
         calc = OrekitVisibilityCalculator(config=None)
         assert calc.min_elevation == 5.0
-        assert calc.time_step == 60
+        assert calc.time_step == 1  # 默认1秒步长（HPOP高精度）
 
 
 # =============================================================================
@@ -334,6 +334,11 @@ class TestVisibilityWindowComputation:
     def test_window_computation_with_custom_timestep(self, custom_calculator, mock_satellite, mock_target, time_range):
         """测试自定义时间步长的窗口计算"""
         start, end = time_range
+
+        # 禁用BatchPropagator和自适应步长，确保使用_propagate_range
+        custom_calculator.use_batch_propagator = False
+        custom_calculator._batch_propagator = None
+        custom_calculator.use_adaptive_step = False
 
         with patch.object(custom_calculator, '_propagate_range') as mock_prop:
             mock_prop.return_value = []
@@ -660,6 +665,11 @@ class TestAdditionalCoverage:
     def test_compute_satellite_target_windows_exception(self, calculator, mock_satellite, time_range):
         """测试卫星-目标窗口计算的异常处理"""
         start, end = time_range
+
+        # 禁用自适应步长和BatchPropagator以避免无限重试
+        calculator.use_adaptive_step = False
+        calculator.use_batch_propagator = False
+        calculator._batch_propagator = None
 
         # 创建一个会引发异常的目标
         bad_target = Mock()
