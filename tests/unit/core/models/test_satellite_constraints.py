@@ -174,7 +174,7 @@ class TestSatelliteWithConstraints:
         }
 
     def test_satellite_default_capabilities_no_constraints(self):
-        """Test satellite with default capabilities has empty constraints."""
+        """Test satellite with default capabilities has expected constraints."""
         satellite = Satellite(
             id="test_sat",
             name="Test Satellite",
@@ -182,7 +182,10 @@ class TestSatelliteWithConstraints:
             orbit=Orbit(),
         )
 
-        assert satellite.capabilities.imaging_mode_constraints == {}
+        # OPTICAL_1 now has default constraints: min=6s, max=12s
+        assert satellite.capabilities.imaging_mode_constraints == {
+            ImagingMode.PUSH_BROOM: {'min_duration': 6.0, 'max_duration': 12.0}
+        }
 
 
 class TestSatelliteCapabilitiesSerialization:
@@ -193,7 +196,9 @@ class TestSatelliteCapabilitiesSerialization:
         constraints = {
             ImagingMode.PUSH_BROOM: {'min_duration': 30.0, 'max_duration': 600.0},
         }
+        # Also include imaging_modes to prevent _set_default_capabilities from overriding
         capabilities = SatelliteCapabilities(
+            imaging_modes=[ImagingMode.PUSH_BROOM],
             imaging_mode_constraints=constraints
         )
         satellite = Satellite(
