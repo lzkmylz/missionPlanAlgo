@@ -14,10 +14,13 @@ Features:
 
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
+import math
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from ..frequency_utils import ObservationTask, create_observation_tasks
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
+from core.dynamics.slew_calculator import SlewCalculator
+from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 
 
 class GreedyScheduler(BaseScheduler):
@@ -77,6 +80,9 @@ class GreedyScheduler(BaseScheduler):
         # Track satellite resource usage during scheduling
         self._sat_resource_usage: Dict[str, Dict[str, Any]] = {}
 
+        # Slew calculators per satellite (initialized in initialize())
+        self._slew_calculators: Dict[str, SlewCalculator] = {}
+
     def get_parameters(self) -> Dict[str, Any]:
         """Return algorithm configurable parameters"""
         return {
@@ -108,6 +114,19 @@ class GreedyScheduler(BaseScheduler):
             for sat in self.mission.satellites
         }
 
+        # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
+        self._initialize_slew_checker()
+
+        # Keep _slew_calculators for backward compatibility
+        self._slew_calculators = {}
+        for sat in self.mission.satellites:
+            agility = sat.capabilities.agility
+            self._slew_calculators[sat.id] = SlewCalculator(
+                max_slew_rate=agility.get('max_slew_rate', 3.0),
+                max_slew_angle=sat.capabilities.max_off_nadir,
+                settling_time=agility.get('settling_time', 5.0)
+            )
+
         # Sort tasks based on heuristic (using frequency-aware tasks)
         pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
         scheduled_tasks: List[ScheduledTask] = []
@@ -118,11 +137,11 @@ class GreedyScheduler(BaseScheduler):
             best_assignment = self._find_best_assignment(task)
 
             if best_assignment:
-                sat_id, window, imaging_mode = best_assignment
+                sat_id, window, imaging_mode, slew_result = best_assignment
 
-                # Create scheduled task
+                # Create scheduled task with slew information
                 scheduled_task = self._create_scheduled_task(
-                    task, sat_id, window, imaging_mode
+                    task, sat_id, window, imaging_mode, slew_result
                 )
                 scheduled_tasks.append(scheduled_task)
 
@@ -244,7 +263,7 @@ class GreedyScheduler(BaseScheduler):
 
         return sorted(tasks, key=deadline_key)
 
-    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any]]:
+    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
         """
         Find the best satellite-window assignment for a task
 
@@ -252,7 +271,7 @@ class GreedyScheduler(BaseScheduler):
             task: Target task to schedule
 
         Returns:
-            Tuple of (satellite_id, window, imaging_mode) or None if no valid assignment
+            Tuple of (satellite_id, window, imaging_mode, slew_result) or None if no valid assignment
         """
         best_assignment = None
         best_score = None
@@ -291,16 +310,32 @@ class GreedyScheduler(BaseScheduler):
                 if not self._check_resource_constraints(sat, task, imaging_mode):
                     continue
 
+                # Check slew constraints (core constraint using SlewConstraintChecker)
+                prev_target = self._get_previous_task_target(sat.id)
+                usage = self._sat_resource_usage.get(sat.id, {})
+                last_task_end = usage.get('last_task_end', self.mission.start_time)
+
+                # Ensure _slew_checker is initialized
+                self._ensure_slew_checker_initialized()
+
+                if self._slew_checker is None:
+                    continue
+
+                slew_result = self._slew_checker.check_slew_feasibility(
+                    sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                )
+
+                if not slew_result.feasible:
+                    continue
+
+                # Use actual start time from slew calculation
+                actual_start = slew_result.actual_start
+                actual_end = actual_start + timedelta(seconds=imaging_duration)
+
                 # Check time conflicts
                 if self.consider_time_conflicts:
-                    actual_start, actual_end = self._calculate_task_time(
-                        sat.id, window_start, imaging_duration
-                    )
                     if self._has_time_conflict(sat.id, actual_start, actual_end):
                         continue
-                else:
-                    actual_start = window_start
-                    actual_end = window_start + timedelta(seconds=imaging_duration)
 
                 # Calculate score for this assignment
                 score = self._calculate_assignment_score(
@@ -310,7 +345,7 @@ class GreedyScheduler(BaseScheduler):
                 # Update best assignment if this is better
                 if best_score is None or score > best_score:
                     best_score = score
-                    best_assignment = (sat.id, window, imaging_mode)
+                    best_assignment = (sat.id, window, imaging_mode, slew_result)
 
         return best_assignment
 
@@ -543,14 +578,52 @@ class GreedyScheduler(BaseScheduler):
 
         # Prefer satellites with more remaining resources
         usage = self._sat_resource_usage.get(sat.id, {})
-        power_ratio = usage.get('power', 0) / sat.capabilities.power_capacity
-        storage_ratio = 1.0 - (usage.get('storage', 0) / sat.capabilities.storage_capacity)
+        power_capacity = sat.capabilities.power_capacity
+        storage_capacity = sat.capabilities.storage_capacity
+
+        # Guard against division by zero
+        if power_capacity > 0:
+            power_ratio = usage.get('power', 0) / power_capacity
+        else:
+            power_ratio = 0.0
+
+        if storage_capacity > 0:
+            storage_ratio = 1.0 - (usage.get('storage', 0) / storage_capacity)
+        else:
+            storage_ratio = 0.0
+
         score += (power_ratio + storage_ratio) * 5
 
         return score
 
+    def _get_previous_task_target(self, sat_id: str) -> Optional[Any]:
+        """获取卫星上一个已调度任务的目标
+
+        Args:
+            sat_id: 卫星ID
+
+        Returns:
+            前一个任务的目标对象，如果没有则返回None
+        """
+        usage = self._sat_resource_usage.get(sat_id, {})
+        scheduled_tasks = usage.get('scheduled_tasks', [])
+
+        if not scheduled_tasks:
+            return None
+
+        # 获取最后一个已调度任务
+        last_task_info = scheduled_tasks[-1]
+        prev_task_id = last_task_info.get('task_id')
+
+        if not prev_task_id or not self.mission:
+            return None
+
+        # 从mission中找到对应的目标
+        return self.mission.get_target_by_id(prev_task_id)
+
     def _create_scheduled_task(
-        self, task: Any, sat_id: str, window: Any, imaging_mode: Any
+        self, task: Any, sat_id: str, window: Any, imaging_mode: Any,
+        slew_result: Optional[SlewFeasibilityResult] = None
     ) -> ScheduledTask:
         """
         Create a ScheduledTask object
@@ -560,6 +633,7 @@ class GreedyScheduler(BaseScheduler):
             sat_id: Satellite ID
             window: Visibility window
             imaging_mode: Imaging mode
+            slew_result: 机动可行性检查结果（可选）
 
         Returns:
             ScheduledTask object
@@ -569,11 +643,6 @@ class GreedyScheduler(BaseScheduler):
         # Get satellite for satellite-specific constraints
         sat = self.mission.get_satellite_by_id(sat_id)
         imaging_duration = self._calculate_imaging_time(task, imaging_mode, sat)
-
-        # Calculate actual timing
-        actual_start, actual_end = self._calculate_task_time(
-            sat_id, window_start, imaging_duration
-        )
 
         # Get current resource levels
         usage = self._sat_resource_usage.get(sat_id, {})
@@ -595,6 +664,38 @@ class GreedyScheduler(BaseScheduler):
                 task, imaging_mode, data_rate
             )
 
+        # 使用 slew_result 中的机动信息（如果提供），否则重新计算
+        if slew_result:
+            slew_angle = slew_result.slew_angle
+            slew_time_seconds = slew_result.slew_time
+            actual_start = slew_result.actual_start
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+        else:
+            # 计算动态机动时间和角度（回退逻辑）
+            slew_angle = 0.0
+            slew_time_seconds = self.DEFAULT_SLEW_TIME.total_seconds()
+
+            if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+                prev_target = self._get_previous_task_target(sat_id)
+                if prev_target and hasattr(prev_target, 'latitude') and hasattr(prev_target, 'longitude'):
+                    slew_calculator = self._slew_calculators.get(sat_id)
+                    if slew_calculator:
+                        lon_diff = task.longitude - prev_target.longitude
+                        lat_diff = task.latitude - prev_target.latitude
+                        slew_angle = math.sqrt(lon_diff**2 + lat_diff**2)
+                        slew_angle = min(slew_angle, sat.capabilities.max_off_nadir)
+                        slew_time_seconds = slew_calculator.calculate_slew_time(slew_angle)
+
+            # 计算实际开始时间
+            usage = self._sat_resource_usage.get(sat_id, {})
+            last_task_end = usage.get('last_task_end')
+            if last_task_end:
+                earliest_start = last_task_end + timedelta(seconds=slew_time_seconds)
+                actual_start = max(window_start, earliest_start)
+            else:
+                actual_start = window_start
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
@@ -603,7 +704,8 @@ class GreedyScheduler(BaseScheduler):
             imaging_start=actual_start,
             imaging_end=actual_end,
             imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
-            slew_angle=0.0,  # Could be calculated based on target positions
+            slew_angle=slew_angle,
+            slew_time=slew_time_seconds,
             storage_before=storage_before,
             storage_after=storage_before + storage_used,
             power_before=power_before,

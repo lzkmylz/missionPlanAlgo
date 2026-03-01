@@ -21,6 +21,7 @@ from core.dynamics.attitude_calculator import (
     PropagatorType,
     AttitudeAngles,
 )
+from .constraints import SlewConstraintChecker
 
 
 class TaskFailureReason(Enum):
@@ -83,6 +84,7 @@ class ScheduledTask:
     imaging_end: datetime
     imaging_mode: str
     slew_angle: float = 0.0
+    slew_time: float = 0.0  # 机动时间（秒）
     storage_before: float = 0.0
     storage_after: float = 0.0
     power_before: float = 0.0
@@ -108,6 +110,7 @@ class ScheduledTask:
             'imaging_end': self.imaging_end.isoformat() if self.imaging_end else None,
             'imaging_mode': self.imaging_mode,
             'slew_angle': self.slew_angle,
+            'slew_time': self.slew_time,
             'ground_station_id': self.ground_station_id,
             'antenna_id': self.antenna_id,
             'downlink_start': self.downlink_start.isoformat() if self.downlink_start else None,
@@ -172,12 +175,28 @@ class BaseScheduler(ABC):
         )
         self._enable_attitude_calculation = self.config.get('enable_attitude_calculation', True)
 
+        # 初始化机动约束检查器（在 initialize() 中完成实际初始化）
+        self._slew_checker: Optional[SlewConstraintChecker] = None
+
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
         self.mission = mission
         self._failure_log = []
         self._iterations = 0
         self._convergence_curve = []
+
+    def _initialize_slew_checker(self) -> None:
+        """初始化机动约束检查器"""
+        if self.mission is None:
+            return
+
+        self._slew_checker = SlewConstraintChecker(
+            self.mission,
+            self._attitude_calculator
+        )
+
+        for sat in self.mission.satellites:
+            self._slew_checker.initialize_satellite(sat)
 
     def set_window_cache(self, cache) -> None:
         """设置窗口缓存"""
@@ -389,4 +408,86 @@ class BaseScheduler(ABC):
             enable: 是否启用姿态角计算
         """
         self._enable_attitude_calculation = enable
+
+    def _ensure_slew_checker_initialized(self) -> None:
+        """确保机动约束检查器已初始化
+
+        如果_slew_checker为None，则调用_initialize_slew_checker()进行初始化。
+        所有使用_slew_checker的方法应在访问前调用此方法。
+        """
+        if self._slew_checker is None:
+            self._initialize_slew_checker()
+
+    def _calculate_slew_angle_and_time(
+        self,
+        sat_id: str,
+        prev_target: Any,
+        current_target: Any
+    ) -> Tuple[float, float]:
+        """计算机动角度和时间
+
+        统一的机动计算方法，供所有调度器使用，避免代码重复。
+        优先使用SlewConstraintChecker进行计算，如果不可用则使用简化计算。
+
+        Args:
+            sat_id: 卫星ID
+            prev_target: 上一个目标（None表示第一个任务）
+            current_target: 当前目标
+
+        Returns:
+            Tuple[float, float]: (机动角度, 机动时间秒)
+        """
+        import math
+
+        # 如果没有上一个目标，不需要机动
+        if prev_target is None:
+            return 0.0, 0.0
+
+        # 检查目标是否有位置信息
+        if not hasattr(prev_target, 'latitude') or not hasattr(prev_target, 'longitude'):
+            return 0.0, 0.0
+
+        if not hasattr(current_target, 'latitude') or not hasattr(current_target, 'longitude'):
+            return 0.0, 0.0
+
+        # 确保_slew_checker已初始化
+        self._ensure_slew_checker_initialized()
+
+        # 优先使用SlewConstraintChecker
+        if self._slew_checker is not None:
+            try:
+                # 获取卫星以取得最大侧摆角
+                sat = None
+                if self.mission:
+                    sat = self.mission.get_satellite_by_id(sat_id)
+
+                if sat:
+                    # 使用SlewConstraintChecker的简化计算方法
+                    slew_angle = self._slew_checker._calculate_simplified_slew_angle(
+                        prev_target, current_target
+                    )
+                    max_slew_angle = sat.capabilities.max_off_nadir
+                    slew_angle = min(slew_angle, max_slew_angle)
+
+                    # 获取SlewCalculator计算机动时间
+                    slew_calc = self._slew_checker._slew_calculators.get(sat_id)
+                    if slew_calc:
+                        slew_time = slew_calc.calculate_slew_time(slew_angle)
+                        return slew_angle, slew_time
+            except Exception:
+                # 如果SlewConstraintChecker失败，回退到简化计算
+                pass
+
+        # 回退到简化计算（与原始代码一致）
+        lon_diff = current_target.longitude - prev_target.longitude
+        lat_diff = current_target.latitude - prev_target.latitude
+        slew_angle = math.sqrt(lon_diff**2 + lat_diff**2)
+
+        # 限制在最大侧摆角内
+        if self.mission:
+            sat = self.mission.get_satellite_by_id(sat_id)
+            if sat:
+                slew_angle = min(slew_angle, sat.capabilities.max_off_nadir)
+
+        return slew_angle, 0.0  # 简化计算不计算机动时间
 

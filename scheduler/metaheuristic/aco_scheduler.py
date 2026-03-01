@@ -12,6 +12,8 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
+from core.dynamics.slew_calculator import SlewCalculator
+from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 
 
 @dataclass
@@ -88,6 +90,9 @@ class ACOScheduler(BaseScheduler):
         self.pheromone_matrix: Optional[np.ndarray] = None
         self.heuristic_matrix: Optional[np.ndarray] = None
 
+        # Slew calculators per satellite (initialized in schedule())
+        self._slew_calculators: Dict[str, SlewCalculator] = {}
+
     def _validate_positive_int(self, value: int, name: str) -> int:
         """验证正整数参数"""
         if not isinstance(value, int) or value <= 0:
@@ -144,6 +149,19 @@ class ACOScheduler(BaseScheduler):
         # 处理空场景
         if self.task_count == 0 or self.sat_count == 0:
             return self._build_empty_result()
+
+        # Initialize slew constraint checker
+        self._initialize_slew_checker()
+
+        # Keep _slew_calculators for backward compatibility in _decode_solution
+        self._slew_calculators = {}
+        for sat in self.satellites:
+            agility = getattr(sat.capabilities, 'agility', {})
+            self._slew_calculators[sat.id] = SlewCalculator(
+                max_slew_rate=agility.get('max_slew_rate', 3.0) if agility else 3.0,
+                max_slew_angle=sat.capabilities.max_off_nadir,
+                settling_time=agility.get('settling_time', 5.0) if agility else 5.0
+            )
 
         # 初始化信息素矩阵
         self._initialize_pheromone_matrix()
@@ -282,6 +300,7 @@ class ACOScheduler(BaseScheduler):
         - 奖励：窗口质量、资源均衡
         - 惩罚：时间冲突
         - 频次满足度奖励
+        - 机动可行性检查
         """
         from ..frequency_utils import ObservationTask
 
@@ -291,6 +310,9 @@ class ACOScheduler(BaseScheduler):
         sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
             i: [] for i in range(self.sat_count)
         }
+        # Track last scheduled target per satellite for slew calculation
+        sat_last_target: Dict[int, Any] = {}
+        sat_last_end_time: Dict[int, datetime] = {}
 
         for task_idx, sat_idx in enumerate(ant.path):
             if task_idx >= len(self.tasks):
@@ -320,6 +342,28 @@ class ACOScheduler(BaseScheduler):
                     break
 
             if feasible_window:
+                # 检查机动可行性使用 SlewConstraintChecker
+                prev_target = sat_last_target.get(sat_idx)
+                last_end_time = sat_last_end_time.get(sat_idx)
+
+                # 确保_slew_checker已初始化
+                self._ensure_slew_checker_initialized()
+
+                if self._slew_checker:
+                    imaging_duration = 30.0  # Default imaging duration
+                    slew_result = self._slew_checker.check_slew_feasibility(
+                        sat.id, prev_target, task, last_end_time or feasible_window.start_time,
+                        feasible_window.start_time, imaging_duration
+                    )
+                    if not slew_result.feasible:
+                        continue
+                    # 使用机动后的实际开始时间
+                    actual_start = slew_result.actual_start
+                else:
+                    actual_start = feasible_window.start_time
+
+                actual_end = feasible_window.end_time
+
                 scheduled_count += 1
                 score += 10.0  # 基础完成奖励
 
@@ -327,13 +371,15 @@ class ACOScheduler(BaseScheduler):
                 score += feasible_window.quality_score * 2.0
 
                 # 记录时间
-                sat_task_times[sat_idx].append(
-                    (feasible_window.start_time, feasible_window.end_time)
-                )
+                sat_task_times[sat_idx].append((actual_start, actual_end))
 
                 # 记录目标观测次数
                 target_id = task.target_id if isinstance(task, ObservationTask) else task.id
                 target_obs_count[target_id] = target_obs_count.get(target_id, 0) + 1
+
+                # 更新上一个目标和结束时间
+                sat_last_target[sat_idx] = task
+                sat_last_end_time[sat_idx] = actual_end
 
         # 资源均衡奖励
         if scheduled_count > 0:
@@ -367,6 +413,7 @@ class ACOScheduler(BaseScheduler):
     ) -> Tuple[List[ScheduledTask], Dict[str, Any]]:
         """将蚂蚁解解码为调度方案"""
         from ..frequency_utils import ObservationTask
+        import math
 
         scheduled_tasks = []
         unscheduled = {}
@@ -374,6 +421,8 @@ class ACOScheduler(BaseScheduler):
         sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
             i: [] for i in range(self.sat_count)
         }
+        # Track last scheduled target per satellite for slew calculation
+        sat_last_target: Dict[int, Any] = {}
 
         for task_idx, sat_idx in enumerate(ant.path):
             if task_idx >= len(self.tasks):
@@ -419,13 +468,24 @@ class ACOScheduler(BaseScheduler):
                     break
 
             if feasible_window:
+                # 计算动态机动时间和角度 - 使用基类统一方法
+                prev_target = sat_last_target.get(sat_idx)
+                slew_angle, slew_time_seconds = self._calculate_slew_angle_and_time(
+                    sat.id, prev_target, task
+                )
+
+                # 更新最后任务目标跟踪
+                sat_last_target[sat_idx] = task
+
                 scheduled_task = ScheduledTask(
                     task_id=task_id,
                     satellite_id=sat.id,
                     target_id=target_id,
                     imaging_start=feasible_window.start_time,
                     imaging_end=feasible_window.end_time,
-                    imaging_mode="push_broom"
+                    imaging_mode="push_broom",
+                    slew_angle=slew_angle,
+                    slew_time=slew_time_seconds
                 )
                 scheduled_tasks.append(scheduled_task)
                 sat_task_times[sat_idx].append(

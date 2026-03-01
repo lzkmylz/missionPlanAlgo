@@ -9,9 +9,13 @@ EDD调度器（最早截止时间优先）
 
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
+import math
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
+from ..frequency_utils import ObservationTask
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
+from core.dynamics.slew_calculator import SlewCalculator
+from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 
 
 class EDDScheduler(BaseScheduler):
@@ -57,6 +61,11 @@ class EDDScheduler(BaseScheduler):
         )
         self._power_profile = PowerProfile(config.get('power_coefficients'))
 
+        # Slew calculators per satellite (initialized in schedule())
+        self._slew_calculators: Dict[str, SlewCalculator] = {}
+        self._last_task_target: Dict[str, Any] = {}  # Track last scheduled target per satellite
+        self._sat_resource_usage: Dict[str, Dict[str, Any]] = {}
+
     def get_parameters(self) -> Dict[str, Any]:
         """返回算法可调参数"""
         return {
@@ -83,8 +92,8 @@ class EDDScheduler(BaseScheduler):
         unscheduled: Dict[str, Any] = {}
         target_obs_count: Dict[str, int] = {}
 
-        # 卫星资源状态跟踪
-        sat_resource_usage = {
+        # Initialize resource tracking for each satellite
+        self._sat_resource_usage = {
             sat.id: {
                 'power': sat.current_power if hasattr(sat, 'current_power') else sat.capabilities.power_capacity,
                 'storage': 0.0,  # 初始存储为空
@@ -93,50 +102,38 @@ class EDDScheduler(BaseScheduler):
             }
             for sat in self.mission.satellites
         }
+        # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
+        self._initialize_slew_checker()
+
+        # Keep _slew_calculators for backward compatibility
+        self._slew_calculators = {}
+        self._last_task_target = {}
+        for sat in self.mission.satellites:
+            agility = getattr(sat.capabilities, 'agility', {})
+            self._slew_calculators[sat.id] = SlewCalculator(
+                max_slew_rate=agility.get('max_slew_rate', 3.0) if agility else 3.0,
+                max_slew_angle=sat.capabilities.max_off_nadir,
+                settling_time=agility.get('settling_time', 5.0) if agility else 5.0
+            )
 
         # EDD调度主循环
         for task in pending_tasks:
-            best_assignment = self._find_best_assignment(
-                task, sat_resource_usage
-            )
+            best_assignment = self._find_best_assignment(task)
 
             if best_assignment:
-                sat_id, window, imaging_mode = best_assignment
+                sat_id, window, imaging_mode, slew_result = best_assignment
 
-                # 计算实际开始和结束时间
-                window_start = window['start'] if isinstance(window, dict) else window.start_time
-                window_end = window['end'] if isinstance(window, dict) else window.end_time
-                usage = sat_resource_usage[sat_id]
-                last_task_end = usage.get('last_task_end', self.mission.start_time)
-                earliest_start = last_task_end + self.DEFAULT_SLEW_TIME
-                actual_start = max(window_start, earliest_start)
-                imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
-                actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-                # 更新资源状态
-                self._update_resource_usage(
-                    sat_id, task, actual_start, actual_end, sat_resource_usage
-                )
-
-                # 创建调度任务
-                usage = sat_resource_usage[sat_id]
-                task_sat = self.mission.get_satellite_by_id(sat_id)
-                power_consumed = 0
-                if self.consider_power and task_sat:
-                    power_consumed = task_sat.capabilities.power_capacity * self._power_profile.get_coefficient_for_mode(imaging_mode) * (self._imaging_calculator.calculate(task, imaging_mode) / 3600)
-                scheduled_task = ScheduledTask(
-                    task_id=task.task_id,
-                    satellite_id=sat_id,
-                    target_id=task.target_id,
-                    imaging_start=actual_start,
-                    imaging_end=actual_end,
-                    imaging_mode=imaging_mode if isinstance(imaging_mode, str) else str(imaging_mode),
-                    storage_before=usage['storage'] - (getattr(task, 'data_size_gb', 1.0) if self.consider_storage else 0),
-                    storage_after=usage['storage'],
-                    power_before=usage['power'] + power_consumed,
-                    power_after=usage['power'],
+                # Create scheduled task with slew information
+                scheduled_task = self._create_scheduled_task(
+                    task, sat_id, window, imaging_mode, slew_result
                 )
                 scheduled_tasks.append(scheduled_task)
+
+                # Update resource usage
+                self._update_resource_usage(sat_id, task, window, scheduled_task)
+
+                # Update last task target tracking
+                self._last_task_target[sat_id] = task
 
                 # 更新目标观测计数
                 target_obs_count[task.target_id] = target_obs_count.get(task.target_id, 0) + 1
@@ -144,7 +141,7 @@ class EDDScheduler(BaseScheduler):
                 self._add_convergence_point(len(scheduled_tasks))
             else:
                 # 记录失败原因
-                reason = self._determine_failure_reason(task, sat_resource_usage)
+                reason = self._determine_failure_reason(task)
                 self._record_failure(
                     task_id=task.task_id,
                     reason=reason,
@@ -202,27 +199,20 @@ class EDDScheduler(BaseScheduler):
 
         return sorted(tasks, key=edd_key)
 
-    def _find_best_assignment(
-        self,
-        task: Any,
-        sat_resource_usage: Dict
-    ) -> Optional[Tuple[str, Any, Any]]:
+    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
         """
         为任务找到最佳卫星-窗口组合
 
-        EDD策略：选择最早的可用窗口
+        EDD策略：选择最早的可用窗口，使用SlewConstraintChecker检查机动约束
 
         Args:
             task: 目标任务
-            sat_resource_usage: 卫星资源使用情况
 
         Returns:
-            Optional[Tuple]: (satellite_id, window, imaging_mode) 或 None
+            Optional[Tuple]: (satellite_id, window, imaging_mode, slew_result) 或 None
         """
-        best_window = None
-        best_sat_id = None
+        best_assignment = None
         best_start = None
-        best_imaging_mode = None
 
         for sat in self.mission.satellites:
             # 检查卫星能力匹配
@@ -230,7 +220,7 @@ class EDDScheduler(BaseScheduler):
                 continue
 
             # 获取可见窗口
-            windows = self._get_feasible_windows(sat, task, sat_resource_usage)
+            windows = self._get_feasible_windows(sat, task)
             if not windows:
                 continue
 
@@ -243,11 +233,30 @@ class EDDScheduler(BaseScheduler):
                 imaging_mode = self._select_imaging_mode(sat, task)
                 imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
 
-                # 计算实际开始时间（考虑转移时间）
-                usage = sat_resource_usage[sat.id]
+                # 检查资源约束
+                if not self._check_resource_constraints(sat, task):
+                    continue
+
+                # 检查 slew 约束（核心约束使用 SlewConstraintChecker）
+                prev_target = self._get_previous_task_target(sat.id)
+                usage = self._sat_resource_usage.get(sat.id, {})
                 last_task_end = usage.get('last_task_end', self.mission.start_time)
-                earliest_start = last_task_end + self.DEFAULT_SLEW_TIME
-                actual_start = max(window_start, earliest_start)
+
+                # 确保_slew_checker已初始化
+                self._ensure_slew_checker_initialized()
+
+                if self._slew_checker is None:
+                    continue
+
+                slew_result = self._slew_checker.check_slew_feasibility(
+                    sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                )
+
+                if not slew_result.feasible:
+                    continue
+
+                # 使用实际开始时间从 slew 计算
+                actual_start = slew_result.actual_start
                 actual_end = actual_start + timedelta(seconds=imaging_duration)
 
                 # 检查是否超出窗口结束时间
@@ -260,27 +269,19 @@ class EDDScheduler(BaseScheduler):
                         continue
 
                 # 检查时间冲突
-                if self._has_time_conflict(sat.id, actual_start, actual_end, sat_resource_usage):
-                    continue
-
-                # 检查资源约束
-                if not self._check_resource_constraints(sat, task, window, sat_resource_usage):
+                if self._has_time_conflict(sat.id, actual_start, actual_end):
                     continue
 
                 # 选择最早的窗口
                 if best_start is None or actual_start < best_start:
                     best_start = actual_start
-                    best_window = window
-                    best_sat_id = sat.id
-                    best_imaging_mode = imaging_mode
+                    best_assignment = (sat.id, window, imaging_mode, slew_result)
 
-        if best_sat_id and best_window:
-            return (best_sat_id, best_window, best_imaging_mode)
-        return None
+        return best_assignment
 
-    def _has_time_conflict(self, sat_id: str, start: datetime, end: datetime, sat_resource_usage: Dict) -> bool:
+    def _has_time_conflict(self, sat_id: str, start: datetime, end: datetime) -> bool:
         """检查是否与已调度任务有时间冲突"""
-        usage = sat_resource_usage.get(sat_id, {})
+        usage = self._sat_resource_usage.get(sat_id, {})
         scheduled_tasks = usage.get('scheduled_tasks', [])
 
         for task in scheduled_tasks:
@@ -289,7 +290,7 @@ class EDDScheduler(BaseScheduler):
                 return True
         return False
 
-    def _get_feasible_windows(self, sat: Any, task: Any, sat_resource_usage: Dict) -> List[Any]:
+    def _get_feasible_windows(self, sat: Any, task: Any) -> List[Any]:
         """获取可行的时间窗口"""
         if self.window_cache:
             # 支持ObservationTask和原始Target
@@ -298,6 +299,31 @@ class EDDScheduler(BaseScheduler):
             return self.window_cache.get_windows(sat.id, target_id)
         return []
 
+    def _get_previous_task_target(self, sat_id: str) -> Optional[Any]:
+        """获取卫星上一个已调度任务的目标
+
+        Args:
+            sat_id: 卫星ID
+
+        Returns:
+            前一个任务的目标对象，如果没有则返回None
+        """
+        usage = self._sat_resource_usage.get(sat_id, {})
+        scheduled_tasks = usage.get('scheduled_tasks', [])
+
+        if not scheduled_tasks:
+            return None
+
+        # 获取最后一个已调度任务
+        last_task_info = scheduled_tasks[-1]
+        prev_task_id = last_task_info.get('task_id')
+
+        if not prev_task_id or not self.mission:
+            return None
+
+        # 从mission中找到对应的目标
+        return self.mission.get_target_by_id(prev_task_id)
+
     def _can_satellite_perform_task(self, sat: Any, task: Any) -> bool:
         """检查卫星是否能执行任务"""
         # 基础检查：卫星必须有成像能力
@@ -305,15 +331,9 @@ class EDDScheduler(BaseScheduler):
             return False
         return True
 
-    def _check_resource_constraints(
-        self,
-        sat: Any,
-        task: Any,
-        window: Any,
-        sat_resource_usage: Dict
-    ) -> bool:
+    def _check_resource_constraints(self, sat: Any, task: Any) -> bool:
         """检查资源约束"""
-        usage = sat_resource_usage[sat.id]
+        usage = self._sat_resource_usage.get(sat.id, {})
 
         # 电量约束 - 使用动态计算的成像时长和功率系数
         if self.consider_power:
@@ -321,7 +341,7 @@ class EDDScheduler(BaseScheduler):
             duration = self._imaging_calculator.calculate(task, imaging_mode)
             power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
             power_needed = sat.capabilities.power_capacity * power_coefficient * (duration / 3600)
-            if usage['power'] < power_needed:
+            if usage.get('power', 0) < power_needed:
                 return False
 
         # 存储约束 - 动态计算基于成像时长
@@ -331,7 +351,7 @@ class EDDScheduler(BaseScheduler):
             storage_needed = self._imaging_calculator.get_storage_consumption(
                 task, imaging_mode, data_rate
             )
-            if usage['storage'] + storage_needed > sat.capabilities.storage_capacity:
+            if usage.get('storage', 0) + storage_needed > sat.capabilities.storage_capacity:
                 return False
 
         return True
@@ -349,71 +369,44 @@ class EDDScheduler(BaseScheduler):
         return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
 
     def _update_resource_usage(
-        self,
-        sat_id: str,
-        task: Any,
-        actual_start,
-        actual_end=None,
-        sat_resource_usage: Dict = None
+        self, sat_id: str, task: Any, window: Any, scheduled_task: ScheduledTask
     ) -> None:
         """更新资源使用状态
 
         Args:
             sat_id: 卫星ID
             task: 目标任务
-            actual_start: 实际开始时间（datetime）或 window 字典（测试兼容）
-            actual_end: 实际结束时间（datetime）或 sat_resource_usage 字典（测试兼容）
-            sat_resource_usage: 卫星资源使用情况字典
+            window: 可见窗口
+            scheduled_task: 已调度的任务对象
         """
-        # 处理测试用例的调用方式: _update_resource_usage(sat_id, task, window, sat_resource_usage)
-        # 其中 window 是 {'start': ..., 'end': ...} 字典
-        if sat_resource_usage is None and isinstance(actual_end, dict):
-            sat_resource_usage = actual_end
-            window = actual_start
-            actual_start = window['start'] if isinstance(window, dict) else window.start_time
-            actual_end = window['end'] if isinstance(window, dict) else window.end_time
+        usage = self._sat_resource_usage.get(sat_id)
+        if usage is None:
+            return
 
-        usage = sat_resource_usage[sat_id]
-        sat = self.mission.get_satellite_by_id(sat_id)
+        # 更新电量
+        if self.consider_power:
+            usage['power'] = scheduled_task.power_after
 
-        if sat:
-            # 更新电量 - 使用动态计算的成像时长和功率系数
-            if self.consider_power:
-                imaging_mode = self._select_imaging_mode(sat, task)
-                duration = self._imaging_calculator.calculate(task, imaging_mode)
-                power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
-                power_consumed = sat.capabilities.power_capacity * power_coefficient * (duration / 3600)
-                usage['power'] -= power_consumed
+        # 更新存储
+        if self.consider_storage:
+            usage['storage'] = scheduled_task.storage_after
 
-            # 更新存储 - 动态计算基于成像时长
-            if self.consider_storage:
-                imaging_mode = self._select_imaging_mode(sat, task)
-                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
-                storage_used = self._imaging_calculator.get_storage_consumption(
-                    task, imaging_mode, data_rate
-                )
-                usage['storage'] += storage_used
+        # 更新最后任务结束时间
+        usage['last_task_end'] = scheduled_task.imaging_end
 
-            # 更新时间
-            usage['last_task_end'] = actual_end
+        # 记录已调度任务用于冲突检测
+        if 'scheduled_tasks' not in usage:
+            usage['scheduled_tasks'] = []
+        usage['scheduled_tasks'].append({
+            'start': scheduled_task.imaging_start,
+            'end': scheduled_task.imaging_end,
+            'task_id': task.task_id if hasattr(task, 'task_id') else task.id
+        })
 
-            # 记录已调度任务用于冲突检测
-            if 'scheduled_tasks' not in usage:
-                usage['scheduled_tasks'] = []
-            usage['scheduled_tasks'].append({
-                'start': actual_start,
-                'end': actual_end,
-                'task_id': task.id
-            })
-
-    def _determine_failure_reason(
-        self,
-        task: Any,
-        sat_resource_usage: Dict
-    ) -> TaskFailureReason:
+    def _determine_failure_reason(self, task: Any) -> TaskFailureReason:
         """确定任务失败原因"""
         # 检查是否是存储约束 - 使用动态固存消耗
-        for sat_id, usage in sat_resource_usage.items():
+        for sat_id, usage in self._sat_resource_usage.items():
             sat = self.mission.get_satellite_by_id(sat_id)
             if sat:
                 imaging_mode = self._select_imaging_mode(sat, task)
@@ -425,7 +418,7 @@ class EDDScheduler(BaseScheduler):
                     return TaskFailureReason.STORAGE_CONSTRAINT
 
         # 检查是否是电量约束
-        for sat_id, usage in sat_resource_usage.items():
+        for sat_id, usage in self._sat_resource_usage.items():
             sat = self.mission.get_satellite_by_id(sat_id)
             if sat:
                 # 简化的电量检查：如果电量低于10%认为可能不足
@@ -433,3 +426,81 @@ class EDDScheduler(BaseScheduler):
                     return TaskFailureReason.POWER_CONSTRAINT
 
         return TaskFailureReason.NO_VISIBLE_WINDOW
+
+    def _create_scheduled_task(
+        self, task: Any, sat_id: str, window: Any, imaging_mode: Any,
+        slew_result: Optional[SlewFeasibilityResult] = None
+    ) -> ScheduledTask:
+        """
+        创建ScheduledTask对象
+
+        Args:
+            task: 目标任务
+            sat_id: 卫星ID
+            window: 可见窗口
+            imaging_mode: 成像模式
+            slew_result: 机动可行性检查结果（可选）
+
+        Returns:
+            ScheduledTask对象
+        """
+        window_start = window['start'] if isinstance(window, dict) else window.start_time
+
+        # 获取卫星
+        sat = self.mission.get_satellite_by_id(sat_id)
+        imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
+
+        # 获取当前资源水平
+        usage = self._sat_resource_usage.get(sat_id, {})
+        power_before = usage.get('power', 0)
+        storage_before = usage.get('storage', 0)
+
+        # 计算资源消耗
+        power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
+        power_consumed = 0.0
+        if sat and self.consider_power:
+            power_consumed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
+
+        # 动态计算固存消耗
+        storage_used = 0.0
+        if sat and self.consider_storage:
+            data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+            storage_used = self._imaging_calculator.get_storage_consumption(
+                task, imaging_mode, data_rate
+            )
+
+        # 使用 slew_result 中的机动信息
+        if slew_result:
+            slew_angle = slew_result.slew_angle
+            slew_time_seconds = slew_result.slew_time
+            actual_start = slew_result.actual_start
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+        else:
+            # 回退逻辑
+            slew_angle = 0.0
+            slew_time_seconds = self.DEFAULT_SLEW_TIME.total_seconds()
+            actual_start = window_start
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+        # 创建ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=task.task_id,
+            satellite_id=sat_id,
+            target_id=task.target_id,
+            imaging_start=actual_start,
+            imaging_end=actual_end,
+            imaging_mode=imaging_mode if isinstance(imaging_mode, str) else str(imaging_mode),
+            slew_angle=slew_angle,
+            slew_time=slew_time_seconds,
+            storage_before=storage_before,
+            storage_after=storage_before + storage_used,
+            power_before=power_before,
+            power_after=power_before - power_consumed
+        )
+
+        # 计算并应用姿态角（用于姿控系统验证）
+        if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+            attitude = self._calculate_attitude_angles(sat, task, actual_start)
+            self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
+
+        return scheduled_task
