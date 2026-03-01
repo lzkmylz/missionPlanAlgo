@@ -93,6 +93,7 @@ class AttitudeCalculator:
 
     EARTH_RADIUS = 6371000.0  # 地球平均半径（米）
     EARTH_GM = 3.986004418e14  # 地球引力常数 (m^3/s^2)
+    EARTH_OMEGA = 7.2921158553e-5  # 地球自转角速度 (rad/s)
 
     def __init__(self, propagator_type: PropagatorType = PropagatorType.SGP4):
         """初始化姿态角计算器
@@ -187,10 +188,123 @@ class AttitudeCalculator:
         Returns:
             (position, velocity) in ECEF coordinates (meters, m/s)
         """
-        if self.propagator_type == PropagatorType.HPOP and self._hpop_available:
-            return self._propagate_with_hpop(satellite, timestamp)
+        # 优先使用TLE（如果可用）
+        if satellite.tle_line1 and satellite.tle_line2:
+            if self.propagator_type == PropagatorType.HPOP and self._hpop_available:
+                return self._propagate_with_hpop(satellite, timestamp)
+            else:
+                return self._propagate_with_sgp4(satellite, timestamp)
         else:
-            return self._propagate_with_sgp4(satellite, timestamp)
+            # 没有TLE时使用简化二体模型
+            return self._propagate_with_simple_twobody(satellite, timestamp)
+
+    def _propagate_with_simple_twobody(
+        self,
+        satellite: Satellite,
+        timestamp: datetime
+    ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+        """使用简化二体模型传播卫星轨道
+
+        当没有TLE时使用轨道六根数进行简化计算。
+        假设圆形轨道，使用简单的开普勒定律。
+
+        Args:
+            satellite: 卫星对象
+            timestamp: 目标时刻
+
+        Returns:
+            (position, velocity) in ECEF (meters, m/s)
+        """
+        orbit = satellite.orbit
+        if orbit is None:
+            raise ValueError(f"Satellite {satellite.id} has no orbit data")
+
+        # 获取轨道参数
+        a = orbit.get_semi_major_axis()  # 半长轴 (m)
+        ecc = orbit.eccentricity
+        inc = math.radians(orbit.inclination)
+        raan = math.radians(orbit.raan)
+        argp = math.radians(orbit.arg_of_perigee)
+
+        # 历元时间和当前时间
+        epoch = orbit.epoch if orbit.epoch else timestamp
+        delta_t = (timestamp - epoch).total_seconds()
+
+        # 计算平均运动 (rad/s)
+        n = math.sqrt(self.EARTH_GM / (a ** 3))
+
+        # 计算平近点角随时间变化
+        initial_mean_anomaly = math.radians(orbit.mean_anomaly)
+        mean_anomaly = (initial_mean_anomaly + n * delta_t) % (2 * math.pi)
+
+        # 简化：假设圆形轨道 (ecc = 0)，则真近点角 = 平近点角
+        true_anomaly = mean_anomaly
+
+        # 在轨道平面中的位置 (km)
+        r = a / 1000.0  # 转换为 km
+        x_orb = r * math.cos(true_anomaly)
+        y_orb = r * math.sin(true_anomaly)
+        z_orb = 0.0
+
+        # 轨道平面速度 (km/s) - 圆形轨道
+        v = math.sqrt(self.EARTH_GM / (r * 1000)) / 1000  # km/s
+        vx_orb = -v * math.sin(true_anomaly)
+        vy_orb = v * math.cos(true_anomaly)
+        vz_orb = 0.0
+
+        # 从轨道平面转换到惯性系 (3-1-3旋转)
+        # 1. 绕Z轴旋转 -argp (近地点幅角)
+        # 2. 绕X轴旋转 -inc (倾角)
+        # 3. 绕Z轴旋转 -raan (升交点赤经)
+
+        # 组合旋转矩阵
+        cos_raan, sin_raan = math.cos(raan), math.sin(raan)
+        cos_inc, sin_inc = math.cos(inc), math.sin(inc)
+        cos_argp, sin_argp = math.cos(argp), math.sin(argp)
+
+        # 位置转换
+        x_eci = (cos_raan * cos_argp - sin_raan * sin_argp * cos_inc) * x_orb + \
+                (-cos_raan * sin_argp - sin_raan * cos_argp * cos_inc) * y_orb
+        y_eci = (sin_raan * cos_argp + cos_raan * sin_argp * cos_inc) * x_orb + \
+                (-sin_raan * sin_argp + cos_raan * cos_argp * cos_inc) * y_orb
+        z_eci = (sin_argp * sin_inc) * x_orb + \
+                (cos_argp * sin_inc) * y_orb
+
+        # 速度转换
+        vx_eci = (cos_raan * cos_argp - sin_raan * sin_argp * cos_inc) * vx_orb + \
+                 (-cos_raan * sin_argp - sin_raan * cos_argp * cos_inc) * vy_orb
+        vy_eci = (sin_raan * cos_argp + cos_raan * sin_argp * cos_inc) * vx_orb + \
+                 (-sin_raan * sin_argp + cos_raan * cos_argp * cos_inc) * vy_orb
+        vz_eci = (sin_argp * sin_inc) * vx_orb + \
+                 (cos_argp * sin_inc) * vy_orb
+
+        # ECI到ECEF转换
+        from sgp4.api import jday
+        jd, fr = jday(
+            timestamp.year, timestamp.month, timestamp.day,
+            timestamp.hour, timestamp.minute,
+            timestamp.second + timestamp.microsecond / 1e6
+        )
+        d = jd - 2451545.0 + fr
+        gmst = (18.697374558 + 24.06570982441908 * d) % 24
+        gmst_deg = gmst * 15.0
+        gmst_rad = math.radians(gmst_deg)
+
+        cos_gmst, sin_gmst = math.cos(gmst_rad), math.sin(gmst_rad)
+
+        x_ecef = x_eci * cos_gmst + y_eci * sin_gmst
+        y_ecef = -x_eci * sin_gmst + y_eci * cos_gmst
+        z_ecef = z_eci
+
+        vx_ecef = vx_eci * cos_gmst + vy_eci * sin_gmst - self.EARTH_OMEGA * y_eci
+        vy_ecef = -vx_eci * sin_gmst + vy_eci * cos_gmst + self.EARTH_OMEGA * x_eci
+        vz_ecef = vz_eci
+
+        # 转换为米
+        return (
+            (x_ecef * 1000, y_ecef * 1000, z_ecef * 1000),
+            (vx_ecef * 1000, vy_ecef * 1000, vz_ecef * 1000)
+        )
 
     def _propagate_with_sgp4(
         self,
