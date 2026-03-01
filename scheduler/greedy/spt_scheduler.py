@@ -108,6 +108,9 @@ class SPTScheduler(BaseScheduler):
         # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
         self._initialize_slew_checker()
 
+        # Initialize SAA constraint checker
+        self._initialize_saa_checker()
+
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
         self._last_task_target = {}
@@ -266,6 +269,15 @@ class SPTScheduler(BaseScheduler):
 
                 if not slew_result.feasible:
                     continue
+
+                # Check SAA constraints
+                self._ensure_saa_checker_initialized()
+                if self._saa_checker is not None:
+                    saa_result = self._saa_checker.check_window_feasibility(
+                        sat.id, window_start, window_end
+                    )
+                    if not saa_result.feasible:
+                        continue
 
                 # 使用实际开始时间从 slew 计算
                 actual_start = slew_result.actual_start

@@ -117,6 +117,9 @@ class GreedyScheduler(BaseScheduler):
         # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
         self._initialize_slew_checker()
 
+        # Initialize SAA constraint checker
+        self._initialize_saa_checker()
+
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
         for sat in self.mission.satellites:
@@ -327,6 +330,15 @@ class GreedyScheduler(BaseScheduler):
 
                 if not slew_result.feasible:
                     continue
+
+                # Check SAA constraints
+                self._ensure_saa_checker_initialized()
+                if self._saa_checker is not None:
+                    saa_result = self._saa_checker.check_window_feasibility(
+                        sat.id, window_start, window_end
+                    )
+                    if not saa_result.feasible:
+                        continue
 
                 # Use actual start time from slew calculation
                 actual_start = slew_result.actual_start

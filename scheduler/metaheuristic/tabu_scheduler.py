@@ -145,6 +145,9 @@ class TabuScheduler(BaseScheduler):
         # Initialize slew constraint checker
         self._initialize_slew_checker()
 
+        # Initialize SAA constraint checker
+        self._initialize_saa_checker()
+
         # Keep _slew_calculators for backward compatibility in _decode_solution
         self._slew_calculators = {}
         for sat in self.satellites:
@@ -358,6 +361,17 @@ class TabuScheduler(BaseScheduler):
                     actual_start = feasible_window.start_time
 
                 actual_end = feasible_window.end_time
+
+                # Check SAA constraints on the full visibility window
+                # This ensures no part of the window (including slew time) is in SAA
+                self._ensure_saa_checker_initialized()
+                if self._saa_checker is not None:
+                    saa_result = self._saa_checker.check_window_feasibility(
+                        sat.id, feasible_window.start_time, feasible_window.end_time
+                    )
+                    if not saa_result.feasible:
+                        unscheduled_count += 1
+                        continue
 
                 scheduled_count += 1
                 score += 10.0  # 基础完成奖励

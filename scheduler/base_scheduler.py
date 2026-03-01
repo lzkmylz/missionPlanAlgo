@@ -21,7 +21,7 @@ from core.dynamics.attitude_calculator import (
     PropagatorType,
     AttitudeAngles,
 )
-from .constraints import SlewConstraintChecker
+from .constraints import SlewConstraintChecker, SAAConstraintChecker
 
 
 class TaskFailureReason(Enum):
@@ -50,6 +50,7 @@ class TaskFailureReason(Enum):
     THERMAL_CONSTRAINT = "thermal_constraint"        # 热控约束超限
     SUN_EXCLUSION_VIOLATION = "sun_exclusion_violation"  # 太阳规避角不满足
     STORAGE_FRAGMENTATION = "storage_fragmentation"  # 存储碎片化无法分配
+    SAA_CONSTRAINT = "saa_constraint"  # 南大西洋异常区约束
 
     # 网络约束 - H2新增
     NO_ISL_PATH = "no_isl_path"                      # 无可用ISL路径
@@ -178,6 +179,9 @@ class BaseScheduler(ABC):
         # 初始化机动约束检查器（在 initialize() 中完成实际初始化）
         self._slew_checker: Optional[SlewConstraintChecker] = None
 
+        # 初始化 SAA 约束检查器
+        self._saa_checker: Optional[SAAConstraintChecker] = None
+
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
         self.mission = mission
@@ -197,6 +201,19 @@ class BaseScheduler(ABC):
 
         for sat in self.mission.satellites:
             self._slew_checker.initialize_satellite(sat)
+
+    def _initialize_saa_checker(self) -> None:
+        """初始化 SAA 约束检查器"""
+        if self.mission is None:
+            return
+
+        self._saa_checker = SAAConstraintChecker(
+            self.mission,
+            self._attitude_calculator
+        )
+
+        for sat in self.mission.satellites:
+            self._saa_checker.initialize_satellite(sat)
 
     def set_window_cache(self, cache) -> None:
         """设置窗口缓存"""
@@ -417,6 +434,15 @@ class BaseScheduler(ABC):
         """
         if self._slew_checker is None:
             self._initialize_slew_checker()
+
+    def _ensure_saa_checker_initialized(self) -> None:
+        """确保SAA约束检查器已初始化
+
+        如果_saa_checker为None，则调用_initialize_saa_checker()进行初始化。
+        所有使用_saa_checker的方法应在访问前调用此方法。
+        """
+        if self._saa_checker is None:
+            self._initialize_saa_checker()
 
     def _calculate_slew_angle_and_time(
         self,
