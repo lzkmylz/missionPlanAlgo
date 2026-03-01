@@ -594,7 +594,8 @@ class GreedyScheduler(BaseScheduler):
                 task, imaging_mode, data_rate
             )
 
-        return ScheduledTask(
+        # 创建ScheduledTask对象
+        scheduled_task = ScheduledTask(
             task_id=task.id,
             satellite_id=sat_id,
             target_id=task.id,
@@ -607,6 +608,13 @@ class GreedyScheduler(BaseScheduler):
             power_before=power_before,
             power_after=power_before - power_consumed
         )
+
+        # 计算并应用姿态角（用于姿控系统验证）
+        if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+            attitude = self._calculate_attitude_angles(sat, task, actual_start)
+            self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
+
+        return scheduled_task
 
     def _update_resource_usage(
         self, sat_id: str, task: Any, window: Any, scheduled_task: ScheduledTask

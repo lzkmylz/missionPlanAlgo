@@ -16,6 +16,11 @@ from .frequency_utils import (
     create_observation_tasks,
     calculate_frequency_fitness,
 )
+from core.dynamics.attitude_calculator import (
+    AttitudeCalculator,
+    PropagatorType,
+    AttitudeAngles,
+)
 
 
 class TaskFailureReason(Enum):
@@ -88,6 +93,11 @@ class ScheduledTask:
     downlink_start: Optional[datetime] = None
     downlink_end: Optional[datetime] = None
     data_transferred: float = 0.0
+    # 姿态角字段 - 用于姿控系统验证
+    roll_angle: Optional[float] = None    # 滚转角（度）
+    pitch_angle: Optional[float] = None   # 俯仰角（度）
+    yaw_angle: Optional[float] = None     # 偏航角（度）
+    attitude_coordinate_system: str = "LVLH"  # 坐标系：LVLH
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -103,6 +113,10 @@ class ScheduledTask:
             'downlink_start': self.downlink_start.isoformat() if self.downlink_start else None,
             'downlink_end': self.downlink_end.isoformat() if self.downlink_end else None,
             'data_transferred': self.data_transferred,
+            'roll_angle': self.roll_angle,
+            'pitch_angle': self.pitch_angle,
+            'yaw_angle': self.yaw_angle,
+            'attitude_coordinate_system': self.attitude_coordinate_system,
         }
 
 
@@ -151,6 +165,12 @@ class BaseScheduler(ABC):
         self._start_time: Optional[float] = None
         self._iterations = 0
         self._convergence_curve: List[float] = []
+        # 初始化姿态角计算器
+        propagator_type = self.config.get('propagator_type', 'sgp4')
+        self._attitude_calculator = AttitudeCalculator(
+            propagator_type=PropagatorType.SGP4 if propagator_type == 'sgp4' else PropagatorType.HPOP
+        )
+        self._enable_attitude_calculation = self.config.get('enable_attitude_calculation', True)
 
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
@@ -285,4 +305,88 @@ class BaseScheduler(ABC):
         return calculate_frequency_fitness(
             target_obs_count, self.mission.targets, base_score
         )
+
+    def _calculate_attitude_angles(
+        self,
+        satellite,
+        target,
+        imaging_time
+    ) -> Optional[AttitudeAngles]:
+        """计算卫星成像时刻的姿态角
+
+        使用配置的AttitudeCalculator计算姿态角，
+        如果计算失败则返回None。
+
+        Args:
+            satellite: 卫星对象
+            target: 目标对象
+            imaging_time: 成像时刻
+
+        Returns:
+            AttitudeAngles对象，如果禁用姿态角计算或计算失败则返回None
+        """
+        if not self._enable_attitude_calculation:
+            return None
+
+        if self._attitude_calculator is None:
+            return None
+
+        try:
+            attitude = self._attitude_calculator.calculate_attitude(
+                satellite=satellite,
+                target=target,
+                imaging_time=imaging_time
+            )
+            return attitude
+        except Exception as e:
+            # 记录警告但不中断调度流程
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to calculate attitude angles for task: {e}"
+            )
+            return None
+
+    def _apply_attitude_to_scheduled_task(
+        self,
+        scheduled_task: ScheduledTask,
+        attitude: Optional[AttitudeAngles]
+    ) -> None:
+        """将姿态角应用到ScheduledTask
+
+        Args:
+            scheduled_task: 已调度的任务对象
+            attitude: 姿态角对象
+        """
+        if attitude is None:
+            return
+
+        scheduled_task.roll_angle = attitude.roll
+        scheduled_task.pitch_angle = attitude.pitch
+        scheduled_task.yaw_angle = attitude.yaw
+        scheduled_task.attitude_coordinate_system = attitude.coordinate_system
+
+    def set_propagator_type(self, propagator_type: str) -> None:
+        """设置轨道传播器类型
+
+        Args:
+            propagator_type: 'sgp4' 或 'hpop'
+        """
+        if propagator_type.lower() == 'sgp4':
+            self._attitude_calculator = AttitudeCalculator(
+                propagator_type=PropagatorType.SGP4
+            )
+        elif propagator_type.lower() == 'hpop':
+            self._attitude_calculator = AttitudeCalculator(
+                propagator_type=PropagatorType.HPOP
+            )
+        else:
+            raise ValueError(f"Unknown propagator type: {propagator_type}")
+
+    def enable_attitude_calculation(self, enable: bool = True) -> None:
+        """启用或禁用姿态角计算
+
+        Args:
+            enable: 是否启用姿态角计算
+        """
+        self._enable_attitude_calculation = enable
 
