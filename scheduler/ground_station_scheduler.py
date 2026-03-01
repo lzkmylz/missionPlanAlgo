@@ -7,6 +7,12 @@
 3. 考虑地面站可见性窗口（已预计算）
 4. 考虑地面站天线资源冲突（同一时间只能服务一个卫星）
 5. 数传完成后释放固存
+6. 考虑链路建立时间（天线指向、捕获、同步）
+
+链路建立时间说明：
+- 默认15秒，包含天线指向、信号捕获、链路同步等过程
+- 可通过 link_setup_time_seconds 参数自定义
+- 数传总时长 = 链路建立时间 + 数据传输时间
 """
 
 from dataclasses import dataclass, field
@@ -21,12 +27,18 @@ from scheduler.base_scheduler import ScheduledTask
 logger = logging.getLogger(__name__)
 
 
-def calculate_downlink_duration(data_size_gb: float, data_rate_mbps: float) -> float:
+def calculate_downlink_duration(
+    data_size_gb: float,
+    data_rate_mbps: float,
+    link_setup_time_seconds: float = 0.0
+) -> float:
     """
-    计算数传所需时长
+    计算数传所需时长（含链路建立时间）
 
-    公式: duration = data_size_gb / (data_rate_mbps / 8 / 1024)
+    公式: duration = link_setup_time + data_transmission_time
     其中:
+        - link_setup_time: 链路建立时间（指向、捕获、同步）
+        - data_transmission_time = data_size_gb / (data_rate_mbps / 8 / 1024)
         - data_size_gb: 数据量 (GB)
         - data_rate_mbps: 数据传输速率 (Mbps)
         - 转换: Mbps -> MB/s = Mbps / 8 (bits to bytes)
@@ -35,9 +47,10 @@ def calculate_downlink_duration(data_size_gb: float, data_rate_mbps: float) -> f
     Args:
         data_size_gb: 数据量 (GB)
         data_rate_mbps: 数据传输速率 (Mbps)
+        link_setup_time_seconds: 链路建立时间（秒），默认0秒
 
     Returns:
-        数传时长 (秒)
+        总时长 (秒)，包含链路建立和数据传输
 
     Raises:
         ValueError: 如果 data_rate_mbps 为 0
@@ -46,12 +59,14 @@ def calculate_downlink_duration(data_size_gb: float, data_rate_mbps: float) -> f
         raise ValueError("Data rate must be positive")
 
     if data_size_gb <= 0:
-        return 0.0
+        return link_setup_time_seconds
 
     # 转换 Mbps 到 GB/s: Mbps / 8 = MB/s, MB/s / 1024 = GB/s
     data_rate_gb_per_sec = data_rate_mbps / 8 / 1024
 
-    return data_size_gb / data_rate_gb_per_sec
+    # 数据传输时间 + 链路建立时间
+    transmission_time = data_size_gb / data_rate_gb_per_sec
+    return link_setup_time_seconds + transmission_time
 
 
 @dataclass
@@ -87,7 +102,20 @@ class StorageState:
 
 @dataclass
 class DownlinkTask:
-    """数传任务"""
+    """数传任务
+
+    Attributes:
+        task_id: 任务ID
+        satellite_id: 卫星ID
+        ground_station_id: 地面站ID
+        start_time: 开始时间
+        end_time: 结束时间
+        data_size_gb: 数据量 (GB)
+        antenna_id: 天线ID
+        related_imaging_task_id: 关联的成像任务ID
+        effective_data_rate: 实际使用的数据率 (Mbps)
+        link_setup_time_seconds: 链路建立时间（秒），包含在总时长中
+    """
     task_id: str
     satellite_id: str
     ground_station_id: str
@@ -97,10 +125,16 @@ class DownlinkTask:
     antenna_id: Optional[str] = None
     related_imaging_task_id: Optional[str] = None
     effective_data_rate: float = 300.0  # 实际使用的数据率 (Mbps)
+    link_setup_time_seconds: float = 15.0  # 链路建立时间（秒）
 
     def get_duration_seconds(self) -> float:
-        """获取数传时长（秒）"""
+        """获取数传总时长（秒），包含链路建立时间"""
         return (self.end_time - self.start_time).total_seconds()
+
+    def get_transmission_time_seconds(self) -> float:
+        """获取纯数据传输时长（秒），不含链路建立时间"""
+        total_duration = self.get_duration_seconds()
+        return max(0.0, total_duration - self.link_setup_time_seconds)
 
 
 @dataclass
@@ -128,12 +162,16 @@ class GroundStationScheduler:
     - 自动选择最优天线进行分配
     """
 
+    # 默认链路建立时间（秒）：指向 + 捕获 + 同步
+    DEFAULT_LINK_SETUP_TIME_SECONDS = 15.0
+
     def __init__(
         self,
         ground_station_pool: GroundStationPool,
         data_rate_mbps: float = 300.0,
         storage_capacity_gb: float = 100.0,
-        overflow_threshold: float = 0.95
+        overflow_threshold: float = 0.95,
+        link_setup_time_seconds: float = 15.0
     ):
         """
         初始化地面站调度器
@@ -143,11 +181,13 @@ class GroundStationScheduler:
             data_rate_mbps: 默认数据传输速率 (Mbps)
             storage_capacity_gb: 默认固存容量 (GB)
             overflow_threshold: 固存溢出阈值 (0-1)
+            link_setup_time_seconds: 链路建立时间（秒），包括天线指向、捕获、同步等
         """
         self.ground_station_pool = ground_station_pool
         self.data_rate_mbps = data_rate_mbps
         self.storage_capacity_gb = storage_capacity_gb
         self.overflow_threshold = overflow_threshold
+        self.link_setup_time_seconds = link_setup_time_seconds
 
         # 跟踪每个卫星的固存状态
         self._storage_states: Dict[str, StorageState] = {}
@@ -545,9 +585,9 @@ class GroundStationScheduler:
         if data_size_gb <= 0:
             return None
 
-        # 计算数传所需时长
+        # 计算数传所需时长（含链路建立时间）
         downlink_duration = calculate_downlink_duration(
-            data_size_gb, self.data_rate_mbps
+            data_size_gb, self.data_rate_mbps, self.link_setup_time_seconds
         )
 
         # 检查可见性窗口是否足够长
@@ -590,8 +630,10 @@ class GroundStationScheduler:
         if not selected_gs or not selected_antenna:
             return None
 
-        # 重新计算数传时长（使用天线的实际数据率）
-        downlink_duration = calculate_downlink_duration(data_size_gb, selected_data_rate)
+        # 重新计算数传时长（使用天线的实际数据率，含链路建立时间）
+        downlink_duration = calculate_downlink_duration(
+            data_size_gb, selected_data_rate, self.link_setup_time_seconds
+        )
         downlink_end = downlink_start + timedelta(seconds=downlink_duration)
 
         # 检查是否在可见性窗口内
@@ -610,7 +652,7 @@ class GroundStationScheduler:
             data_size_gb=data_size_gb
         )
 
-        # 创建数传任务（包含天线信息和实际数据率）
+        # 创建数传任务（包含天线信息、实际数据率和链路建立时间）
         downlink_task = DownlinkTask(
             task_id=f"DL-{imaging_task.task_id}",
             satellite_id=imaging_task.satellite_id,
@@ -620,7 +662,8 @@ class GroundStationScheduler:
             data_size_gb=data_size_gb,
             antenna_id=selected_antenna,  # 记录具体使用的天线
             related_imaging_task_id=imaging_task.task_id,
-            effective_data_rate=selected_data_rate  # 记录实际使用的数据率
+            effective_data_rate=selected_data_rate,  # 记录实际使用的数据率
+            link_setup_time_seconds=self.link_setup_time_seconds  # 记录链路建立时间
         )
 
         return downlink_task
