@@ -20,6 +20,7 @@ class PerformanceMetrics:
         makespan: 总完成时间 (秒)
         avg_revisit_time: 平均观测间隔 (秒)
         data_delivery_time: 数据回传用时 (秒)
+        imaging_to_downlink_time: 观测数传实效性，即成像到数传完成用时 (秒)
         computation_time: 算法求解用时 (秒)
         solution_quality: 解质量 (0-1)
         satellite_utilization: 卫星利用率 (0-1)
@@ -30,6 +31,7 @@ class PerformanceMetrics:
     makespan: float = 0.0
     avg_revisit_time: float = 0.0
     data_delivery_time: float = 0.0
+    imaging_to_downlink_time: float = 0.0  # 观测数传实效性
     computation_time: float = 0.0
     solution_quality: float = 0.0
     satellite_utilization: float = 0.0
@@ -42,6 +44,9 @@ class PerformanceMetrics:
             'demand_satisfaction_rate': self.demand_satisfaction_rate,
             'makespan_hours': self.makespan / 3600,
             'avg_revisit_time_hours': self.avg_revisit_time / 3600,
+            'data_delivery_time_seconds': self.data_delivery_time,
+            'imaging_to_downlink_time_seconds': self.imaging_to_downlink_time,
+            'imaging_to_downlink_time_minutes': self.imaging_to_downlink_time / 60,
             'computation_time_seconds': self.computation_time,
             'solution_quality': self.solution_quality,
             'satellite_utilization': self.satellite_utilization,
@@ -55,6 +60,7 @@ class PerformanceMetrics:
             f"PerformanceMetrics(\n"
             f"  需求满足率: {self.demand_satisfaction_rate:.2%}\n"
             f"  总完成时间: {self.makespan/3600:.2f} 小时\n"
+            f"  观测数传实效性: {self.imaging_to_downlink_time/60:.2f} 分钟\n"
             f"  算法求解用时: {self.computation_time:.2f} 秒\n"
             f"  解质量: {self.solution_quality:.4f}\n"
             f"  卫星利用率: {self.satellite_utilization:.2%}\n"
@@ -107,6 +113,11 @@ class MetricsCalculator:
         # 解质量
         metrics.solution_quality = self._calculate_solution_quality(
             schedule_result, metrics.demand_satisfaction_rate
+        )
+
+        # 观测数传实效性（成像到数传完成用时）
+        metrics.imaging_to_downlink_time = self._calculate_imaging_to_downlink_time(
+            schedule_result.scheduled_tasks
         )
 
         return metrics
@@ -217,3 +228,40 @@ class MetricsCalculator:
         time_efficiency = max(0.0, time_efficiency)
         quality = 0.6 * dsr + 0.4 * time_efficiency
         return quality
+
+    def _calculate_imaging_to_downlink_time(self, scheduled_tasks: List[Any]) -> float:
+        """计算观测数传实效性（成像到数传完成用时）
+
+        评估从成像完成到数传完成的平均用时。
+        只计算有数传信息的任务。
+
+        Args:
+            scheduled_tasks: 已调度任务列表
+
+        Returns:
+            float: 平均成像到数传完成用时（秒），如果没有数传任务则返回0
+        """
+        if not scheduled_tasks:
+            return 0.0
+
+        downlink_delays = []
+
+        for task in scheduled_tasks:
+            # 检查是否有数传信息
+            imaging_end = getattr(task, 'imaging_end', None)
+            downlink_end = getattr(task, 'downlink_end', None)
+
+            # 只计算有完整数传信息的任务
+            if imaging_end is not None and downlink_end is not None:
+                # 计算从成像结束到数传完成的用时
+                delay = (downlink_end - imaging_end).total_seconds()
+
+                # 只记录正值（正常情况下成像应在数传之前）
+                if delay >= 0:
+                    downlink_delays.append(delay)
+
+        # 返回平均用时
+        if downlink_delays:
+            return sum(downlink_delays) / len(downlink_delays)
+        else:
+            return 0.0
