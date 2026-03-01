@@ -242,9 +242,63 @@ class SatelliteCapabilities:
     # 详细成像模式参数（JSON模板中的模式详细配置）
     imaging_mode_details: List[Dict[str, Any]] = field(default_factory=list)
 
+    # 每个成像模式的最小/最大成像时长约束
+    # Format: {ImagingMode.PUSH_BROOM: {'min_duration': 30.0, 'max_duration': 600.0}}
+    imaging_mode_constraints: Dict[ImagingMode, Dict[str, float]] = field(
+        default_factory=dict
+    )
+
     def supports_mode(self, mode: ImagingMode) -> bool:
         """检查是否支持指定成像模式"""
         return mode in self.imaging_modes
+
+    def get_imaging_constraints(self, mode: ImagingMode) -> Optional[Dict[str, float]]:
+        """
+        获取指定成像模式的时长约束
+
+        Args:
+            mode: 成像模式
+
+        Returns:
+            约束字典 {'min_duration': float, 'max_duration': float} 或 None
+        """
+        return self.imaging_mode_constraints.get(mode)
+
+    def validate_constraints(self) -> bool:
+        """
+        验证所有成像模式约束的有效性
+
+        Returns:
+            True if all constraints are valid
+
+        Raises:
+            ValueError: if any constraint is invalid
+        """
+        for mode, constraints in self.imaging_mode_constraints.items():
+            if 'min_duration' not in constraints:
+                raise ValueError(
+                    f"Missing 'min_duration' for mode {mode.value}"
+                )
+            if 'max_duration' not in constraints:
+                raise ValueError(
+                    f"Missing 'max_duration' for mode {mode.value}"
+                )
+
+            min_dur = constraints['min_duration']
+            max_dur = constraints['max_duration']
+
+            if min_dur > max_dur:
+                raise ValueError(
+                    f"min_duration ({min_dur}) greater than max_duration ({max_dur}) "
+                    f"for mode {mode.value}"
+                )
+            if min_dur == max_dur:
+                raise ValueError(
+                    f"min_duration ({min_dur}) equal to max_duration ({max_dur}) "
+                    f"for mode {mode.value}"
+                )
+
+        return True
 
 
 @dataclass
@@ -430,6 +484,12 @@ class Satellite:
             orbit_dict['altitude'] = self.orbit.altitude
             orbit_dict['inclination'] = self.orbit.inclination
 
+        # Convert imaging_mode_constraints to serializable format
+        constraints_dict = {
+            mode.value: constraints
+            for mode, constraints in self.capabilities.imaging_mode_constraints.items()
+        }
+
         return {
             'id': self.id,
             'name': self.name,
@@ -443,6 +503,7 @@ class Satellite:
                 'data_rate': self.capabilities.data_rate,
                 'imager': self.capabilities.imager,
                 'imaging_mode_details': self.capabilities.imaging_mode_details,
+                'imaging_mode_constraints': constraints_dict,
             }
         }
 
@@ -544,6 +605,20 @@ class Satellite:
                 if m not in imaging_mode_details:
                     imaging_mode_details.append(m)
 
+        # 解析成像模式约束
+        raw_constraints = cap_data.get('imaging_mode_constraints', {})
+        imaging_mode_constraints: Dict[ImagingMode, Dict[str, float]] = {}
+        for mode_str, constraints in raw_constraints.items():
+            try:
+                mode = ImagingMode(mode_str)
+                imaging_mode_constraints[mode] = {
+                    'min_duration': float(constraints['min_duration']),
+                    'max_duration': float(constraints['max_duration']),
+                }
+            except (ValueError, KeyError):
+                # 跳过无效的约束配置
+                continue
+
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
             max_off_nadir=cap_data.get('max_off_nadir', 30.0),
@@ -552,6 +627,7 @@ class Satellite:
             data_rate=cap_data.get('data_rate', 300.0),
             imager=imager_data,
             imaging_mode_details=imaging_mode_details,
+            imaging_mode_constraints=imaging_mode_constraints,
         )
 
         # 读取TLE（支持多种格式）
