@@ -86,6 +86,12 @@ class AttitudeCalculator:
 
     计算卫星成像时刻在LVLH坐标系下的姿态角。
 
+    传播策略（按精度从高到低）:
+    1. SGP4: 使用TLE（含J2摄动）
+    2. HPOP: 高精度轨道传播（当无TLE但HPOP可用时）
+    3. J2 Model: 使用J2摄动模型（当无TLE且无HPOP时）
+    4. Two-Body: 简化二体模型（降级方案）
+
     Attributes:
         propagator_type: 使用的轨道传播器类型
         earth_radius: 地球半径（米）
@@ -94,6 +100,10 @@ class AttitudeCalculator:
     EARTH_RADIUS = 6371000.0  # 地球平均半径（米）
     EARTH_GM = 3.986004418e14  # 地球引力常数 (m^3/s^2)
     EARTH_OMEGA = 7.2921158553e-5  # 地球自转角速度 (rad/s)
+
+    # J2摄动系数 (WGS84)
+    J2 = 1.08263e-3
+    EARTH_RADIUS_KM = 6378.137  # km
 
     def __init__(self, propagator_type: PropagatorType = PropagatorType.SGP4):
         """初始化姿态角计算器
@@ -195,8 +205,181 @@ class AttitudeCalculator:
             else:
                 return self._propagate_with_sgp4(satellite, timestamp)
         else:
-            # 没有TLE时使用简化二体模型
-            return self._propagate_with_simple_twobody(satellite, timestamp)
+            # 没有TLE时，优先使用HPOP，其次使用J2模型，最后使用二体模型
+            if self._hpop_available:
+                try:
+                    return self._propagate_with_hpop(satellite, timestamp)
+                except Exception as e:
+                    logger.warning(f"HPOP propagation failed: {e}, falling back to J2 model")
+
+            # 使用J2摄动模型（比二体更精确）
+            return self._propagate_with_j2_model(satellite, timestamp)
+
+    def _propagate_with_j2_model(
+        self,
+        satellite: Satellite,
+        timestamp: datetime
+    ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+        """使用J2摄动模型传播卫星轨道
+
+        J2摄动是地球扁率引起的主要摄动，影响：
+        1. 升交点赤经的长期漂移 (RAAN regression)
+        2. 近地点幅角的长期漂移 (Argument of perigee precession)
+
+        公式来源: Vallado, Fundamentals of Astrodynamics and Applications
+
+        Args:
+            satellite: 卫星对象
+            timestamp: 目标时刻
+
+        Returns:
+            (position, velocity) in ECEF (meters, m/s)
+        """
+        orbit = satellite.orbit
+        if orbit is None:
+            raise ValueError(f"Satellite {satellite.id} has no orbit data")
+
+        # 获取轨道参数
+        a = orbit.get_semi_major_axis() / 1000.0  # 转换为 km
+        ecc = orbit.eccentricity
+        inc = math.radians(orbit.inclination)
+        raan = math.radians(orbit.raan)
+        argp = math.radians(orbit.arg_of_perigee)
+
+        # 历元时间和当前时间
+        epoch = orbit.epoch if orbit.epoch else timestamp
+        delta_t = (timestamp - epoch).total_seconds()
+
+        # 平均运动 (rad/s)
+        n = math.sqrt(self.EARTH_GM / ((a * 1000) ** 3))
+
+        # 计算J2摄动引起的轨道参数变化
+        # J2对升交点赤经的影响 (RAAN regression)
+        cos_inc = math.cos(inc)
+        j2_factor = 1.5 * self.J2 * ((self.EARTH_RADIUS_KM / (a * (1 - ecc**2))) ** 2) * n
+
+        # RAAN变化率 (rad/s)
+        raan_dot = -j2_factor * cos_inc
+
+        # 近地点幅角变化率 (rad/s)
+        argp_dot = j2_factor * (2.5 * cos_inc**2 - 0.5)
+
+        # 更新轨道参数
+        updated_raan = raan + raan_dot * delta_t
+        updated_argp = argp + argp_dot * delta_t
+
+        # 计算平近点角
+        initial_mean_anomaly = math.radians(orbit.mean_anomaly)
+        mean_anomaly = (initial_mean_anomaly + n * delta_t) % (2 * math.pi)
+
+        # 从平近点角解算真近点角 (使用牛顿迭代法)
+        # 对于小偏心率，可以使用级数展开
+        if ecc < 0.1:
+            # 小偏心率近似
+            true_anomaly = mean_anomaly + 2 * ecc * math.sin(mean_anomaly)
+        else:
+            # 牛顿迭代法解开普勒方程
+            E = mean_anomaly  # 初始猜测
+            for _ in range(10):
+                delta = (E - ecc * math.sin(E) - mean_anomaly) / (1 - ecc * math.cos(E))
+                E -= delta
+                if abs(delta) < 1e-10:
+                    break
+            # 从偏近点角计算真近点角
+            true_anomaly = 2 * math.atan2(
+                math.sqrt(1 + ecc) * math.sin(E / 2),
+                math.sqrt(1 - ecc) * math.cos(E / 2)
+            )
+
+        # 考虑J2对平近点角的影响（长期项）
+        mean_anomaly_dot = n + j2_factor * (1 - 1.5 * math.sin(inc)**2)
+        mean_anomaly = (initial_mean_anomaly + mean_anomaly_dot * delta_t) % (2 * math.pi)
+
+        # 重新计算真近点角（使用更新后的平近点角）
+        if ecc < 0.1:
+            true_anomaly = mean_anomaly + 2 * ecc * math.sin(mean_anomaly)
+        else:
+            E = mean_anomaly
+            for _ in range(10):
+                delta = (E - ecc * math.sin(E) - mean_anomaly) / (1 - ecc * math.cos(E))
+                E -= delta
+                if abs(delta) < 1e-10:
+                    break
+            true_anomaly = 2 * math.atan2(
+                math.sqrt(1 + ecc) * math.sin(E / 2),
+                math.sqrt(1 - ecc) * math.cos(E / 2)
+            )
+
+        # 轨道半径
+        r = a * (1 - ecc**2) / (1 + ecc * math.cos(true_anomaly))
+
+        # 在轨道平面中的位置和速度
+        x_orb = r * math.cos(true_anomaly)
+        y_orb = r * math.sin(true_anomaly)
+        z_orb = 0.0
+
+        # 轨道速度
+        h = math.sqrt(self.EARTH_GM * a * 1000 * (1 - ecc**2))  # 比角动量
+        v_orb = math.sqrt(self.EARTH_GM / (r * 1000))  # 速度大小
+
+        vx_orb = -v_orb * math.sin(true_anomaly) / math.sqrt(1 + ecc**2 + 2*ecc*math.cos(true_anomaly))
+        vy_orb = v_orb * (ecc + math.cos(true_anomaly)) / math.sqrt(1 + ecc**2 + 2*ecc*math.cos(true_anomaly))
+        vz_orb = 0.0
+
+        # 归一化
+        v_mag = math.sqrt(vx_orb**2 + vy_orb**2)
+        if v_mag > 0:
+            vx_orb = vx_orb / v_mag * v_orb
+            vy_orb = vy_orb / v_mag * v_orb
+
+        # 从轨道平面转换到惯性系 (3-1-3旋转)
+        cos_raan, sin_raan = math.cos(updated_raan), math.sin(updated_raan)
+        cos_inc, sin_inc = math.cos(inc), math.sin(inc)
+        cos_argp, sin_argp = math.cos(updated_argp), math.sin(updated_argp)
+
+        # 位置转换
+        x_eci = (cos_raan * cos_argp - sin_raan * sin_argp * cos_inc) * x_orb + \
+                (-cos_raan * sin_argp - sin_raan * cos_argp * cos_inc) * y_orb
+        y_eci = (sin_raan * cos_argp + cos_raan * sin_argp * cos_inc) * x_orb + \
+                (-sin_raan * sin_argp + cos_raan * cos_argp * cos_inc) * y_orb
+        z_eci = (sin_argp * sin_inc) * x_orb + \
+                (cos_argp * sin_inc) * y_orb
+
+        # 速度转换
+        vx_eci = (cos_raan * cos_argp - sin_raan * sin_argp * cos_inc) * vx_orb + \
+                 (-cos_raan * sin_argp - sin_raan * cos_argp * cos_inc) * vy_orb
+        vy_eci = (sin_raan * cos_argp + cos_raan * sin_argp * cos_inc) * vx_orb + \
+                 (-sin_raan * sin_argp + cos_raan * cos_argp * cos_inc) * vy_orb
+        vz_eci = (sin_argp * sin_inc) * vx_orb + \
+                 (cos_argp * sin_inc) * vy_orb
+
+        # ECI到ECEF转换
+        from sgp4.api import jday
+        jd, fr = jday(
+            timestamp.year, timestamp.month, timestamp.day,
+            timestamp.hour, timestamp.minute,
+            timestamp.second + timestamp.microsecond / 1e6
+        )
+        d = jd - 2451545.0 + fr
+        gmst = (18.697374558 + 24.06570982441908 * d) % 24
+        gmst_deg = gmst * 15.0
+        gmst_rad = math.radians(gmst_deg)
+
+        cos_gmst, sin_gmst = math.cos(gmst_rad), math.sin(gmst_rad)
+
+        x_ecef = x_eci * cos_gmst + y_eci * sin_gmst
+        y_ecef = -x_eci * sin_gmst + y_eci * cos_gmst
+        z_ecef = z_eci
+
+        vx_ecef = vx_eci * cos_gmst + vy_eci * sin_gmst - self.EARTH_OMEGA * y_eci
+        vy_ecef = -vx_eci * sin_gmst + vy_eci * cos_gmst + self.EARTH_OMEGA * x_eci
+        vz_ecef = vz_eci
+
+        # 转换为米
+        return (
+            (x_ecef * 1000, y_ecef * 1000, z_ecef * 1000),
+            (vx_ecef * 1000, vy_ecef * 1000, vz_ecef * 1000)
+        )
 
     def _propagate_with_simple_twobody(
         self,
