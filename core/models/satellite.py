@@ -344,12 +344,21 @@ class Satellite:
             self.capabilities.storage_capacity = 500.0
             self.capabilities.power_capacity = 2000.0
             self.capabilities.resolution = 10.0
+            # 光学卫星成像时长约束：最短6秒，最长12秒
+            self.capabilities.imaging_mode_constraints = {
+                ImagingMode.PUSH_BROOM: {'min_duration': 6.0, 'max_duration': 12.0}
+            }
         elif self.sat_type == SatelliteType.OPTICAL_2:
             self.capabilities.imaging_modes = [ImagingMode.PUSH_BROOM, ImagingMode.FRAME]
             self.capabilities.max_off_nadir = 45.0
             self.capabilities.storage_capacity = 800.0
             self.capabilities.power_capacity = 2500.0
             self.capabilities.resolution = 5.0
+            # 光学卫星成像时长约束：最短6秒，最长12秒
+            self.capabilities.imaging_mode_constraints = {
+                ImagingMode.PUSH_BROOM: {'min_duration': 6.0, 'max_duration': 12.0},
+                ImagingMode.FRAME: {'min_duration': 6.0, 'max_duration': 12.0}
+            }
         elif self.sat_type == SatelliteType.SAR_1:
             self.capabilities.imaging_modes = [
                 ImagingMode.SPOTLIGHT,
@@ -360,6 +369,13 @@ class Satellite:
             self.capabilities.storage_capacity = 1000.0
             self.capabilities.power_capacity = 3000.0
             self.capabilities.resolution = 3.0
+            # SAR-1成像时长约束（基于典型SAR卫星数据）
+            # Spotlight: 最长20秒, Stripmap: 最长40秒
+            self.capabilities.imaging_mode_constraints = {
+                ImagingMode.SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 20.0},
+                ImagingMode.SLIDING_SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 25.0},
+                ImagingMode.STRIPMAP: {'min_duration': 15.0, 'max_duration': 40.0}
+            }
         elif self.sat_type == SatelliteType.SAR_2:
             self.capabilities.imaging_modes = [
                 ImagingMode.SPOTLIGHT,
@@ -370,6 +386,13 @@ class Satellite:
             self.capabilities.storage_capacity = 1500.0
             self.capabilities.power_capacity = 4000.0
             self.capabilities.resolution = 1.0
+            # SAR-2成像时长约束（增强型，支持更长成像）
+            # Spotlight: 最长25秒, Stripmap: 最长56秒
+            self.capabilities.imaging_mode_constraints = {
+                ImagingMode.SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 25.0},
+                ImagingMode.SLIDING_SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 30.0},
+                ImagingMode.STRIPMAP: {'min_duration': 15.0, 'max_duration': 56.0}
+            }
 
     def get_position_sgp4(self, dt: datetime) -> tuple:
         """

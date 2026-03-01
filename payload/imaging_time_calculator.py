@@ -89,10 +89,12 @@ class ImagingTimeCalculator:
     根据目标类型、大小和成像模式计算所需的成像时长
     """
 
-    # 默认成像参数
-    DEFAULT_MIN_DURATION = 60       # 最小成像时长（秒）
-    DEFAULT_MAX_DURATION = 1800     # 最大成像时长（秒）
-    DEFAULT_DEFAULT_DURATION = 300  # 默认成像时长（秒）
+    # 默认成像参数（基于典型卫星数据）
+    # 光学卫星：最短6秒，最长12秒
+    # SAR卫星：Spotlight 10-25秒，Stripmap 15-56秒
+    DEFAULT_MIN_DURATION = 6.0       # 最小成像时长（秒）- 光学卫星最短6秒
+    DEFAULT_MAX_DURATION = 56.0      # 最大成像时长（秒）- SAR Stripmap最长56秒
+    DEFAULT_DEFAULT_DURATION = 10.0  # 默认成像时长（秒）
 
     # 区域目标成像参数
     SQKM_TO_DURATION_FACTOR = 5.0   # 每平方公里需要的成像秒数
@@ -220,16 +222,24 @@ class ImagingTimeCalculator:
         Returns:
             float: 成像时长（秒）
         """
-        # 基础时长
-        base_duration = self.default_duration
+        # 基础时长（基于典型光学卫星6-12秒约束）
+        # 光学模式使用较短的成像时间
+        if mode in [ImagingMode.FRAME, ImagingMode.PUSH_BROOM]:
+            base_duration = 8.0  # 光学典型8秒
+        elif mode in [ImagingMode.STRIPMAP, ImagingMode.SLIDING_SPOTLIGHT]:
+            base_duration = 20.0  # SAR中等分辨率20秒
+        elif mode == ImagingMode.SPOTLIGHT:
+            base_duration = 15.0  # SAR高分辨率15秒
+        else:
+            base_duration = self.default_duration
 
-        # 根据成像模式调整
+        # 根据成像模式微调
         mode_factors = {
-            ImagingMode.FRAME: 0.5,              # 框幅模式：快速单次曝光
+            ImagingMode.FRAME: 0.8,              # 框幅模式：快速单次曝光
             ImagingMode.PUSH_BROOM: 1.0,         # 推扫模式：标准时长
-            ImagingMode.STRIPMAP: 1.2,           # 条带模式：稍长
-            ImagingMode.SLIDING_SPOTLIGHT: 1.5,  # 滑动聚束：较长
-            ImagingMode.SPOTLIGHT: 2.0,          # 聚束模式：最长（需要更多曝光时间）
+            ImagingMode.STRIPMAP: 1.0,           # 条带模式：标准
+            ImagingMode.SLIDING_SPOTLIGHT: 1.3,  # 滑动聚束：稍长
+            ImagingMode.SPOTLIGHT: 1.0,          # 聚束模式：标准
         }
 
         factor = mode_factors.get(mode, 1.0)
@@ -279,19 +289,23 @@ class ImagingTimeCalculator:
         聚束模式通过控制天线波束指向来获取高分辨率图像，
         但覆盖效率较低。
 
+        基于ICEYE等典型SAR卫星数据：
+        - 标准Spotlight: 最长20秒
+        - Dwell模式: 最长25秒
+
         Args:
             area_sqkm: 区域面积（平方公里）
 
         Returns:
             float: 成像时长（秒）
         """
-        # 聚束模式效率较低，每平方公里需要更多时间
-        # 假设每次聚束观测覆盖约10平方公里
+        # 聚束模式每shot覆盖约10平方公里
         coverage_per_shot = 10.0  # 平方公里
-        shots_needed = max(1, area_sqkm / coverage_per_shot)
+        shots_needed = max(1, int(area_sqkm / coverage_per_shot))
 
-        # 每次观测约60秒（包括姿态调整）
-        time_per_shot = 60.0
+        # 每次聚束观测典型时长：10-25秒（基于SAR卫星公开数据）
+        # 使用15秒作为平均值
+        time_per_shot = 15.0
         total_time = shots_needed * time_per_shot
 
         return total_time
@@ -301,6 +315,9 @@ class ImagingTimeCalculator:
         计算条带模式成像时长
 
         条带模式是最高效的扫描方式，卫星沿飞行方向连续成像。
+
+        基于Synspective等典型SAR卫星数据：
+        - Stripmap: 16-56秒（覆盖2-7个场景，每个约50km）
 
         Args:
             area_sqkm: 区域面积（平方公里）
@@ -320,9 +337,10 @@ class ImagingTimeCalculator:
         # 扫描时间 = 长度 / 速度
         duration = scan_length_km / velocity_kmps
 
-        # 添加姿态调整时间（每次约30秒）
-        num_passes = max(1, int(area_sqkm / 500))  # 假设每次过境最多覆盖500平方公里
-        setup_time = num_passes * 30.0
+        # 添加姿态调整时间（每次约5-10秒，更实际的值）
+        # 基于SAR卫星典型数据，单次过境最多覆盖50-200平方公里
+        num_passes = max(1, int(area_sqkm / 150))  # 每次过境约150平方公里
+        setup_time = num_passes * 8.0  # 每次约8秒姿态调整
 
         return duration + setup_time
 
