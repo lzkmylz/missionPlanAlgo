@@ -1,0 +1,87 @@
+{
+  "metadata": {
+    "scenario": "scenarios/large_scale_frequency.json",
+    "algorithms": [
+      "FCFS",
+      "Greedy-EDF",
+      "Greedy-MaxVal",
+      "GA",
+      "SA"
+    ],
+    "repetitions": 1,
+    "generated_at": "2026-03-01T10:14:08.472264",
+    "total_observation_demand": 2638
+  },
+  "raw_results": {
+    "FCFS": [
+      {
+        "algorithm": "FCFS",
+        "scheduled_count": 2442,
+        "downlink_count": 2371,
+        "unique_targets_observed": 887,
+        "computation_time": 15.407938241958618,
+        "frequency_satisfaction_rate": 0.882,
+        "observation_completion_rate": 0.9257012888551933,
+        "total_required": 2638,
+        "total_actual": 2442,
+        "repetition": 1
+      }
+    ],
+    "Greedy-EDF": [
+      {
+        "algorithm": "Greedy-EDF",
+        "scheduled_count": 2442,
+        "downlink_count": 2371,
+        "unique_targets_observed": 887,
+        "computation_time": 16.459758281707764,
+        "frequency_satisfaction_rate": 0.882,
+        "observation_completion_rate": 0.9257012888551933,
+        "total_required": 2638,
+        "total_actual": 2442,
+        "repetition": 1
+      }
+    ],
+    "Greedy-MaxVal": [
+      {
+        "algorithm": "Greedy-MaxVal",
+        "scheduled_count": 2610,
+        "downlink_count": 2610,
+        "unique_targets_observed": 987,
+        "computation_time": 23.66361093521118,
+        "frequency_satisfaction_rate": 0.986,
+        "observation_completion_rate": 0.9893858984078847,
+        "total_required": 2638,
+        "total_actual": 2610,
+        "repetition": 1
+      }
+    ],
+    "GA": [
+      {
+        "algorithm": "GA",
+        "scheduled_count": 1022,
+        "downlink_count": 952,
+        "unique_targets_observed": 577,
+        "computation_time": 1274.8913011550903,
+        "frequency_satisfaction_rate": 0.29,
+        "observation_completion_rate": 0.38741470811220624,
+        "total_required": 2638,
+        "total_actual": 1022,
+        "repetition": 1
+      }
+    ],
+    "SA": [
+      {
+        "algorithm": "SA",
+        "scheduled_count": 1000,
+        "downlink_count": 931,
+        "unique_targets_observed": 557,
+        "computation_time": 28.471510887145996,
+        "frequency_satisfaction_rate": 0.288,
+        "observation_completion_rate": 0.37907505686125853,
+        "total_required": 2638,
+        "total_actual": 1000,
+        "repetition": 1
+      }
+    ]
+  }
+}
