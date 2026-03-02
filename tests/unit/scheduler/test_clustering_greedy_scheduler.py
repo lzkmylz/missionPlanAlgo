@@ -211,7 +211,8 @@ def high_priority_targets() -> List[Target]:
 @pytest.fixture
 def visibility_windows() -> Dict[str, List[VisibilityWindow]]:
     """Create mock visibility windows for targets"""
-    base_time = datetime(2024, 1, 1, 6, 0, 0)
+    # Use 12:00 to avoid SAA (South Atlantic Anomaly) which occurs around 6:00-7:00
+    base_time = datetime(2024, 1, 1, 12, 0, 0)
     windows = {}
 
     # Create windows for all target IDs

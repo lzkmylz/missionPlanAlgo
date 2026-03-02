@@ -48,11 +48,9 @@ def mock_satellite():
     sat = Mock()
     sat.id = "SAT-001"
     sat.name = "Test Satellite"
-    sat.orbit = Mock()
-    sat.orbit.altitude = 500000.0  # 500km
-    sat.orbit.inclination = 97.4
-    sat.orbit.raan = 0.0
-    sat.orbit.mean_anomaly = 0.0
+    # Use a real Orbit-like object with actual numeric values
+    from core.models.satellite import Orbit
+    sat.orbit = Orbit()
     sat.tle_line1 = None
     sat.tle_line2 = None
     return sat

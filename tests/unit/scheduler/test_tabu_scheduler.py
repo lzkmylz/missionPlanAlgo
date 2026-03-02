@@ -12,6 +12,17 @@ from scheduler.metaheuristic.tabu_scheduler import TabuScheduler, TabuSolution
 from scheduler.base_scheduler import ScheduleResult, TaskFailureReason
 
 
+def create_mock_satellite(sat_id="SAT-01"):
+    """创建带有完整capabilities的模拟卫星"""
+    sat = Mock()
+    sat.id = sat_id
+    sat.capabilities = Mock()
+    sat.capabilities.storage_capacity = 100
+    sat.capabilities.max_off_nadir = 45.0
+    sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
+    return sat
+
+
 class TestTabuSolution:
     """测试TabuSolution数据类"""
 
@@ -110,6 +121,7 @@ class TestTabuSchedulerBasic:
 
         mock_target = Mock()
         mock_target.id = "TARGET-01"
+        mock_target.required_observations = 1
 
         mock_mission = Mock()
         mock_mission.targets = [mock_target]
@@ -138,6 +150,7 @@ class TestTabuSchedulerWithCache:
         for i in range(num_targets):
             target = Mock()
             target.id = f"TARGET-{i:02d}"
+            target.required_observations = 1
             targets.append(target)
 
         satellites = []
@@ -146,6 +159,8 @@ class TestTabuSchedulerWithCache:
             sat.id = f"SAT-{i:02d}"
             sat.capabilities = Mock()
             sat.capabilities.storage_capacity = 100
+            sat.capabilities.max_off_nadir = 45.0
+            sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
             satellites.append(sat)
 
         mission = Mock()
@@ -268,7 +283,7 @@ class TestTabuSchedulerNeighborhood:
         scheduler = TabuScheduler()
 
         mock_mission = Mock()
-        mock_mission.targets = [Mock() for _ in range(3)]
+        mock_mission.targets = [Mock(required_observations=1) for _ in range(3)]
         mock_mission.satellites = [Mock() for _ in range(2)]
 
         scheduler.initialize(mock_mission)
@@ -296,8 +311,8 @@ class TestTabuSchedulerConvergence:
         scheduler = TabuScheduler({'max_iterations': 10})
 
         mock_mission = Mock()
-        mock_mission.targets = [Mock() for _ in range(3)]
-        mock_mission.satellites = [Mock() for _ in range(2)]
+        mock_mission.targets = [Mock(required_observations=1) for _ in range(3)]
+        mock_mission.satellites = [create_mock_satellite(f"SAT-{i:02d}") for i in range(2)]
         mock_mission.start_time = datetime(2024, 1, 1)
 
         scheduler.initialize(mock_mission)
@@ -317,8 +332,8 @@ class TestTabuSchedulerConvergence:
         scheduler = TabuScheduler({'max_iterations': 20})
 
         mock_mission = Mock()
-        mock_mission.targets = [Mock() for _ in range(5)]
-        mock_mission.satellites = [Mock() for _ in range(2)]
+        mock_mission.targets = [Mock(required_observations=1) for _ in range(5)]
+        mock_mission.satellites = [create_mock_satellite(f"SAT-{i:02d}") for i in range(2)]
         mock_mission.start_time = datetime(2024, 1, 1)
 
         scheduler.initialize(mock_mission)
@@ -344,10 +359,16 @@ class TestTabuSchedulerEdgeCases:
         mock_mission = Mock()
         mock_target = Mock()
         mock_target.id = "TARGET-01"
+        mock_target.required_observations = 1
+        mock_target.required_observations = 1
         mock_mission.targets = [mock_target]
 
         mock_sat = Mock()
         mock_sat.id = "SAT-01"
+        mock_sat.capabilities = Mock()
+        mock_sat.capabilities.storage_capacity = 100
+        mock_sat.capabilities.max_off_nadir = 45.0
+        mock_sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
         mock_mission.satellites = [mock_sat]
         mock_mission.start_time = datetime(2024, 1, 1)
 
@@ -376,8 +397,8 @@ class TestTabuSchedulerEdgeCases:
         scheduler = TabuScheduler({'max_iterations': 10})
 
         mock_mission = Mock()
-        mock_mission.targets = [Mock() for _ in range(5)]
-        mock_mission.satellites = [Mock()]
+        mock_mission.targets = [Mock(required_observations=1) for _ in range(5)]
+        mock_mission.satellites = [create_mock_satellite("SAT-01")]
         mock_mission.start_time = datetime(2024, 1, 1)
 
         scheduler.initialize(mock_mission)
@@ -396,8 +417,8 @@ class TestTabuSchedulerEdgeCases:
         })
 
         mock_mission = Mock()
-        mock_mission.targets = [Mock() for _ in range(20)]
-        mock_mission.satellites = [Mock() for _ in range(5)]
+        mock_mission.targets = [Mock(required_observations=1) for _ in range(20)]
+        mock_mission.satellites = [create_mock_satellite(f"SAT-{i:02d}") for i in range(5)]
         mock_mission.start_time = datetime(2024, 1, 1)
 
         scheduler.initialize(mock_mission)

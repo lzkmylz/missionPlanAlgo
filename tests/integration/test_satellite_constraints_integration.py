@@ -66,10 +66,11 @@ class TestSchedulerWithSatelliteConstraints:
         scheduler.initialize(mission)
 
         # Mock window cache with a window that's long enough
+        # Use 12:00-12:30 to avoid SAA (South Atlantic Anomaly) which occurs around 6:00-7:00
         mock_cache = MagicMock()
         mock_cache.get_windows.return_value = [{
-            'start': datetime(2024, 1, 1, 6, 0),
-            'end': datetime(2024, 1, 1, 6, 30),  # 30 min window
+            'start': datetime(2024, 1, 1, 12, 0),
+            'end': datetime(2024, 1, 1, 12, 30),  # 30 min window
             'max_elevation': 45.0
         }]
         scheduler.set_window_cache(mock_cache)
@@ -77,7 +78,7 @@ class TestSchedulerWithSatelliteConstraints:
         result = scheduler.schedule()
 
         # Should schedule the task
-        assert len(result.scheduled_tasks) == 1
+        assert len(result.scheduled_tasks) == 1, f"Expected 1 task, got {len(result.scheduled_tasks)}. Unscheduled: {result.unscheduled_tasks}"
 
         # The duration should be constrained by satellite-specific max (120s)
         # not the global max (1800s)
@@ -123,11 +124,11 @@ class TestSchedulerWithSatelliteConstraints:
         })
         scheduler.initialize(mission)
 
-        # Mock window cache
+        # Mock window cache - use 12:00-12:30 to avoid SAA
         mock_cache = MagicMock()
         mock_cache.get_windows.return_value = [{
-            'start': datetime(2024, 1, 1, 6, 0),
-            'end': datetime(2024, 1, 1, 6, 30),
+            'start': datetime(2024, 1, 1, 12, 0),
+            'end': datetime(2024, 1, 1, 12, 30),
             'max_elevation': 45.0
         }]
         scheduler.set_window_cache(mock_cache)
@@ -135,7 +136,7 @@ class TestSchedulerWithSatelliteConstraints:
         result = scheduler.schedule()
 
         # Should schedule the task
-        assert len(result.scheduled_tasks) == 1
+        assert len(result.scheduled_tasks) == 1, f"Expected 1 task, got {len(result.scheduled_tasks)}. Unscheduled: {result.unscheduled_tasks}"
 
         # The duration should use global constraints (60-1800s)
         task = result.scheduled_tasks[0]
@@ -200,10 +201,11 @@ class TestSchedulerWithSatelliteConstraints:
         scheduler.initialize(mission)
 
         # Mock window cache - both satellites have windows
+        # Use 12:00-12:30 to avoid SAA
         mock_cache = MagicMock()
         mock_cache.get_windows.side_effect = lambda sat_id, target_id: [{
-            'start': datetime(2024, 1, 1, 6, 0),
-            'end': datetime(2024, 1, 1, 6, 30),
+            'start': datetime(2024, 1, 1, 12, 0),
+            'end': datetime(2024, 1, 1, 12, 30),
             'max_elevation': 45.0
         }]
         scheduler.set_window_cache(mock_cache)
@@ -211,7 +213,7 @@ class TestSchedulerWithSatelliteConstraints:
         result = scheduler.schedule()
 
         # Should schedule the task
-        assert len(result.scheduled_tasks) == 1
+        assert len(result.scheduled_tasks) == 1, f"Expected 1 task, got {len(result.scheduled_tasks)}. Unscheduled: {result.unscheduled_tasks}"
 
         # Verify the scheduled satellite and duration
         task = result.scheduled_tasks[0]
@@ -266,10 +268,11 @@ class TestSchedulerWithSatelliteConstraints:
         })
         scheduler.initialize(mission)
 
+        # Use 12:00-12:30 to avoid SAA
         mock_cache = MagicMock()
         mock_cache.get_windows.return_value = [{
-            'start': datetime(2024, 1, 1, 6, 0),
-            'end': datetime(2024, 1, 1, 6, 30),
+            'start': datetime(2024, 1, 1, 12, 0),
+            'end': datetime(2024, 1, 1, 12, 30),
             'max_elevation': 45.0
         }]
         scheduler.set_window_cache(mock_cache)
@@ -277,7 +280,7 @@ class TestSchedulerWithSatelliteConstraints:
         result = scheduler.schedule()
 
         # Should schedule the task
-        assert len(result.scheduled_tasks) == 1
+        assert len(result.scheduled_tasks) == 1, f"Expected 1 task, got {len(result.scheduled_tasks)}. Unscheduled: {result.unscheduled_tasks}"
 
         # The duration should be constrained based on the selected mode
         task = result.scheduled_tasks[0]
@@ -320,10 +323,11 @@ class TestSchedulerWithSatelliteConstraints:
         scheduler = GreedyScheduler()
         scheduler.initialize(mission)
 
+        # Use 12:00-12:30 to avoid SAA
         mock_cache = MagicMock()
         mock_cache.get_windows.return_value = [{
-            'start': datetime(2024, 1, 1, 6, 0),
-            'end': datetime(2024, 1, 1, 6, 30),
+            'start': datetime(2024, 1, 1, 12, 0),
+            'end': datetime(2024, 1, 1, 12, 30),
             'max_elevation': 45.0
         }]
         scheduler.set_window_cache(mock_cache)
@@ -331,4 +335,4 @@ class TestSchedulerWithSatelliteConstraints:
         result = scheduler.schedule()
 
         # Should work without errors
-        assert len(result.scheduled_tasks) == 1
+        assert len(result.scheduled_tasks) == 1, f"Expected 1 task, got {len(result.scheduled_tasks)}. Unscheduled: {result.unscheduled_tasks}"

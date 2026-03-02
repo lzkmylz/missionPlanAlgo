@@ -270,15 +270,15 @@ class TestEDDFailureReasons:
         scheduler = EDDScheduler()
         scheduler.initialize(self.mission)
 
-        # 模拟资源使用情况 - 资源充足
-        sat_resource_usage = {
+        # 设置资源使用情况 - 资源充足
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0
             }
         }
 
-        reason = scheduler._determine_failure_reason(self.targets[0], sat_resource_usage)
+        reason = scheduler._determine_failure_reason(self.targets[0])
         # 资源充足时，失败原因应该是无可见窗口
         assert reason == TaskFailureReason.NO_VISIBLE_WINDOW
 
@@ -287,15 +287,15 @@ class TestEDDFailureReasons:
         scheduler = EDDScheduler()
         scheduler.initialize(self.mission)
 
-        # 模拟资源使用情况 - 电量不足
-        sat_resource_usage = {
+        # 设置资源使用情况 - 电量不足
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 50.0,  # 低电量（低于10%阈值）
                 'storage': 0.0
             }
         }
 
-        reason = scheduler._determine_failure_reason(self.targets[0], sat_resource_usage)
+        reason = scheduler._determine_failure_reason(self.targets[0])
         assert reason == TaskFailureReason.POWER_CONSTRAINT
 
 
@@ -501,14 +501,14 @@ class TestSPTFailureReasons:
         scheduler = SPTScheduler()
         scheduler.initialize(self.mission)
 
-        sat_resource_usage = {
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0
             }
         }
 
-        reason = scheduler._determine_failure_reason(self.targets[0], sat_resource_usage)
+        reason = scheduler._determine_failure_reason(self.targets[0])
         assert reason == TaskFailureReason.NO_VISIBLE_WINDOW
 
     def test_determine_failure_reason_storage(self):
@@ -516,18 +516,16 @@ class TestSPTFailureReasons:
         scheduler = SPTScheduler()
         scheduler.initialize(self.mission)
 
-        # 模拟存储已满
-        sat_resource_usage = {
+        # 设置存储已满 - 卫星默认存储容量为500GB
+        # 设置已使用存储为499.9GB，使任何任务都无法再存储
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
-                'storage': 499.0  # 接近容量上限
+                'storage': 499.9  # 接近容量上限，动态计算的存储需求会超出
             }
         }
 
-        # 添加data_size_gb属性
-        self.targets[0].data_size_gb = 2.0
-
-        reason = scheduler._determine_failure_reason(self.targets[0], sat_resource_usage)
+        reason = scheduler._determine_failure_reason(self.targets[0])
         assert reason == TaskFailureReason.STORAGE_CONSTRAINT
 
 
@@ -566,19 +564,16 @@ class TestSPTResourceConstraints:
         scheduler = SPTScheduler(config={'consider_power': True})
         scheduler.initialize(self.mission)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0
             }
         }
 
-        window = MagicMock()
-        window.start_time = datetime(2024, 1, 1, 6, 0)
-        window.end_time = datetime(2024, 1, 1, 6, 10)
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is True
 
@@ -588,21 +583,16 @@ class TestSPTResourceConstraints:
         scheduler = SPTScheduler(config={'consider_storage': True})
         scheduler.initialize(self.mission)
 
-        sat_resource_usage = {
+        # 设置资源使用情况 - 存储已满 (容量为100GB，使用99.9GB)
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
-                'storage': 95.0
+                'storage': 99.9  # 接近容量上限，动态计算的存储需求会超出
             }
         }
 
-        self.target.data_size_gb = 10.0
-
-        window = MagicMock()
-        window.start_time = datetime(2024, 1, 1, 6, 0)
-        window.end_time = datetime(2024, 1, 1, 6, 10)
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is False
 
@@ -649,6 +639,9 @@ class TestSPTWithWindows:
         scheduler = SPTScheduler()
         scheduler.initialize(self.mission)
 
+        # 初始化机动约束检查器
+        scheduler._initialize_slew_checker()
+
         mock_window = {
             'start': datetime(2024, 1, 1, 6, 0),
             'end': datetime(2024, 1, 1, 6, 10)
@@ -658,7 +651,8 @@ class TestSPTWithWindows:
         mock_cache.get_windows.return_value = [mock_window]
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -666,10 +660,10 @@ class TestSPTWithWindows:
             }
         }
 
-        result = scheduler._find_best_assignment(self.target, sat_resource_usage)
+        result = scheduler._find_best_assignment(self.target)
 
         assert result is not None
-        sat_id, window, imaging_mode = result
+        sat_id, window, imaging_mode, slew_result = result
         assert sat_id == "SAT-01"
 
     def test_spt_find_best_assignment_no_windows(self):
@@ -677,11 +671,15 @@ class TestSPTWithWindows:
         scheduler = SPTScheduler()
         scheduler.initialize(self.mission)
 
+        # 初始化机动约束检查器
+        scheduler._initialize_slew_checker()
+
         mock_cache = MagicMock()
         mock_cache.get_windows.return_value = []
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -689,13 +687,16 @@ class TestSPTWithWindows:
             }
         }
 
-        result = scheduler._find_best_assignment(self.target, sat_resource_usage)
+        result = scheduler._find_best_assignment(self.target)
         assert result is None
 
     def test_spt_deadline_constraint_with_allow_tardiness(self):
         """测试SPT允许延迟时的截止时间约束"""
         scheduler = SPTScheduler(config={'allow_tardiness': True})
         scheduler.initialize(self.mission)
+
+        # 初始化机动约束检查器
+        scheduler._initialize_slew_checker()
 
         past_target = Target(
             id="PAST-TARGET",
@@ -716,7 +717,8 @@ class TestSPTWithWindows:
         mock_cache.get_windows.return_value = [future_window]
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -724,7 +726,7 @@ class TestSPTWithWindows:
             }
         }
 
-        result = scheduler._find_best_assignment(past_target, sat_resource_usage)
+        result = scheduler._find_best_assignment(past_target)
         assert result is not None
 
 
@@ -760,13 +762,17 @@ class TestSPTResourceUpdate:
 
     def test_spt_update_resource_usage(self):
         """测试SPT资源使用更新"""
+        from scheduler.base_scheduler import ScheduledTask
+        from core.models import ImagingMode
+
         scheduler = SPTScheduler()
         scheduler.initialize(self.mission)
 
         initial_power = 1000.0
         initial_storage = 0.0
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': initial_power,
                 'storage': initial_storage,
@@ -779,20 +785,38 @@ class TestSPTResourceUpdate:
             'end': datetime(2024, 1, 1, 6, 10)
         }
 
-        scheduler._update_resource_usage("SAT-01", self.target, window, sat_resource_usage)
+        # 创建模拟的ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=self.target.id,
+            satellite_id="SAT-01",
+            target_id=self.target.id,
+            imaging_start=window['start'],
+            imaging_end=window['end'],
+            imaging_mode=ImagingMode.PUSH_BROOM.value,
+            power_before=initial_power,
+            power_after=initial_power - 50.0,  # 模拟电量消耗
+            storage_before=initial_storage,
+            storage_after=initial_storage + 5.0  # 模拟存储增加
+        )
 
-        assert sat_resource_usage["SAT-01"]['power'] < initial_power
-        assert sat_resource_usage["SAT-01"]['storage'] == initial_storage + 5.0
-        assert sat_resource_usage["SAT-01"]['last_task_end'] == window['end']
+        scheduler._update_resource_usage("SAT-01", self.target, window, scheduled_task)
+
+        assert scheduler._sat_resource_usage["SAT-01"]['power'] == initial_power - 50.0
+        assert scheduler._sat_resource_usage["SAT-01"]['storage'] == initial_storage + 5.0
+        assert scheduler._sat_resource_usage["SAT-01"]['last_task_end'] == window['end']
 
     def test_spt_update_resource_usage_power_disabled(self):
         """测试SPT禁用电量更新"""
+        from scheduler.base_scheduler import ScheduledTask
+        from core.models import ImagingMode
+
         scheduler = SPTScheduler(config={'consider_power': False})
         scheduler.initialize(self.mission)
 
         initial_power = 1000.0
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': initial_power,
                 'storage': 0.0,
@@ -805,18 +829,37 @@ class TestSPTResourceUpdate:
             'end': datetime(2024, 1, 1, 6, 10)
         }
 
-        scheduler._update_resource_usage("SAT-01", self.target, window, sat_resource_usage)
+        # 创建模拟的ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=self.target.id,
+            satellite_id="SAT-01",
+            target_id=self.target.id,
+            imaging_start=window['start'],
+            imaging_end=window['end'],
+            imaging_mode=ImagingMode.PUSH_BROOM.value,
+            power_before=initial_power,
+            power_after=initial_power - 50.0,  # 模拟电量消耗
+            storage_before=0.0,
+            storage_after=5.0
+        )
 
-        assert sat_resource_usage["SAT-01"]['power'] == initial_power
+        scheduler._update_resource_usage("SAT-01", self.target, window, scheduled_task)
+
+        # 禁用电量时，电量不应该被更新
+        assert scheduler._sat_resource_usage["SAT-01"]['power'] == initial_power
 
     def test_spt_update_resource_usage_storage_disabled(self):
         """测试SPT禁用存储更新"""
+        from scheduler.base_scheduler import ScheduledTask
+        from core.models import ImagingMode
+
         scheduler = SPTScheduler(config={'consider_storage': False})
         scheduler.initialize(self.mission)
 
         initial_storage = 0.0
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': initial_storage,
@@ -829,9 +872,24 @@ class TestSPTResourceUpdate:
             'end': datetime(2024, 1, 1, 6, 10)
         }
 
-        scheduler._update_resource_usage("SAT-01", self.target, window, sat_resource_usage)
+        # 创建模拟的ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=self.target.id,
+            satellite_id="SAT-01",
+            target_id=self.target.id,
+            imaging_start=window['start'],
+            imaging_end=window['end'],
+            imaging_mode=ImagingMode.PUSH_BROOM.value,
+            power_before=1000.0,
+            power_after=950.0,
+            storage_before=initial_storage,
+            storage_after=initial_storage + 5.0  # 模拟存储增加
+        )
 
-        assert sat_resource_usage["SAT-01"]['storage'] == initial_storage
+        scheduler._update_resource_usage("SAT-01", self.target, window, scheduled_task)
+
+        # 禁用存储时，存储不应该被更新
+        assert scheduler._sat_resource_usage["SAT-01"]['storage'] == initial_storage
 
 
 class TestSPTSelectImagingMode:
@@ -916,59 +974,47 @@ class TestResourceConstraints:
 
     def test_power_constraint_check(self):
         """测试电量约束检查"""
-        from unittest.mock import MagicMock
         scheduler = EDDScheduler(config={'consider_power': True})
         scheduler.initialize(self.mission)
 
-        # 模拟资源使用情况 - 电量充足
-        sat_resource_usage = {
+        # 设置资源使用情况 - 电量充足
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0
             }
         }
 
-        # 创建一个模拟窗口对象
-        window = MagicMock()
-        window.start_time = datetime(2024, 1, 1, 6, 0)
-        window.end_time = datetime(2024, 1, 1, 6, 10)
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is True
 
     def test_power_constraint_violation(self):
         """测试电量约束违反"""
-        from unittest.mock import MagicMock
         scheduler = EDDScheduler(config={'consider_power': True})
         scheduler.initialize(self.mission)
 
-        # 模拟资源使用情况 - 电量不足
-        sat_resource_usage = {
+        # 设置资源使用情况 - 电量不足
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 0.0,  # 无电量
                 'storage': 0.0
             }
         }
 
-        window = MagicMock()
-        window.start_time = datetime(2024, 1, 1, 6, 0)
-        window.end_time = datetime(2024, 1, 1, 6, 10)
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is False
 
     def test_storage_constraint_check(self):
         """测试存储约束检查"""
-        from unittest.mock import MagicMock
         scheduler = EDDScheduler(config={'consider_storage': True})
         scheduler.initialize(self.mission)
 
-        # 模拟资源使用情况 - 存储充足
-        sat_resource_usage = {
+        # 设置资源使用情况 - 存储充足
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 50.0  # 已使用50GB，还剩50GB
@@ -978,38 +1024,26 @@ class TestResourceConstraints:
         # 设置任务数据大小
         self.target.data_size_gb = 10.0
 
-        window = MagicMock()
-        window.start_time = datetime(2024, 1, 1, 6, 0)
-        window.end_time = datetime(2024, 1, 1, 6, 10)
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is True
 
     def test_storage_constraint_violation(self):
         """测试存储约束违反"""
-        from unittest.mock import MagicMock
         scheduler = EDDScheduler(config={'consider_storage': True})
         scheduler.initialize(self.mission)
 
-        # 模拟资源使用情况 - 存储已满
-        sat_resource_usage = {
+        # 设置资源使用情况 - 存储已满 (容量为100GB，使用99.9GB)
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
-                'storage': 95.0  # 已使用95GB，只剩5GB
+                'storage': 99.9  # 接近容量上限，动态计算的存储需求会超出
             }
         }
 
-        # 设置任务数据大小超过剩余空间
-        self.target.data_size_gb = 10.0
-
-        window = MagicMock()
-        window.start_time = datetime(2024, 1, 1, 6, 0)
-        window.end_time = datetime(2024, 1, 1, 6, 10)
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is False
 
@@ -1022,7 +1056,7 @@ class TestResourceConstraints:
         scheduler.initialize(self.mission)
 
         # 即使资源不足，也应该通过
-        sat_resource_usage = {
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 0.0,
                 'storage': 100.0  # 已满
@@ -1031,13 +1065,8 @@ class TestResourceConstraints:
 
         self.target.data_size_gb = 10.0
 
-        window = {
-            'start': datetime(2024, 1, 1, 6, 0),
-            'end': datetime(2024, 1, 1, 6, 10)
-        }
-
         result = scheduler._check_resource_constraints(
-            self.satellite, self.target, window, sat_resource_usage
+            self.satellite, self.target
         )
         assert result is True
 
@@ -1172,7 +1201,8 @@ class TestSchedulerWithWindows:
         mock_cache.get_windows.return_value = [mock_window]
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -1180,11 +1210,11 @@ class TestSchedulerWithWindows:
             }
         }
 
-        result = scheduler._find_best_assignment(self.target, sat_resource_usage)
+        result = scheduler._find_best_assignment(self.target)
 
         # 应该找到分配
         assert result is not None
-        sat_id, window, imaging_mode = result
+        sat_id, window, imaging_mode, slew_result = result
         assert sat_id == "SAT-01"
 
     def test_find_best_assignment_no_windows(self):
@@ -1197,7 +1227,8 @@ class TestSchedulerWithWindows:
         mock_cache.get_windows.return_value = []
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -1205,7 +1236,7 @@ class TestSchedulerWithWindows:
             }
         }
 
-        result = scheduler._find_best_assignment(self.target, sat_resource_usage)
+        result = scheduler._find_best_assignment(self.target)
 
         # 应该返回None
         assert result is None
@@ -1236,7 +1267,8 @@ class TestSchedulerWithWindows:
         mock_cache.get_windows.return_value = [future_window]
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -1245,7 +1277,7 @@ class TestSchedulerWithWindows:
         }
 
         # 允许延迟时，应该能找到分配
-        result = scheduler._find_best_assignment(past_target, sat_resource_usage)
+        result = scheduler._find_best_assignment(past_target)
         assert result is not None
 
     def test_deadline_constraint_without_allow_tardiness(self):
@@ -1274,7 +1306,8 @@ class TestSchedulerWithWindows:
         mock_cache.get_windows.return_value = [future_window]
         scheduler.set_window_cache(mock_cache)
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': 0.0,
@@ -1283,7 +1316,7 @@ class TestSchedulerWithWindows:
         }
 
         # 不允许延迟时，应该找不到分配
-        result = scheduler._find_best_assignment(past_target, sat_resource_usage)
+        result = scheduler._find_best_assignment(past_target)
         assert result is None
 
 
@@ -1319,13 +1352,17 @@ class TestSchedulerResourceUpdate:
 
     def test_update_resource_usage(self):
         """测试资源使用更新"""
+        from scheduler.base_scheduler import ScheduledTask
+        from core.models import ImagingMode
+
         scheduler = EDDScheduler()
         scheduler.initialize(self.mission)
 
         initial_power = 1000.0
         initial_storage = 0.0
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': initial_power,
                 'storage': initial_storage,
@@ -1339,21 +1376,39 @@ class TestSchedulerResourceUpdate:
             'end': datetime(2024, 1, 1, 6, 10)
         }
 
-        scheduler._update_resource_usage("SAT-01", self.target, window, sat_resource_usage)
+        # 创建模拟的ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=self.target.id,
+            satellite_id="SAT-01",
+            target_id=self.target.id,
+            imaging_start=window['start'],
+            imaging_end=window['end'],
+            imaging_mode=ImagingMode.PUSH_BROOM.value,
+            power_before=initial_power,
+            power_after=initial_power - 50.0,  # 模拟电量消耗
+            storage_before=initial_storage,
+            storage_after=initial_storage + 5.0  # 模拟存储增加
+        )
+
+        scheduler._update_resource_usage("SAT-01", self.target, window, scheduled_task)
 
         # 验证资源被更新
-        assert sat_resource_usage["SAT-01"]['power'] < initial_power
-        assert sat_resource_usage["SAT-01"]['storage'] == initial_storage + 5.0
-        assert sat_resource_usage["SAT-01"]['last_task_end'] == window['end']
+        assert scheduler._sat_resource_usage["SAT-01"]['power'] == initial_power - 50.0
+        assert scheduler._sat_resource_usage["SAT-01"]['storage'] == initial_storage + 5.0
+        assert scheduler._sat_resource_usage["SAT-01"]['last_task_end'] == window['end']
 
     def test_update_resource_usage_power_disabled(self):
         """测试禁用电量更新"""
+        from scheduler.base_scheduler import ScheduledTask
+        from core.models import ImagingMode
+
         scheduler = EDDScheduler(config={'consider_power': False})
         scheduler.initialize(self.mission)
 
         initial_power = 1000.0
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': initial_power,
                 'storage': 0.0,
@@ -1366,19 +1421,37 @@ class TestSchedulerResourceUpdate:
             'end': datetime(2024, 1, 1, 6, 10)
         }
 
-        scheduler._update_resource_usage("SAT-01", self.target, window, sat_resource_usage)
+        # 创建模拟的ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=self.target.id,
+            satellite_id="SAT-01",
+            target_id=self.target.id,
+            imaging_start=window['start'],
+            imaging_end=window['end'],
+            imaging_mode=ImagingMode.PUSH_BROOM.value,
+            power_before=initial_power,
+            power_after=initial_power - 50.0,  # 模拟电量消耗
+            storage_before=0.0,
+            storage_after=5.0
+        )
 
-        # 电量不应该被更新
-        assert sat_resource_usage["SAT-01"]['power'] == initial_power
+        scheduler._update_resource_usage("SAT-01", self.target, window, scheduled_task)
+
+        # 禁用电量时，电量不应该被更新
+        assert scheduler._sat_resource_usage["SAT-01"]['power'] == initial_power
 
     def test_update_resource_usage_storage_disabled(self):
         """测试禁用存储更新"""
+        from scheduler.base_scheduler import ScheduledTask
+        from core.models import ImagingMode
+
         scheduler = EDDScheduler(config={'consider_storage': False})
         scheduler.initialize(self.mission)
 
         initial_storage = 0.0
 
-        sat_resource_usage = {
+        # 设置资源使用情况
+        scheduler._sat_resource_usage = {
             "SAT-01": {
                 'power': 1000.0,
                 'storage': initial_storage,
@@ -1391,10 +1464,24 @@ class TestSchedulerResourceUpdate:
             'end': datetime(2024, 1, 1, 6, 10)
         }
 
-        scheduler._update_resource_usage("SAT-01", self.target, window, sat_resource_usage)
+        # 创建模拟的ScheduledTask对象
+        scheduled_task = ScheduledTask(
+            task_id=self.target.id,
+            satellite_id="SAT-01",
+            target_id=self.target.id,
+            imaging_start=window['start'],
+            imaging_end=window['end'],
+            imaging_mode=ImagingMode.PUSH_BROOM.value,
+            power_before=1000.0,
+            power_after=950.0,
+            storage_before=initial_storage,
+            storage_after=initial_storage + 5.0  # 模拟存储增加
+        )
 
-        # 存储不应该被更新
-        assert sat_resource_usage["SAT-01"]['storage'] == initial_storage
+        scheduler._update_resource_usage("SAT-01", self.target, window, scheduled_task)
+
+        # 禁用存储时，存储不应该被更新
+        assert scheduler._sat_resource_usage["SAT-01"]['storage'] == initial_storage
 
 
 class TestSchedulerSelectImagingMode:

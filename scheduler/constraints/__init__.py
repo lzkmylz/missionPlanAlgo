@@ -6,10 +6,13 @@
 
 from .slew_constraint_checker import SlewConstraintChecker, SlewFeasibilityResult
 from .saa_constraint_checker import SAAConstraintChecker, SAAFeasibilityResult
+from .attitude_constraint_checker import AttitudeConstraintChecker, AttitudeFeasibilityResult
 
 __all__ = [
     'SlewConstraintChecker',
     'SlewFeasibilityResult',
     'SAAConstraintChecker',
     'SAAFeasibilityResult',
+    'AttitudeConstraintChecker',
+    'AttitudeFeasibilityResult',
 ]

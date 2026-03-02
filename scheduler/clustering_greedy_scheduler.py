@@ -765,7 +765,7 @@ class ClusteringGreedyScheduler(GreedyScheduler):
         if not best_assignment:
             return None
 
-        sat_id, window, imaging_mode = best_assignment
+        sat_id, window, imaging_mode, slew_result = best_assignment
         scheduled_task = self._create_scheduled_task(task, sat_id, window, imaging_mode)
 
         self._update_resource_usage(sat_id, task, window, scheduled_task)

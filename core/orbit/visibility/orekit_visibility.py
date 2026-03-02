@@ -86,8 +86,8 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         min_elevation = config.get('min_elevation', 5.0)
         super().__init__(min_elevation=min_elevation)
 
-        # 默认使用1秒步长（HPOP高精度）
-        self.time_step = config.get('time_step', 1)
+        # 默认使用60秒步长（向后兼容）
+        self.time_step = config.get('time_step', 60)
         self._config = config
 
         # 是否使用OrekitBatchPropagator（默认启用，最高精度）

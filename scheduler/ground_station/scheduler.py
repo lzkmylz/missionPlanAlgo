@@ -359,6 +359,16 @@ class GroundStationScheduler:
         """为多个成像任务安排数传计划"""
         result = GroundStationScheduleResult()
 
+        # Auto-initialize storage for any unknown satellites
+        for task in scheduled_tasks:
+            sat_id = task.satellite_id
+            if sat_id not in self._storage_states:
+                # Initialize with the storage_before value from the task
+                self.initialize_satellite_storage(
+                    satellite_id=sat_id,
+                    current_gb=getattr(task, 'storage_before', 0.0)
+                )
+
         for task in scheduled_tasks:
             sat_id = task.satellite_id
             windows = visibility_windows.get(sat_id, [])

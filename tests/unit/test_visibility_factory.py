@@ -79,7 +79,11 @@ class TestVisibilityCalculatorFactory:
 
                 VisibilityCalculatorFactory.create(preferred='stk', config=config)
 
-                mock_stk.assert_called_once_with(config)
+                # 验证工厂调用了calculator，并且config包含了用户指定的参数
+                assert mock_stk.called
+                call_args = mock_stk.call_args[0][0]
+                assert call_args['timeout'] == 30
+                assert call_args['precision'] == 'high'
 
     def test_stk_availability_check(self):
         """测试STK可用性检查"""

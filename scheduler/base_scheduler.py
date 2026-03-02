@@ -21,7 +21,8 @@ from core.dynamics.attitude_calculator import (
     PropagatorType,
     AttitudeAngles,
 )
-from .constraints import SlewConstraintChecker, SAAConstraintChecker
+from .constraints import SlewConstraintChecker, SAAConstraintChecker, AttitudeConstraintChecker
+from core.dynamics.attitude_mode import AttitudeMode
 
 
 class TaskFailureReason(Enum):
@@ -181,6 +182,11 @@ class BaseScheduler(ABC):
 
         # 初始化 SAA 约束检查器
         self._saa_checker: Optional[SAAConstraintChecker] = None
+
+        # 初始化姿态管理
+        self._enable_attitude_management = self.config.get('enable_attitude_management', False)
+        self._attitude_checker: Optional[AttitudeConstraintChecker] = None
+        self._sat_attitude_state: Dict[str, AttitudeMode] = {}
 
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
@@ -516,4 +522,56 @@ class BaseScheduler(ABC):
                 slew_angle = min(slew_angle, sat.capabilities.max_off_nadir)
 
         return slew_angle, 0.0  # 简化计算不计算机动时间
+
+    def _initialize_attitude_checker(self) -> None:
+        """初始化姿态约束检查器"""
+        if not self._enable_attitude_management:
+            return
+        if self._attitude_checker is None:
+            from .constraints import AttitudeConstraintChecker
+            from core.dynamics.attitude_manager import AttitudeManagementConfig
+            config = AttitudeManagementConfig(
+                max_slew_rate=3.0,
+                settling_time=5.0
+            )
+            self._attitude_checker = AttitudeConstraintChecker(config=config)
+
+    def _ensure_attitude_checker_initialized(self) -> None:
+        """确保姿态约束检查器已初始化"""
+        if self._enable_attitude_management and self._attitude_checker is None:
+            self._initialize_attitude_checker()
+
+    def _initialize_attitude_state(self) -> None:
+        """初始化卫星姿态状态跟踪"""
+        if not self._enable_attitude_management or self.mission is None:
+            return
+        for sat in self.mission.satellites:
+            self._sat_attitude_state[sat.id] = AttitudeMode.NADIR_POINTING
+
+    def _get_satellite_attitude_mode(self, sat_id: str) -> AttitudeMode:
+        """获取卫星当前姿态模式"""
+        if not self._enable_attitude_management:
+            return AttitudeMode.NADIR_POINTING
+        return self._sat_attitude_state.get(sat_id, AttitudeMode.NADIR_POINTING)
+
+    def _set_satellite_attitude_mode(self, sat_id: str, mode: AttitudeMode) -> None:
+        """设置卫星姿态模式"""
+        if self._enable_attitude_management:
+            self._sat_attitude_state[sat_id] = mode
+
+    def _calculate_attitude_transition_time(
+        self,
+        sat_id: str,
+        from_mode: AttitudeMode,
+        to_mode: AttitudeMode,
+        timestamp: datetime
+    ) -> timedelta:
+        """计算姿态切换时间"""
+        if not self._enable_attitude_management or from_mode == to_mode:
+            return timedelta(seconds=0)
+        self._ensure_attitude_checker_initialized()
+        if self._attitude_checker is None:
+            return timedelta(seconds=30)  # 默认30秒
+        # 简化为固定30秒机动时间
+        return timedelta(seconds=30)
 
