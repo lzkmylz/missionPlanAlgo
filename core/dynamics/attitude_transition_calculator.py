@@ -24,6 +24,7 @@ from typing import Tuple, Optional
 
 from core.dynamics.attitude_mode import AttitudeMode, AttitudeTransition, TransitionResult
 from core.dynamics.sun_position_calculator import SunPositionCalculator
+from core.dynamics.power_generation_calculator import PowerGenerationCalculator, PowerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,8 @@ class AttitudeTransitionCalculator:
     def __init__(
         self,
         sun_calculator: SunPositionCalculator,
-        config: Optional[TransitionConfig] = None
+        config: Optional[TransitionConfig] = None,
+        power_calculator: Optional[PowerGenerationCalculator] = None
     ):
         """
         初始化姿态切换计算器
@@ -66,6 +68,7 @@ class AttitudeTransitionCalculator:
         Args:
             sun_calculator: 太阳位置计算器，用于计算对日定向姿态
             config: 切换配置参数，如果为None则使用默认配置
+            power_calculator: 发电功率计算器（可选），用于计算姿态切换后的发电功率
 
         Raises:
             TypeError: 如果sun_calculator为None
@@ -75,6 +78,7 @@ class AttitudeTransitionCalculator:
 
         self.sun_calculator = sun_calculator
         self.config = config if config is not None else TransitionConfig()
+        self.power_calculator = power_calculator
 
     def _validate_satellite_position(
         self,
@@ -430,12 +434,25 @@ class AttitudeTransitionCalculator:
 
         # 相同模式，无需机动
         if from_mode == to_mode:
+            # 计算当前姿态的发电功率
+            power = 0.0
+            if self.power_calculator is not None:
+                try:
+                    power = self.power_calculator.calculate_power(
+                        attitude_mode=from_mode,
+                        satellite_position=transition.satellite_position,
+                        timestamp=transition.timestamp,
+                        roll_angle=0.0,
+                        pitch_angle=0.0
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to calculate power: {e}")
             return TransitionResult(
                 slew_time=0.0,
                 slew_angle=0.0,
                 roll_angle=0.0,
                 pitch_angle=0.0,
-                power_generation=0.0,  # TODO: 实现功率计算
+                power_generation=power,
                 feasible=True
             )
 
@@ -515,12 +532,26 @@ class AttitudeTransitionCalculator:
                 from_angles, to_angles
             )
 
+            # 计算目标姿态的发电功率
+            power = 0.0
+            if self.power_calculator is not None:
+                try:
+                    power = self.power_calculator.calculate_power(
+                        attitude_mode=to_mode,
+                        satellite_position=transition.satellite_position,
+                        timestamp=transition.timestamp,
+                        roll_angle=to_angles[0],
+                        pitch_angle=to_angles[1]
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to calculate power: {e}")
+
             return TransitionResult(
                 slew_time=slew_time,
                 slew_angle=slew_angle,
                 roll_angle=to_angles[0],  # 目标滚转角
                 pitch_angle=to_angles[1],  # 目标俯仰角
-                power_generation=0.0,  # TODO: 实现功率计算
+                power_generation=power,
                 feasible=True
             )
 

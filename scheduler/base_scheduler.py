@@ -566,12 +566,38 @@ class BaseScheduler(ABC):
         to_mode: AttitudeMode,
         timestamp: datetime
     ) -> timedelta:
-        """计算姿态切换时间"""
+        """计算姿态切换时间
+
+        使用姿态约束检查器计算机动所需时间。
+        如果无法计算，返回默认的30秒。
+        """
         if not self._enable_attitude_management or from_mode == to_mode:
             return timedelta(seconds=0)
+
         self._ensure_attitude_checker_initialized()
         if self._attitude_checker is None:
             return timedelta(seconds=30)  # 默认30秒
-        # 简化为固定30秒机动时间
-        return timedelta(seconds=30)
+
+        # 获取卫星位置
+        sat = self.mission.get_satellite_by_id(sat_id) if self.mission else None
+        if sat is None:
+            return timedelta(seconds=30)
+
+        # 获取卫星当前位置（如果可用）
+        sat_position = getattr(sat, 'position', None)
+        if sat_position is None or not isinstance(sat_position, (tuple, list)) or len(sat_position) != 3:
+            # 使用默认轨道位置（假设500km高度，简化计算）
+            sat_position = (6871000.0, 0.0, 0.0)  # 默认位置（米）
+
+        try:
+            result = self._attitude_checker.check_attitude_transition(
+                from_mode=from_mode,
+                to_mode=to_mode,
+                satellite_position=tuple(sat_position),
+                timestamp=timestamp
+            )
+            return result.transition_time
+        except Exception as e:
+            # 计算失败时返回默认时间
+            return timedelta(seconds=30)
 

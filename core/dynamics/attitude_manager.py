@@ -87,18 +87,6 @@ class AttitudeManager:
         # 创建太阳位置计算器
         self.sun_calculator = SunPositionCalculator(use_orekit=False)
 
-        # 创建姿态切换配置
-        transition_config = TransitionConfig(
-            max_slew_rate=self.config.max_slew_rate,
-            settling_time=self.config.settling_time,
-        )
-
-        # 创建姿态切换计算器
-        self.transition_calculator = AttitudeTransitionCalculator(
-            sun_calculator=self.sun_calculator,
-            config=transition_config,
-        )
-
         # 创建发电功率配置
         power_config = PowerConfig()
 
@@ -106,6 +94,19 @@ class AttitudeManager:
         self.power_calculator = PowerGenerationCalculator(
             sun_calculator=self.sun_calculator,
             config=power_config,
+        )
+
+        # 创建姿态切换配置
+        transition_config = TransitionConfig(
+            max_slew_rate=self.config.max_slew_rate,
+            settling_time=self.config.settling_time,
+        )
+
+        # 创建姿态切换计算器（传入发电功率计算器）
+        self.transition_calculator = AttitudeTransitionCalculator(
+            sun_calculator=self.sun_calculator,
+            config=transition_config,
+            power_calculator=self.power_calculator,
         )
 
         logger.info("AttitudeManager initialized")
