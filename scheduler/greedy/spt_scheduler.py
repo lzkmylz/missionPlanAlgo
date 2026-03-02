@@ -103,13 +103,16 @@ class SPTScheduler(BaseScheduler):
             }
             for sat in self.mission.satellites
         }
-        sat_resource_usage = self._sat_resource_usage
-
         # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
         self._initialize_slew_checker()
 
         # Initialize SAA constraint checker
         self._initialize_saa_checker()
+
+        # 预计算卫星位置以加速调度（仅在非简化模式下且明确启用时）
+        if not self._use_simplified_slew and self.config.get('precompute_positions', False):
+            print("    预计算卫星位置...")
+            self._precompute_satellite_positions(time_step_minutes=self.config.get('precompute_step_minutes', 30))
 
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
@@ -258,14 +261,19 @@ class SPTScheduler(BaseScheduler):
                 if not self._check_resource_constraints(sat, task):
                     continue
 
-                # 检查 slew 约束（核心约束使用 SlewConstraintChecker）
-                prev_target = self._get_previous_task_target(sat.id)
+                # 检查 slew 约束（使用简化或精确计算）
                 usage = self._sat_resource_usage.get(sat.id, {})
                 last_task_end = usage.get('last_task_end', self.mission.start_time)
 
-                slew_result = self._slew_checker.check_slew_feasibility(
-                    sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                )
+                if self._use_simplified_slew:
+                    # 使用简化的机动检查（性能优化）
+                    slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
+                else:
+                    # 使用精确的机动约束检查
+                    prev_target = self._get_previous_task_target(sat.id)
+                    slew_result = self._slew_checker.check_slew_feasibility(
+                        sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                    )
 
                 if not slew_result.feasible:
                     continue
@@ -516,8 +524,12 @@ class SPTScheduler(BaseScheduler):
             power_after=power_before - power_consumed
         )
 
-        # 计算并应用姿态角（用于姿控系统验证）
-        if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+        # 计算并应用姿态角（当有预计算位置缓存时，即使简化模式也计算）
+        should_calculate_attitude = (
+            (not self._use_simplified_slew) or  # 非简化模式
+            (self._position_cache is not None)   # 有预计算位置缓存
+        )
+        if should_calculate_attitude and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
             attitude = self._calculate_attitude_angles(sat, task, actual_start)
             self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
 

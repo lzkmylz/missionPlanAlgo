@@ -188,6 +188,9 @@ class BaseScheduler(ABC):
         self._attitude_checker: Optional[AttitudeConstraintChecker] = None
         self._sat_attitude_state: Dict[str, AttitudeMode] = {}
 
+        # 初始化位置缓存（用于预计算位置）
+        self._position_cache = None
+
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
         self.mission = mission
@@ -195,9 +198,17 @@ class BaseScheduler(ABC):
         self._iterations = 0
         self._convergence_curve = []
 
+        # 性能优化配置：使用简化机动检查加速贪心类算法
+        self._use_simplified_slew = self.config.get('use_simplified_slew', False)
+        self._slew_time_estimate = self.config.get('slew_time_estimate', 30.0)  # 默认30秒
+
     def _initialize_slew_checker(self) -> None:
         """初始化机动约束检查器"""
         if self.mission is None:
+            return
+
+        # 在简化模式下跳过初始化以避免昂贵的计算
+        if self._use_simplified_slew:
             return
 
         self._slew_checker = SlewConstraintChecker(
@@ -208,9 +219,133 @@ class BaseScheduler(ABC):
         for sat in self.mission.satellites:
             self._slew_checker.initialize_satellite(sat)
 
+    def _precompute_satellite_positions(self, time_step_minutes: int = 10) -> None:
+        """
+        预计算卫星位置以加速调度
+
+        在调度开始前批量计算所有卫星在关键时间点的位置，
+        避免在调度循环中重复进行昂贵的轨道传播计算。
+
+        策略:
+        1. 从窗口缓存中提取所有窗口的开始时间作为关键时间点
+        2. 按时间步长离散化，减少计算点数量
+        3. 批量计算并缓存所有卫星位置
+
+        Args:
+            time_step_minutes: 时间步长（分钟），默认10分钟
+
+        Raises:
+            ValueError: 如果 time_step_minutes 小于或等于 0
+        """
+        if self.mission is None:
+            return
+
+        # Issue 2 Fix: Validate time_step_minutes parameter
+        if time_step_minutes <= 0:
+            raise ValueError(f"time_step_minutes must be positive, got {time_step_minutes}")
+
+        import time
+        from datetime import timedelta
+
+        start_time = time.time()
+        total_positions = 0
+
+        # 收集所有关键时间点（从窗口缓存）
+        critical_times = set()
+
+        # 从窗口缓存中提取时间
+        if self.window_cache and hasattr(self.window_cache, '_windows'):
+            for (sat_id, target_id), windows in self.window_cache._windows.items():
+                for window in windows:
+                    critical_times.add(window.start_time)
+                    critical_times.add(window.end_time)
+
+        # 如果没有窗口缓存，使用任务时间范围
+        if not critical_times:
+            current_time = self.mission.start_time
+            end_time = self.mission.end_time
+            time_step = timedelta(minutes=time_step_minutes)
+            while current_time <= end_time:
+                critical_times.add(current_time)
+                current_time += time_step
+
+        # 按时间排序
+        sorted_times = sorted(critical_times)
+
+        # 时间离散化：将时间按步长分桶，减少计算量
+        time_buckets = {}
+        bucket_size = timedelta(minutes=time_step_minutes)
+
+        for t in sorted_times:
+            # 创建时间桶键（按步长取整）
+            bucket_key = t.replace(
+                minute=(t.minute // time_step_minutes) * time_step_minutes,
+                second=0,
+                microsecond=0
+            )
+            if bucket_key not in time_buckets:
+                time_buckets[bucket_key] = t
+
+        discrete_times = sorted(time_buckets.keys())
+
+        # Issue 1 Fix: Ensure we have a position cache to store computed positions
+        # when _slew_checker is None
+        if self._position_cache is None:
+            from core.orbit.visibility.position_cache import SatellitePositionCache
+            self._position_cache = SatellitePositionCache()
+
+        # 为每颗卫星预计算位置
+        for sat in self.mission.satellites:
+            # 获取或创建卫星缓存
+            if self._slew_checker is not None:
+                sat_cache = self._slew_checker._satellite_cache.get(sat.id, {})
+            else:
+                sat_cache = {}
+
+            # 使用批量传播（如果可用）
+            if hasattr(self._attitude_calculator, '_propagate_batch'):
+                try:
+                    batch_results = self._attitude_calculator._propagate_batch(
+                        sat, discrete_times
+                    )
+                    for t, (pos, vel) in zip(discrete_times, batch_results):
+                        if pos:
+                            sat_cache[t] = (pos, vel)
+                            total_positions += 1
+                            # Issue 1 Fix: Also store in position_cache when slew_checker is None
+                            if self._slew_checker is None and self._position_cache is not None:
+                                self._position_cache.set_position(sat.id, t, pos, vel)
+                    continue
+                except Exception:
+                    pass  # 回退到逐点计算
+
+            # 逐点计算
+            for t in discrete_times:
+                if t in sat_cache:
+                    continue
+
+                try:
+                    position, velocity = self._attitude_calculator._get_satellite_state(sat, t)
+                    if position:
+                        sat_cache[t] = (position, velocity)
+                        total_positions += 1
+                        # Issue 1 Fix: Also store in position_cache when slew_checker is None
+                        if self._slew_checker is None and self._position_cache is not None:
+                            self._position_cache.set_position(sat.id, t, position, velocity)
+                except Exception:
+                    continue
+
+        elapsed = time.time() - start_time
+        if total_positions > 0:
+            print(f"    预计算完成: {total_positions} 个位置 ({elapsed:.2f}s)")
+
     def _initialize_saa_checker(self) -> None:
         """初始化 SAA 约束检查器"""
         if self.mission is None:
+            return
+
+        # 在简化模式下跳过初始化以避免昂贵的计算
+        if self._use_simplified_slew:
             return
 
         self._saa_checker = SAAConstraintChecker(
@@ -224,6 +359,16 @@ class BaseScheduler(ABC):
     def set_window_cache(self, cache) -> None:
         """设置窗口缓存"""
         self.window_cache = cache
+
+    def set_position_cache(self, cache) -> None:
+        """设置卫星位置缓存（用于预计算位置）"""
+        self._position_cache = cache
+        # 如果有机动约束检查器，也传递给它
+        if self._slew_checker is not None:
+            self._slew_checker.set_position_cache(cache)
+        # 如果SAA检查器已存在，也传递给它
+        if self._saa_checker is not None:
+            self._saa_checker.set_position_cache(cache)
 
     @abstractmethod
     def schedule(self) -> ScheduleResult:
@@ -256,6 +401,35 @@ class BaseScheduler(ABC):
     def _add_convergence_point(self, fitness: float) -> None:
         self._convergence_curve.append(fitness)
         self._iterations += 1
+
+    def _get_slew_result_simple(self, sat_id: str, prev_end_time: datetime, window_start: datetime):
+        """
+        简化的机动可行性检查（用于加速贪心类算法）
+
+        使用固定估计时间代替精确的轨道传播计算，大幅提升性能。
+
+        Args:
+            sat_id: 卫星ID
+            prev_end_time: 上一个任务结束时间
+            window_start: 当前窗口开始时间
+
+        Returns:
+            SlewFeasibilityResult: 简化的可行性结果
+        """
+        from datetime import timedelta
+        from scheduler.constraints import SlewFeasibilityResult
+
+        slew_time = self._slew_time_estimate
+        earliest_start = prev_end_time + timedelta(seconds=slew_time)
+        actual_start = max(window_start, earliest_start)
+
+        return SlewFeasibilityResult(
+            feasible=True,
+            slew_angle=0.0,
+            slew_time=slew_time,
+            actual_start=actual_start,
+            reason=None
+        )
 
     def _validate_initialization(self) -> None:
         """
@@ -356,8 +530,7 @@ class BaseScheduler(ABC):
     ) -> Optional[AttitudeAngles]:
         """计算卫星成像时刻的姿态角
 
-        使用配置的AttitudeCalculator计算姿态角，
-        如果计算失败则返回None。
+        优先使用预计算位置缓存（如果可用），否则使用AttitudeCalculator实时计算。
 
         Args:
             satellite: 卫星对象
@@ -370,6 +543,13 @@ class BaseScheduler(ABC):
         if not self._enable_attitude_calculation:
             return None
 
+        # 优先使用预计算位置缓存
+        if self._position_cache is not None:
+            return self._calculate_attitude_from_cache(
+                satellite, target, imaging_time
+            )
+
+        # 回退到实时计算
         if self._attitude_calculator is None:
             return None
 
@@ -385,6 +565,66 @@ class BaseScheduler(ABC):
             import logging
             logging.getLogger(__name__).warning(
                 f"Failed to calculate attitude angles for task: {e}"
+            )
+            return None
+
+    def _calculate_attitude_from_cache(
+        self,
+        satellite,
+        target,
+        imaging_time
+    ) -> Optional[AttitudeAngles]:
+        """使用预计算位置缓存计算姿态角
+
+        直接从位置缓存获取卫星位置和速度，避免实时轨道传播计算。
+
+        Args:
+            satellite: 卫星对象
+            target: 目标对象
+            imaging_time: 成像时刻
+
+        Returns:
+            AttitudeAngles对象，如果缓存未命中或计算失败则返回None
+        """
+        from core.dynamics.attitude_calculator import AttitudeAngles
+        import math
+
+        try:
+            # 从缓存获取卫星位置和速度
+            result = self._position_cache.get_position(satellite.id, imaging_time)
+            if result is None:
+                return None
+
+            position, velocity = result
+
+            # 使用AttitudeCalculator的方法计算姿态角
+            if self._attitude_calculator is None:
+                return None
+
+            # 构建LVLH坐标系
+            lvlh_frame = self._attitude_calculator._construct_lvlh_frame(position, velocity)
+
+            # 计算目标视线向量
+            los_vector = self._attitude_calculator._calculate_los_vector(position, target)
+
+            # 将视线向量转换到LVLH坐标系
+            los_in_lvlh = self._attitude_calculator._transform_to_lvlh(los_vector, lvlh_frame)
+
+            # 计算滚转和俯仰角
+            roll, pitch = self._attitude_calculator._calculate_roll_pitch(los_in_lvlh)
+
+            return AttitudeAngles(
+                roll=math.degrees(roll),
+                pitch=math.degrees(pitch),
+                yaw=0.0,
+                coordinate_system="LVLH",
+                timestamp=imaging_time
+            )
+
+        except (AttributeError, TypeError, ValueError) as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to calculate attitude from cache: {type(e).__name__}: {e}"
             )
             return None
 

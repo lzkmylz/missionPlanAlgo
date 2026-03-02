@@ -82,13 +82,16 @@ def load_mission_with_frequency(scenario_path: str) -> tuple:
     return mission, targets, total_obs_demand, scenario_data
 
 
-def load_visibility_cache(visibility_path: str):
-    """从JSON文件加载可见性窗口到缓存"""
+def load_visibility_cache(visibility_path: str, positions_path: str = None):
+    """从JSON文件加载可见性窗口到缓存，可选同时加载卫星位置"""
     from core.orbit.visibility.window_cache import VisibilityWindowCache
     from core.orbit.visibility.base import VisibilityWindow
+    from core.orbit.visibility.position_cache import SatellitePositionCache
 
     cache = VisibilityWindowCache()
+    position_cache = None
 
+    # 加载可见性窗口
     with open(visibility_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -139,7 +142,15 @@ def load_visibility_cache(visibility_path: str):
         cache._windows[key].append(window)
         cache._time_index[key].append(window.start_time)
 
-    return cache
+    # 加载卫星位置（如果提供）
+    if positions_path and Path(positions_path).exists():
+        print(f"    加载预计算卫星位置: {positions_path}")
+        position_cache = SatellitePositionCache()
+        position_cache.load_from_file(positions_path)
+        stats = position_cache.get_statistics()
+        print(f"    位置缓存: {stats['satellite_count']} 颗卫星, {stats['total_positions']} 个位置")
+
+    return cache, position_cache
 
 
 def run_algorithm_with_frequency(
@@ -148,7 +159,8 @@ def run_algorithm_with_frequency(
     targets: List,
     window_cache,
     config: Dict[str, Any],
-    enable_downlink: bool = True
+    enable_downlink: bool = True,
+    position_cache=None
 ) -> Dict[str, Any]:
     """运行单个算法（支持频次约束和地面站数传）"""
 
@@ -158,13 +170,26 @@ def run_algorithm_with_frequency(
 
     print(f"\n  运行 {algorithm_name}...")
 
+    # 配置调度器模式
+    if position_cache:
+        # 有预计算位置：使用简化机动检查（快）+ 预计算位置计算姿态角（精确）
+        config['use_simplified_slew'] = True  # 简化机动检查保持快速
+        config['enable_attitude_calculation'] = True  # 启用姿态角计算
+        print("    使用预计算卫星位置 + 简化机动检查（快速+精确姿态）")
+    elif algorithm_name in ['FCFS', 'Greedy-EDF', 'Greedy-MaxVal']:
+        # 无预计算位置：使用简化模式（跳过姿态角计算）
+        config['use_simplified_slew'] = True
+        print("    使用简化机动检查模式（无姿态角）")
+
     # 实例化调度器（使用原始目标，调度器内部会展开多次观测）
     scheduler = scheduler_class(config)
     scheduler.initialize(mission)
 
-    # 注入窗口缓存
+    # 注入窗口缓存和位置缓存
     if window_cache and hasattr(scheduler, 'set_window_cache'):
         scheduler.set_window_cache(window_cache)
+    if position_cache and hasattr(scheduler, 'set_position_cache'):
+        scheduler.set_position_cache(position_cache)
 
     # 运行调度
     start_time = time.time()
@@ -313,13 +338,23 @@ def run_comparison(
         for freq, count in stats.get('targets_by_frequency', {}).items():
             print(f"    {freq}次观测: {count} 个目标")
 
-    # 加载可见性缓存
+    # 加载可见性缓存和卫星位置缓存
     print(f"\n[2/3] 加载可见性缓存...")
     window_cache = None
+    position_cache = None
     if visibility_path and Path(visibility_path).exists():
-        window_cache = load_visibility_cache(visibility_path)
+        # 尝试加载对应的卫星位置文件
+        # 优先使用 results/satellite_positions.json
+        positions_path = 'results/satellite_positions.json'
+        if not Path(positions_path).exists():
+            # 回退：基于可见性文件名生成路径
+            positions_path = visibility_path.replace('visibility.json', 'satellite_positions.json').replace('_visibility', '_positions')
+
+        window_cache, position_cache = load_visibility_cache(visibility_path, positions_path)
         stats = window_cache.get_statistics()
         print(f"  - 窗口总数: {stats.get('total_windows', 0):,}")
+        if position_cache:
+            print(f"  - 使用预计算卫星位置 ({position_cache.get_statistics()['total_positions']} 个位置)")
     else:
         print(f"  - 警告: 可见性缓存不存在，调度可能无法正常工作")
 
@@ -337,7 +372,7 @@ def run_comparison(
 
             try:
                 result = run_algorithm_with_frequency(
-                    alg_name, mission, targets, window_cache, {}
+                    alg_name, mission, targets, window_cache, {}, position_cache=position_cache
                 )
                 result['repetition'] = rep
                 all_results[alg_name].append(result)

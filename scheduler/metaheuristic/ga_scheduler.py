@@ -251,126 +251,163 @@ class GAScheduler(BaseScheduler):
         - 频次满足度奖励
         - 机动可行性检查
         """
-        score = 0.0
-        scheduled_count = 0
-        target_obs_count: Dict[str, int] = {}  # 记录每个目标的实际观测次数
-        sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
-            i: [] for i in range(self.sat_count)
-        }
-        # 跟踪资源使用情况
-        sat_resources: Dict[int, Dict[str, float]] = {
-            i: {
-                'power': sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0,
-                'storage': 0.0
-            }
-            for i, sat in enumerate(self.satellites)
-        }
-        # Track last scheduled target per satellite for slew calculation
-        sat_last_target: Dict[int, Any] = {}
-        sat_last_end_time: Dict[int, datetime] = {}
+        eval_state = self._initialize_evaluation_state()
 
         for task_idx, sat_idx in enumerate(individual.chromosome):
-            if task_idx >= len(self.tasks):
-                continue
+            self._process_task_assignment(task_idx, sat_idx, eval_state)
 
-            task = self.tasks[task_idx]
-            if sat_idx >= self.sat_count:
-                continue
+        # 计算最终得分
+        return self._compute_final_fitness(eval_state)
 
-            sat = self.satellites[sat_idx]
+    def _initialize_evaluation_state(self) -> Dict[str, Any]:
+        """初始化评估状态跟踪器"""
+        return {
+            'score': 0.0,
+            'scheduled_count': 0,
+            'target_obs_count': {},
+            'sat_task_times': {i: [] for i in range(self.sat_count)},
+            'sat_resources': {
+                i: {
+                    'power': sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0,
+                    'storage': 0.0
+                }
+                for i, sat in enumerate(self.satellites)
+            },
+            'sat_last_target': {},
+            'sat_last_end_time': {}
+        }
 
-            # 检查是否有可见窗口 (ObservationTask使用target_id)
-            if self.window_cache:
-                windows = self.window_cache.get_windows(sat.id, task.target_id)
-            else:
-                windows = []
+    def _process_task_assignment(
+        self, task_idx: int, sat_idx: int, state: Dict[str, Any]
+    ) -> None:
+        """处理单个任务分配"""
+        if task_idx >= len(self.tasks) or sat_idx >= self.sat_count:
+            return
 
-            if not windows:
-                continue
+        task = self.tasks[task_idx]
+        sat = self.satellites[sat_idx]
 
-            # 检查时间冲突和资源约束
-            feasible_window = None
-            for window in windows:
-                start_time = window.start_time
-                end_time = window.end_time
+        feasible_window = self._find_feasible_window(sat_idx, sat, task, state)
+        if not feasible_window:
+            return
 
-                if self._is_time_feasible(sat_idx, start_time, end_time, sat_task_times):
-                    # 检查资源约束
-                    if self._check_resource_constraints(sat_idx, sat, task, sat_resources):
-                        feasible_window = window
-                        break
+        self._try_schedule_task(sat_idx, sat, task, feasible_window, state)
 
-            if feasible_window:
-                # 计算成像时长
-                imaging_mode = self._select_imaging_mode(sat)
-                imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
+    def _find_feasible_window(
+        self, sat_idx: int, sat: Any, task: Any, state: Dict[str, Any]
+    ) -> Optional[Any]:
+        """查找可行的时间窗口"""
+        if not self.window_cache:
+            return None
 
-                # 检查机动可行性使用 SlewConstraintChecker
-                prev_target = sat_last_target.get(sat_idx)
-                last_end_time = sat_last_end_time.get(sat_idx)
+        windows = self.window_cache.get_windows(sat.id, task.target_id)
+        if not windows:
+            return None
 
-                # 确保_slew_checker已初始化
-                self._ensure_slew_checker_initialized()
+        sat_task_times = state['sat_task_times']
+        sat_resources = state['sat_resources']
 
-                if self._slew_checker:
-                    slew_result = self._slew_checker.check_slew_feasibility(
-                        sat.id, prev_target, task, last_end_time or feasible_window.start_time,
-                        feasible_window.start_time, imaging_duration
-                    )
-                    if not slew_result.feasible:
-                        continue
-                    # 使用机动后的实际开始时间
-                    actual_start = slew_result.actual_start
-                else:
-                    actual_start = feasible_window.start_time
+        for window in windows:
+            if self._is_time_feasible(sat_idx, window.start_time, window.end_time, sat_task_times):
+                if self._check_resource_constraints(sat_idx, sat, task, sat_resources):
+                    return window
+        return None
 
-                actual_end = actual_start + timedelta(seconds=imaging_duration)
+    def _try_schedule_task(
+        self, sat_idx: int, sat: Any, task: Any, window: Any, state: Dict[str, Any]
+    ) -> None:
+        """尝试调度任务到指定窗口"""
+        imaging_mode = self._select_imaging_mode(sat)
+        imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
 
-                # Check SAA constraints on the full visibility window
-                # This ensures no part of the window (including slew time) is in SAA
-                self._ensure_saa_checker_initialized()
-                if self._saa_checker is not None:
-                    saa_result = self._saa_checker.check_window_feasibility(
-                        sat.id, feasible_window.start_time, feasible_window.end_time
-                    )
-                    if not saa_result.feasible:
-                        continue
+        actual_start, actual_end = self._calculate_task_timing(
+            sat_idx, sat, task, window, imaging_duration, state
+        )
 
-                # 检查机动后的时间窗口是否足够
-                if actual_end > feasible_window.end_time:
-                    continue
+        if not actual_start or not self._is_saa_feasible(sat.id, window):
+            return
 
-                scheduled_count += 1
-                score += 10.0  # 基础完成奖励
+        if actual_end > window.end_time:
+            return
 
-                # 窗口质量奖励
-                score += feasible_window.quality_score * 2.0
+        # 更新调度状态
+        self._update_scheduled_task_state(
+            sat_idx, sat, task, window, actual_start, actual_end, imaging_duration, state
+        )
 
-                # 记录时间
-                sat_task_times[sat_idx].append((actual_start, actual_end))
+    def _calculate_task_timing(
+        self, sat_idx: int, sat: Any, task: Any, window: Any,
+        imaging_duration: float, state: Dict[str, Any]
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
+        """计算任务的实际开始和结束时间"""
+        sat_last_target = state['sat_last_target']
+        sat_last_end_time = state['sat_last_end_time']
 
-                # 更新资源使用
-                self._update_resource_usage(sat_idx, sat, task, sat_resources)
+        prev_target = sat_last_target.get(sat_idx)
+        last_end_time = sat_last_end_time.get(sat_idx)
 
-                # 记录目标观测次数
-                target_obs_count[task.target_id] = target_obs_count.get(task.target_id, 0) + 1
+        self._ensure_slew_checker_initialized()
 
-                # 更新上一个目标和结束时间
-                sat_last_target[sat_idx] = task
-                sat_last_end_time[sat_idx] = actual_end
+        if self._slew_checker:
+            slew_result = self._slew_checker.check_slew_feasibility(
+                sat.id, prev_target, task, last_end_time or window.start_time,
+                window.start_time, imaging_duration
+            )
+            if not slew_result.feasible:
+                return None, None
+            actual_start = slew_result.actual_start
+        else:
+            actual_start = window.start_time
+
+        actual_end = actual_start + timedelta(seconds=imaging_duration)
+        return actual_start, actual_end
+
+    def _is_saa_feasible(self, sat_id: str, window: Any) -> bool:
+        """检查窗口是否满足 SAA 约束"""
+        self._ensure_saa_checker_initialized()
+        if self._saa_checker is None:
+            return True
+
+        saa_result = self._saa_checker.check_window_feasibility(
+            sat_id, window.start_time, window.end_time
+        )
+        return saa_result.feasible
+
+    def _update_scheduled_task_state(
+        self, sat_idx: int, sat: Any, task: Any, window: Any,
+        actual_start: datetime, actual_end: datetime, imaging_duration: float,
+        state: Dict[str, Any]
+    ) -> None:
+        """更新已调度任务的状态"""
+        state['scheduled_count'] += 1
+        state['score'] += 10.0  # 基础完成奖励
+        state['score'] += window.quality_score * 2.0  # 窗口质量奖励
+
+        state['sat_task_times'][sat_idx].append((actual_start, actual_end))
+        self._update_resource_usage(sat_idx, sat, task, state['sat_resources'])
+
+        state['target_obs_count'][task.target_id] = state['target_obs_count'].get(task.target_id, 0) + 1
+
+        state['sat_last_target'][sat_idx] = task
+        state['sat_last_end_time'][sat_idx] = actual_end
+
+    def _compute_final_fitness(self, state: Dict[str, Any]) -> float:
+        """计算最终适应度分数"""
+        score = state['score']
 
         # 资源均衡奖励
-        if scheduled_count > 0:
-            task_counts = [len(tasks) for tasks in sat_task_times.values()]
-            avg_tasks = sum(task_counts) / len(task_counts)
-            variance = sum((c - avg_tasks) ** 2 for c in task_counts) / len(task_counts)
-            balance_reward = max(0, 10 - variance)  # 越均衡奖励越高
-            score += balance_reward
+        if state['scheduled_count'] > 0:
+            score += self._calculate_balance_reward(state['sat_task_times'])
 
-        # 添加频次满足度奖励
-        score = self._calculate_frequency_fitness(target_obs_count, score)
+        # 频次满足度奖励
+        return self._calculate_frequency_fitness(state['target_obs_count'], score)
 
-        return score
+    def _calculate_balance_reward(self, sat_task_times: Dict[int, List]) -> float:
+        """计算资源均衡奖励"""
+        task_counts = [len(tasks) for tasks in sat_task_times.values()]
+        avg_tasks = sum(task_counts) / len(task_counts)
+        variance = sum((c - avg_tasks) ** 2 for c in task_counts) / len(task_counts)
+        return max(0, 10 - variance)  # 越均衡奖励越高
 
     def _check_resource_constraints(
         self, sat_idx: int, sat: Any, task: Any, sat_resources: Dict[int, Dict[str, float]]

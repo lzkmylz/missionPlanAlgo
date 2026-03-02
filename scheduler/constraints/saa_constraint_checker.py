@@ -78,6 +78,11 @@ class SAAConstraintChecker:
         )
         self._saa_model = saa_model or SAABoundaryModel()
         self._position_cache: Dict[str, Dict[datetime, Tuple[float, float]]] = {}
+        self._precomputed_position_cache = None  # 预计算位置缓存
+
+    def set_position_cache(self, cache) -> None:
+        """设置预计算位置缓存"""
+        self._precomputed_position_cache = cache
 
     def initialize_satellite(self, satellite: Satellite) -> None:
         """初始化卫星的位置缓存
@@ -237,7 +242,7 @@ class SAAConstraintChecker:
     ) -> Optional[Tuple[float, float]]:
         """获取卫星星下点位置（经度、纬度）
 
-        首先检查缓存，如果未缓存则计算并缓存。
+        首先检查预计算缓存，然后检查本地缓存，最后计算并缓存。
 
         Args:
             satellite: 卫星对象
@@ -246,7 +251,16 @@ class SAAConstraintChecker:
         Returns:
             Optional[Tuple[float, float]]: (经度, 纬度) 或 None（计算失败）
         """
-        # 检查缓存
+        # 1. 优先使用预计算位置缓存（ECEF坐标）
+        if self._precomputed_position_cache is not None:
+            result = self._precomputed_position_cache.get_position(satellite.id, timestamp)
+            if result is not None:
+                position, _ = result
+                # 将 ECEF 位置转换为地理坐标
+                lon, lat, _ = self._ecef_to_geodetic(position[0], position[1], position[2])
+                return (lon, lat)
+
+        # 2. 检查本地缓存（已经是经纬度）
         cache = self._position_cache.get(satellite.id, {})
 
         # 尝试精确匹配
@@ -259,7 +273,7 @@ class SAAConstraintChecker:
             if near_time in cache:
                 return cache[near_time]
 
-        # 计算卫星状态
+        # 3. 实时计算卫星状态
         try:
             position, _ = self._attitude_calc._get_satellite_state(satellite, timestamp)
             if position:

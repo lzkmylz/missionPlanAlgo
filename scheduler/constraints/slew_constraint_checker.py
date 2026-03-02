@@ -68,6 +68,11 @@ class SlewConstraintChecker:
         )
         self._slew_calculators: Dict[str, SlewCalculator] = {}
         self._satellite_cache: Dict[str, Dict[datetime, Tuple[Tuple[float, float, float], Tuple[float, float, float]]]] = {}
+        self._position_cache = None  # 预计算位置缓存
+
+    def set_position_cache(self, cache) -> None:
+        """设置预计算位置缓存"""
+        self._position_cache = cache
 
     def initialize_satellite(self, satellite: Satellite) -> None:
         """初始化卫星的 SlewCalculator
@@ -221,7 +226,7 @@ class SlewConstraintChecker:
     ) -> Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[float, float, float]]]:
         """获取卫星位置和速度
 
-        首先检查缓存，如果未缓存则计算并缓存。
+        首先检查预计算位置缓存，然后检查本地缓存，最后计算并缓存。
 
         Args:
             satellite: 卫星对象
@@ -230,7 +235,13 @@ class SlewConstraintChecker:
         Returns:
             (position, velocity) 或 (None, None)
         """
-        # 检查缓存
+        # 1. 优先使用预计算位置缓存
+        if self._position_cache is not None:
+            result = self._position_cache.get_position(satellite.id, timestamp)
+            if result is not None:
+                return result
+
+        # 2. 检查本地缓存
         cache = self._satellite_cache.get(satellite.id, {})
 
         # 尝试精确匹配
@@ -243,7 +254,7 @@ class SlewConstraintChecker:
             if near_time in cache:
                 return cache[near_time]
 
-        # 计算卫星状态
+        # 3. 实时计算卫星状态
         try:
             position, velocity = self._attitude_calc._get_satellite_state(satellite, timestamp)
             if position:

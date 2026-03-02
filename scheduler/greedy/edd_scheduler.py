@@ -108,6 +108,11 @@ class EDDScheduler(BaseScheduler):
         # Initialize SAA constraint checker
         self._initialize_saa_checker()
 
+        # 预计算卫星位置以加速调度（仅在非简化模式下且明确启用时）
+        if not self._use_simplified_slew and self.config.get('precompute_positions', False):
+            print("    预计算卫星位置...")
+            self._precompute_satellite_positions(time_step_minutes=self.config.get('precompute_step_minutes', 30))
+
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
         self._last_task_target = {}
@@ -218,78 +223,157 @@ class EDDScheduler(BaseScheduler):
         best_start = None
 
         for sat in self.mission.satellites:
-            # 检查卫星能力匹配
-            if not self._can_satellite_perform_task(sat, task):
-                continue
-
-            # 获取可见窗口
-            windows = self._get_feasible_windows(sat, task)
-            if not windows:
-                continue
-
-            # EDD策略：选择最早的窗口
-            for window in windows:
-                window_start = window['start'] if isinstance(window, dict) else window.start_time
-                window_end = window['end'] if isinstance(window, dict) else window.end_time
-
-                # 计算成像时长
-                imaging_mode = self._select_imaging_mode(sat, task)
-                imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
-
-                # 检查资源约束
-                if not self._check_resource_constraints(sat, task):
-                    continue
-
-                # 检查 slew 约束（核心约束使用 SlewConstraintChecker）
-                prev_target = self._get_previous_task_target(sat.id)
-                usage = self._sat_resource_usage.get(sat.id, {})
-                last_task_end = usage.get('last_task_end', self.mission.start_time)
-
-                # 确保_slew_checker已初始化
-                self._ensure_slew_checker_initialized()
-
-                if self._slew_checker is None:
-                    continue
-
-                slew_result = self._slew_checker.check_slew_feasibility(
-                    sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                )
-
-                if not slew_result.feasible:
-                    continue
-
-                # Check SAA constraints
-                self._ensure_saa_checker_initialized()
-                if self._saa_checker is not None:
-                    saa_result = self._saa_checker.check_window_feasibility(
-                        sat.id, window_start, window_end
-                    )
-                    if not saa_result.feasible:
-                        continue
-
-                # 使用实际开始时间从 slew 计算
-                actual_start = slew_result.actual_start
-                actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-                # 检查是否超出窗口结束时间
-                if actual_end > window_end:
-                    continue
-
-                # 检查是否在截止时间之前
-                if task.time_window_end and actual_start > task.time_window_end:
-                    if not self.allow_tardiness:
-                        continue
-
-                # 检查时间冲突
-                if self._has_time_conflict(sat.id, actual_start, actual_end):
-                    continue
-
-                # 选择最早的窗口
+            assignment = self._find_best_assignment_for_satellite(sat, task, best_start)
+            if assignment:
+                sat_id, window, imaging_mode, slew_result, actual_start = assignment
                 if best_start is None or actual_start < best_start:
                     best_start = actual_start
-                    best_assignment = (sat.id, window, imaging_mode, slew_result)
+                    best_assignment = (sat_id, window, imaging_mode, slew_result)
 
         return best_assignment
+
+    def _find_best_assignment_for_satellite(
+        self, sat: Any, task: Any, current_best_start: Optional[datetime]
+    ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult, datetime]]:
+        """
+        为指定卫星找到最佳窗口分配
+
+        Args:
+            sat: 卫星对象
+            task: 目标任务
+            current_best_start: 当前找到的最佳开始时间（用于剪枝）
+
+        Returns:
+            包含实际开始时间的分配元组，如果没有可行窗口则返回None
+        """
+        # 检查卫星能力匹配
+        if not self._can_satellite_perform_task(sat, task):
+            return None
+
+        # 获取可见窗口
+        windows = self._get_feasible_windows(sat, task)
+        if not windows:
+            return None
+
+        # 检查资源约束
+        if not self._check_resource_constraints(sat, task):
+            return None
+
+        imaging_mode = self._select_imaging_mode(sat, task)
+        imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
+
+        # EDD策略：选择最早的窗口
+        for window in windows:
+            result = self._evaluate_window(
+                sat, task, window, imaging_mode, imaging_duration, current_best_start
+            )
+            if result:
+                return result
+
+        return None
+
+    def _evaluate_window(
+        self,
+        sat: Any,
+        task: Any,
+        window: Any,
+        imaging_mode: Any,
+        imaging_duration: float,
+        current_best_start: Optional[datetime]
+    ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult, datetime]]:
+        """
+        评估单个窗口的可行性
+
+        Args:
+            sat: 卫星对象
+            task: 目标任务
+            window: 时间窗口
+            imaging_mode: 成像模式
+            imaging_duration: 成像时长（秒）
+            current_best_start: 当前最佳开始时间（用于剪枝）
+
+        Returns:
+            可行窗口的分配信息，如果不可行则返回None
+        """
+        window_start = window['start'] if isinstance(window, dict) else window.start_time
+        window_end = window['end'] if isinstance(window, dict) else window.end_time
+
+        # 获取 slew 约束结果
+        slew_result = self._get_slew_result(sat, task, window_start, imaging_duration)
+        if not slew_result or not slew_result.feasible:
+            return None
+
+        # 检查 SAA 约束
+        if not self._is_saa_feasible(sat.id, window_start, window_end):
+            return None
+
+        actual_start = slew_result.actual_start
+        actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+        # 基本约束检查
+        if not self._is_timing_feasible(
+            sat.id, actual_start, actual_end, window_end, task
+        ):
+            return None
+
+        # 剪枝：如果比当前最佳还晚，跳过
+        if current_best_start and actual_start >= current_best_start:
+            return None
+
+        return (sat.id, window, imaging_mode, slew_result, actual_start)
+
+    def _get_slew_result(
+        self, sat: Any, task: Any, window_start: datetime, imaging_duration: float
+    ) -> Optional[SlewFeasibilityResult]:
+        """获取机动约束检查结果"""
+        usage = self._sat_resource_usage.get(sat.id, {})
+        last_task_end = usage.get('last_task_end', self.mission.start_time)
+
+        if self._use_simplified_slew:
+            return self._get_slew_result_simple(sat.id, last_task_end, window_start)
+
+        # 使用精确的机动约束检查
+        prev_target = self._get_previous_task_target(sat.id)
+        self._ensure_slew_checker_initialized()
+        if self._slew_checker is None:
+            return None
+
+        return self._slew_checker.check_slew_feasibility(
+            sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+        )
+
+    def _is_saa_feasible(self, sat_id: str, window_start: datetime, window_end: datetime) -> bool:
+        """检查窗口是否满足 SAA 约束"""
+        self._ensure_saa_checker_initialized()
+        if self._saa_checker is None:
+            return True
+
+        saa_result = self._saa_checker.check_window_feasibility(sat_id, window_start, window_end)
+        return saa_result.feasible
+
+    def _is_timing_feasible(
+        self,
+        sat_id: str,
+        actual_start: datetime,
+        actual_end: datetime,
+        window_end: datetime,
+        task: Any
+    ) -> bool:
+        """检查时间约束是否满足"""
+        # 检查是否超出窗口结束时间
+        if actual_end > window_end:
+            return False
+
+        # 检查是否在截止时间之前
+        if task.time_window_end and actual_start > task.time_window_end:
+            if not self.allow_tardiness:
+                return False
+
+        # 检查时间冲突
+        if self._has_time_conflict(sat_id, actual_start, actual_end):
+            return False
+
+        return True
 
     def _has_time_conflict(self, sat_id: str, start: datetime, end: datetime) -> bool:
         """检查是否与已调度任务有时间冲突"""
@@ -306,7 +390,6 @@ class EDDScheduler(BaseScheduler):
         """获取可行的时间窗口"""
         if self.window_cache:
             # 支持ObservationTask和原始Target
-            from ..frequency_utils import ObservationTask
             target_id = task.target_id if isinstance(task, ObservationTask) else task.id
             return self.window_cache.get_windows(sat.id, target_id)
         return []
@@ -510,8 +593,12 @@ class EDDScheduler(BaseScheduler):
             power_after=power_before - power_consumed
         )
 
-        # 计算并应用姿态角（用于姿控系统验证）
-        if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+        # 计算并应用姿态角（当有预计算位置缓存时，即使简化模式也计算）
+        should_calculate_attitude = (
+            (not self._use_simplified_slew) or  # 非简化模式
+            (self._position_cache is not None)   # 有预计算位置缓存
+        )
+        if should_calculate_attitude and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
             attitude = self._calculate_attitude_angles(sat, task, actual_start)
             self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
 

@@ -132,6 +132,11 @@ class GreedyScheduler(BaseScheduler):
         # Initialize attitude state tracking
         self._initialize_attitude_state()
 
+        # Precompute satellite positions to accelerate scheduling (only in non-simplified mode)
+        if not self._use_simplified_slew and self.config.get('precompute_positions', False):
+            print("    Precomputing satellite positions...")
+            self._precompute_satellite_positions(time_step_minutes=self.config.get('precompute_step_minutes', 30))
+
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
         for sat in self.mission.satellites:
@@ -325,20 +330,22 @@ class GreedyScheduler(BaseScheduler):
                 if not self._check_resource_constraints(sat, task, imaging_mode):
                     continue
 
-                # Check slew constraints (core constraint using SlewConstraintChecker)
-                prev_target = self._get_previous_task_target(sat.id)
+                # Check slew constraints (using simplified or precise calculation)
                 usage = self._sat_resource_usage.get(sat.id, {})
                 last_task_end = usage.get('last_task_end', self.mission.start_time)
 
-                # Ensure _slew_checker is initialized
-                self._ensure_slew_checker_initialized()
-
-                if self._slew_checker is None:
-                    continue
-
-                slew_result = self._slew_checker.check_slew_feasibility(
-                    sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                )
+                if self._use_simplified_slew:
+                    # Use simplified slew check for performance
+                    slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
+                else:
+                    # Use precise slew constraint check
+                    prev_target = self._get_previous_task_target(sat.id)
+                    self._ensure_slew_checker_initialized()
+                    if self._slew_checker is None:
+                        continue
+                    slew_result = self._slew_checker.check_slew_feasibility(
+                        sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                    )
 
                 if not slew_result.feasible:
                     continue
@@ -746,8 +753,12 @@ class GreedyScheduler(BaseScheduler):
             power_after=power_before - power_consumed
         )
 
-        # 计算并应用姿态角（用于姿控系统验证）
-        if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+        # 计算并应用姿态角（当有预计算位置缓存时，即使简化模式也计算）
+        should_calculate_attitude = (
+            (not self._use_simplified_slew) or  # 非简化模式
+            (self._position_cache is not None)   # 有预计算位置缓存
+        )
+        if should_calculate_attitude and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
             attitude = self._calculate_attitude_angles(sat, task, actual_start)
             self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
 
