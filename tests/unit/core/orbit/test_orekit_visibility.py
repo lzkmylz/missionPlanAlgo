@@ -94,7 +94,7 @@ class TestInitialization:
     def test_default_initialization(self, calculator):
         """测试默认初始化"""
         assert calculator.min_elevation == 5.0
-        assert calculator.time_step == 1  # 默认1秒步长（HPOP高精度）
+        assert calculator.time_step == 60  # 默认60秒步长（向后兼容）
         assert calculator.EARTH_RADIUS == 6371000.0
 
     def test_custom_initialization(self, custom_calculator):
@@ -106,13 +106,13 @@ class TestInitialization:
         """测试空配置初始化"""
         calc = OrekitVisibilityCalculator(config={})
         assert calc.min_elevation == 5.0
-        assert calc.time_step == 1  # 默认1秒步长（HPOP高精度）
+        assert calc.time_step == 60  # 默认60秒步长（向后兼容）
 
     def test_none_config_initialization(self):
         """测试None配置初始化"""
         calc = OrekitVisibilityCalculator(config=None)
         assert calc.min_elevation == 5.0
-        assert calc.time_step == 1  # 默认1秒步长（HPOP高精度）
+        assert calc.time_step == 60  # 默认60秒步长（向后兼容）
 
 
 # =============================================================================
