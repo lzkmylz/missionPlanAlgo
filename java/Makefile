@@ -55,8 +55,13 @@ compile-loader: compile-model
 	@echo "$(YELLOW)编译 JsonScenarioLoader.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/JsonScenarioLoader.java
 
+# 编译SmartOrbitInitializer（需要在OrbitStateCache之前）
+compile-initializer: compile-loader
+	@echo "$(YELLOW)编译 SmartOrbitInitializer.java...$(NC)"
+	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/SmartOrbitInitializer.java
+
 # 编译OrbitStateCache
-compile-cache: compile-loader
+compile-cache: compile-initializer
 	@echo "$(YELLOW)编译 OrbitStateCache.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/OrbitStateCache.java
 

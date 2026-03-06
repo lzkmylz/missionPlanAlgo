@@ -7,6 +7,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.orekit.time.AbsoluteDate;
 import org.orekit.time.DateTimeComponents;
+import org.orekit.time.TimeScalesFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -95,14 +96,50 @@ public class JsonScenarioLoader {
             double argOfPerigee = orbit.getDouble("arg_of_perigee");
             double meanAnomaly = orbit.getDouble("mean_anomaly");
 
-            // 获取场景时间作为轨道历元
-            AbsoluteDate epoch = getStartTime();
+            // 获取轨道历元（优先使用orbit中的epoch，否则使用场景开始时间）
+            AbsoluteDate epoch;
+            if (orbit.has("epoch")) {
+                String epochStr = orbit.getString("epoch");
+                epoch = new AbsoluteDate(epochStr, TimeScalesFactory.getUTC());
+            } else {
+                epoch = getStartTime();
+            }
 
-            // 创建卫星配置（扩展以支持轨道参数）
+            // 读取物理参数（有默认值）
+            double mass, dragArea, reflectivity, dragCoefficient;
+            if (satJson.has("physical_params")) {
+                JSONObject phys = satJson.getJSONObject("physical_params");
+                mass = phys.optDouble("mass", -1);
+                dragArea = phys.optDouble("drag_area", -1);
+                reflectivity = phys.optDouble("reflectivity", -1);
+                dragCoefficient = phys.optDouble("drag_coefficient", -1);
+            } else {
+                mass = -1;
+                dragArea = -1;
+                reflectivity = -1;
+                dragCoefficient = -1;
+            }
+
+            // 根据卫星类型设置默认值
+            if ("sar".equalsIgnoreCase(satType)) {
+                if (mass < 0) mass = 150.0;           // SAR卫星更重
+                if (dragArea < 0) dragArea = 8.0;     // SAR天线面积更大
+                if (reflectivity < 0) reflectivity = 1.3;
+                if (dragCoefficient < 0) dragCoefficient = 2.2;
+            } else {
+                // 默认光学卫星参数
+                if (mass < 0) mass = 100.0;
+                if (dragArea < 0) dragArea = 5.0;
+                if (reflectivity < 0) reflectivity = 1.5;
+                if (dragCoefficient < 0) dragCoefficient = 2.2;
+            }
+
+            // 创建卫星配置（扩展以支持轨道参数和物理参数）
             satellites.add(new ExtendedSatelliteConfig(
                 id, satType, semiMajorAxis, eccentricity,
                 inclination, raan, argOfPerigee, meanAnomaly,
-                minElevation, maxOffNadir, epoch
+                minElevation, maxOffNadir, epoch,
+                mass, dragArea, reflectivity, dragCoefficient
             ));
         }
 
@@ -231,7 +268,7 @@ public class JsonScenarioLoader {
     }
 
     /**
-     * 扩展卫星配置类，包含完整轨道参数
+     * 扩展卫星配置类，包含完整轨道参数和物理参数
      */
     public static class ExtendedSatelliteConfig extends SatelliteConfig {
         public final String satType;
@@ -243,12 +280,20 @@ public class JsonScenarioLoader {
         public final double meanAnomaly;
         public final AbsoluteDate epoch;  // 轨道历元时间
 
+        // 物理参数（用于J4解析传播）
+        public final double mass;              // kg
+        public final double dragArea;          // m²
+        public final double reflectivity;      // 反射系数
+        public final double dragCoefficient;   // 阻力系数
+
         public ExtendedSatelliteConfig(String id, String satType,
                                        double semiMajorAxis, double eccentricity,
                                        double inclination, double raan,
                                        double argOfPerigee, double meanAnomaly,
                                        double minElevation, double maxOffNadir,
-                                       AbsoluteDate epoch) {
+                                       AbsoluteDate epoch,
+                                       double mass, double dragArea,
+                                       double reflectivity, double dragCoefficient) {
             super(id, "", "", minElevation, maxOffNadir);
             this.satType = satType;
             this.semiMajorAxis = semiMajorAxis;
@@ -258,6 +303,10 @@ public class JsonScenarioLoader {
             this.argOfPerigee = argOfPerigee;
             this.meanAnomaly = meanAnomaly;
             this.epoch = epoch;
+            this.mass = mass;
+            this.dragArea = dragArea;
+            this.reflectivity = reflectivity;
+            this.dragCoefficient = dragCoefficient;
         }
     }
 }

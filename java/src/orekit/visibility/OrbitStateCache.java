@@ -88,6 +88,9 @@ public class OrbitStateCache {
     private Frame itrfFrame;
     private OneAxisEllipsoid earth;
 
+    // 智能轨道初始化器（处理历元与场景时间差距问题）
+    private final SmartOrbitInitializer orbitInitializer = new SmartOrbitInitializer();
+
     public OrbitStateCache() {
         try {
             this.itrfFrame = FramesFactory.getITRF(IERSConventions.IERS_2010, true);
@@ -124,12 +127,28 @@ public class OrbitStateCache {
         this.timeStep = stepSeconds;
         cache.clear();
 
+        System.out.println("Precomputing orbits with smart initialization...");
+        System.out.println("  Scenario: " + startTime + " to " + endTime);
+        System.out.println("  Satellites: " + satellites.size());
+
         // 并行计算每颗卫星的轨道
         satellites.parallelStream().forEach(sat -> {
             try {
-                List<OrbitState> states = computeSatelliteOrbit(
-                    sat, startTime, endTime, stepSeconds
-                );
+                // 1. 使用智能初始化器获取场景开始时刻的初始状态
+                //    - TLE: SGP4外推到场景开始
+                //    - 六根数+历元近: 直接使用历元轨道
+                //    - 六根数+历元远: J4外推到场景开始
+                SpacecraftState initialState = orbitInitializer
+                    .getInitialStateAtScenarioStart(sat, startTime);
+
+                // 2. 创建HPOP传播器，从场景开始时刻传播
+                //    HPOP只需要传播场景持续时间（如24小时），而非从历元开始的长期
+                Propagator hpop = createHPOPFromInitialState(initialState);
+
+                // 3. HPOP高精度传播整个场景时段
+                List<OrbitState> states = computeStatesWithPropagator(
+                    hpop, sat.getId(), startTime, endTime, stepSeconds);
+
                 cache.put(sat.getId(), states);
             } catch (Exception e) {
                 throw new RuntimeException(
@@ -137,27 +156,57 @@ public class OrbitStateCache {
                 );
             }
         });
+
+        System.out.println("  Orbit precomputation complete.");
     }
 
     /**
-     * 计算单颗卫星的轨道状态序列
+     * 从初始状态创建HPOP传播器
+     *
+     * HPOP从场景开始时刻的已知状态开始，只传播场景持续时间
      */
-    private List<OrbitState> computeSatelliteOrbit(
-            SatelliteConfig sat,
+    private Propagator createHPOPFromInitialState(SpacecraftState initialState)
+            throws Exception {
+
+        // 创建积分器（Dormand-Prince 8(5,3)）
+        double minStep = 0.001;  // 最小步长 1ms
+        double maxStep = 300.0;  // 最大步长 5分钟
+        double positionTolerance = 10.0;  // 位置容差 10米
+
+        org.hipparchus.ode.nonstiff.DormandPrince853Integrator integrator =
+            new org.hipparchus.ode.nonstiff.DormandPrince853Integrator(
+                minStep, maxStep, positionTolerance, positionTolerance
+            );
+
+        // 创建HPOP传播器，从场景开始时刻的状态开始
+        org.orekit.propagation.numerical.NumericalPropagator hpop =
+            new org.orekit.propagation.numerical.NumericalPropagator(integrator);
+
+        hpop.setInitialState(initialState);
+        hpop.setOrbitType(org.orekit.orbits.OrbitType.CARTESIAN);
+
+        // 配置摄动力模型
+        configurePerturbations(hpop);
+
+        return hpop;
+    }
+
+    /**
+     * 使用传播器计算轨道状态序列
+     */
+    private List<OrbitState> computeStatesWithPropagator(
+            Propagator propagator,
+            String satId,
             AbsoluteDate startTime,
             AbsoluteDate endTime,
             double stepSeconds) throws Exception {
 
         List<OrbitState> states = new ArrayList<>();
 
-        // 创建传播器
-        Propagator propagator = createPropagator(sat);
-
         // 计算时间范围（秒）
         double duration = endTime.durationFrom(startTime);
 
         // 按时间步长传播
-        AbsoluteDate lastSuccessfulTime = startTime;
         for (double t = 0; t <= duration; t += stepSeconds) {
             AbsoluteDate currentTime = startTime.shiftedBy(t);
             try {
@@ -190,11 +239,10 @@ public class OrbitStateCache {
                 );
 
                 states.add(orbitState);
-                lastSuccessfulTime = currentTime;
             } catch (org.orekit.errors.OrekitException e) {
                 // 捕获特定错误（如太阳光压地影计算问题）
                 if (e.getMessage() != null && e.getMessage().contains("inside ellipsoid")) {
-                    System.err.println("Warning: Propagation error at t=" + t + " for " + sat.getId() +
+                    System.err.println("Warning: Propagation error at t=" + t + " for " + satId +
                         ", using last successful state");
                     // 如果可能，复制上一个成功状态
                     if (!states.isEmpty()) {
