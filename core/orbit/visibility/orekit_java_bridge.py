@@ -1222,3 +1222,116 @@ class OrekitJavaBridge:
             }
 
         return result
+
+    # =========================================================================
+    # Phase 3: 优化版批量可见性计算（轨道预计算缓存 + Java并行）
+    # =========================================================================
+
+    @ensure_jvm_attached
+    @translate_java_exception
+    def compute_all_windows_optimized(
+        self,
+        satellites: List[Dict[str, Any]],
+        targets: List[Dict[str, Any]],
+        start_time: datetime,
+        end_time: datetime,
+        coarse_step: float = 5.0,
+        fine_step: float = 1.0
+    ) -> Dict[str, Any]:
+        """
+        优化版批量计算所有可见性窗口
+
+        使用轨道预计算缓存和Java并行传播，大幅提升性能：
+        1. 只调用一次Java方法，避免JNI边界开销
+        2. Java端并行计算所有卫星轨道（16线程）
+        3. 轨道状态缓存复用，每颗卫星只传播一次而非每个目标一次
+
+        Args:
+            satellites: 卫星配置列表
+                [{ 'id': str, 'tle_line1': str, 'tle_line2': str,
+                   'min_elevation': float, ... }]
+            targets: 目标配置列表
+                [{ 'id': str, 'longitude': float, 'latitude': float,
+                   'altitude': float, 'min_observation_duration': int }]
+            start_time: 开始时间
+            end_time: 结束时间
+            coarse_step: 粗扫描步长（秒，默认5.0）
+            fine_step: 精化步长（秒，默认1.0）
+
+        Returns:
+            Dict: {
+                'windows': [
+                    {
+                        'satellite_id': str,
+                        'target_id': str,
+                        'start_time': datetime,
+                        'end_time': datetime,
+                        'duration_seconds': float,
+                        'max_elevation': float,
+                        'quality_score': float,
+                        'confidence': str
+                    },
+                    ...
+                ],
+                'stats': {
+                    'computation_time_ms': int,
+                    'satellite_count': int,
+                    'target_count': int,
+                    'total_windows': int,
+                    'cache_memory_mb': int
+                }
+            }
+
+        Raises:
+            OrbitPropagationError: 如果Java计算失败
+        """
+        self._ensure_jvm_started()
+
+        import json
+
+        try:
+            # 获取Java桥接类
+            PythonBridge = self._get_java_class("orekit.visibility.PythonBridge")
+
+            # 序列化卫星和目标配置为JSON
+            sat_json = json.dumps(satellites)
+            target_json = json.dumps(targets)
+
+            logger.info(f"HPOP轨道传播参数: 粗扫步长={coarse_step}s, 精扫步长={fine_step}s")
+
+            # 调用Java优化方法（单次JNI调用）
+            result_json = PythonBridge.computeAllWindowsOptimized(
+                sat_json,
+                target_json,
+                start_time.isoformat(),
+                end_time.isoformat(),
+                float(coarse_step),
+                float(fine_step)
+            )
+
+            # 解析JSON结果
+            result = json.loads(str(result_json))
+
+            # 检查错误
+            if result.get('error'):
+                raise OrbitPropagationError(
+                    f"Java优化计算失败: {result.get('message', 'Unknown error')}"
+                )
+
+            # 转换窗口时间为datetime对象
+            for window in result.get('windows', []):
+                window['start_time'] = datetime.fromisoformat(
+                    window['start_time'].replace('Z', '+00:00')
+                )
+                window['end_time'] = datetime.fromisoformat(
+                    window['end_time'].replace('Z', '+00:00')
+                )
+
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Java result JSON: {e}")
+            raise OrbitPropagationError(f"解析Java结果失败: {e}") from e
+        except Exception as e:
+            logger.error(f"Optimized batch computation failed: {e}")
+            raise OrbitPropagationError(f"优化批量计算失败: {e}") from e

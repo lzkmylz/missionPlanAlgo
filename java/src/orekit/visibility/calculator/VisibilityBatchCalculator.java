@@ -54,7 +54,7 @@ public class VisibilityBatchCalculator {
      * 创建批量计算器（使用默认配置）
      */
     public VisibilityBatchCalculator() {
-        this(300.0, 60.0, 5.0, 60.0);
+        this(5.0, 1.0, 5.0, 60.0);
     }
 
     /**

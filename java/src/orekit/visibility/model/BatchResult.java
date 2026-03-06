@@ -23,6 +23,36 @@ public class BatchResult {
     }
 
     /**
+     * 创建批量结果（从已有数据）
+     */
+    public BatchResult(Map<String, List<VisibilityWindow>> targetWindows,
+                       Map<String, List<VisibilityWindow>> gsWindows,
+                       Map<String, Object> stats) {
+        this.windows = new HashMap<>();
+        if (targetWindows != null) {
+            this.windows.putAll(targetWindows);
+        }
+        if (gsWindows != null) {
+            this.windows.putAll(gsWindows);
+        }
+        this.errors = new ArrayList<>();
+        this.statistics = new ComputationStatistics();
+
+        // 从stats更新统计信息
+        if (stats != null) {
+            if (stats.containsKey("computationTimeMs")) {
+                this.statistics.setComputationTimeMs((Long) stats.get("computationTimeMs"));
+            }
+            if (stats.containsKey("satelliteCount")) {
+                this.statistics.setTotalPairs((Integer) stats.get("satelliteCount"));
+            }
+            if (stats.containsKey("totalWindows")) {
+                this.statistics.addToWindowCount((Integer) stats.get("totalWindows"));
+            }
+        }
+    }
+
+    /**
      * 添加可见窗口
      */
     public void addWindow(String satelliteId, String targetId, VisibilityWindow window) {

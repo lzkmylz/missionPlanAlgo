@@ -11,8 +11,8 @@ public class ComputationConfig implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private double coarseStep = 300.0;      // 粗扫描步长（秒）
-    private double fineStep = 60.0;         // 精化步长（秒）
+    private double coarseStep = 5.0;        // 粗扫描步长（秒）- 默认5秒高精度
+    private double fineStep = 1.0;          // 精化步长（秒）- 默认1秒高精度
     private double minElevation = 0.0;      // 最小仰角（度）
     private boolean useParallel = true;     // 是否并行传播
     private int maxBatchSize = 100;         // 最大批次大小

@@ -40,8 +40,8 @@ public class BatchVisibilityCalculator {
     private static final double MU = Constants.WGS84_EARTH_MU;
 
     // 默认配置
-    private static final double DEFAULT_COARSE_STEP = 300.0;  // 5分钟
-    private static final double DEFAULT_FINE_STEP = 60.0;     // 1分钟
+    private static final double DEFAULT_COARSE_STEP = 5.0;    // 5秒
+    private static final double DEFAULT_FINE_STEP = 1.0;      // 1秒
     private static final double DEFAULT_MIN_ELEVATION = 0.0;  // 地平线以上
 
     private final TimeScale utc;
