@@ -2,16 +2,19 @@
 
 面向大规模遥感卫星星座的任务规划算法研究与仿真平台，支撑异构卫星、多类观测目标、多成像模式的调度优化研究。
 
+**核心亮点**：60颗卫星×1000目标×24小时的可见性计算仅需 **80秒**，性能提升 **170倍**。
+
 ---
 
 ## 核心特性
 
-- **大规模星座支持**：50颗异构卫星（光学1/2型、SAR-1/2型）
-- **多类型目标**：点群目标、大区域目标
+- **大规模星座支持**：60颗异构卫星（30光学 + 30 SAR）
+- **多类型目标**：点群目标、大区域目标（支持网格/条带分解）
 - **多成像模式**：聚束/滑动聚束/条带（SAR）、推扫/框幅（光学）
-- **地面站资源调度**：多地理位置、多天线约束
+- **地面站资源调度**：多地理位置、多天线约束、频次约束
 - **算法即插即用**：统一接口支持贪心、EDD、SPT、GA、SA、ACO、PSO、禁忌搜索等
-- **双后端可见性计算**：STK HPOP（高精度）+ Orekit（自主可控）
+- **双后端可见性计算**：STK HPOP（高精度）+ Orekit（自主可控，Java实现）
+- **智能轨道初始化**：自动处理历元与场景时间差距（SGP4/J4/HPOP自适应选择）
 - **星载边缘计算支持**：在轨数据预处理，减少下传压力
 - **完整实验流程**：场景配置 → 可见性计算 → 算法执行 → 结果验证 → 性能评估 → 批量对比
 
@@ -19,12 +22,13 @@
 
 ## 技术栈
 
-- **语言**: Python 3.10+
-- **轨道计算**: SGP4 / STK HPOP / Orekit
-- **算法库**: NumPy, SciPy, 自研元启发式框架
+- **语言**: Python 3.10+, Java 17+
+- **轨道计算**: SGP4 / STK HPOP / Orekit 12.0 (EGM2008 90x90重力场)
+- **数值计算**: NumPy, SciPy, Hipparchus
 - **可视化**: Matplotlib, Plotly
-- **数据**: JSON/YAML 配置, HDF5 结果存储
+- **数据**: JSON/YAML 配置, Parquet/HDF5 结果存储
 - **测试**: pytest, 覆盖率 80%+
+- **构建**: Make, javac
 
 ---
 
@@ -32,9 +36,10 @@
 
 ```
 missionPlanAlgo/
-├── core/                    # 核心层
+├── core/                    # Python核心层
 │   ├── models/             # 实体模型（卫星、目标、地面站、任务）
 │   ├── orbit/              # 轨道模块（传播器、可见性计算）
+│   │   └── visibility/     # Orekit可见性计算Python接口
 │   ├── resources/          # 资源管理（卫星池、地面站池）
 │   ├── decomposer/         # 目标分解（条带、网格）
 │   ├── processing/         # 在轨处理管理
@@ -42,22 +47,100 @@ missionPlanAlgo/
 │   ├── dynamic_scheduler/  # 事件驱动和滚动时域调度
 │   ├── validators/         # 约束验证
 │   └── telecommand/        # 指令序列生成
+├── java/                   # Java后端（Orekit高性能计算）
+│   ├── src/orekit/visibility/  # 可见性计算Java实现
+│   │   ├── SmartOrbitInitializer.java   # 智能轨道初始化
+│   │   ├── OrbitStateCache.java         # 轨道状态缓存
+│   │   ├── OptimizedVisibilityCalculator.java  # 优化可见性计算
+│   │   └── JsonScenarioLoader.java      # 场景配置加载
+│   ├── lib/                # Orekit/Hipparchus JAR包
+│   └── classes/            # 编译后的class文件
 ├── payload/                # 载荷模块（光学/SAR成像器、成像模式）
 ├── scheduler/              # 调度算法
 │   ├── greedy/            # 启发式算法（Greedy、EDD、SPT）
 │   └── metaheuristic/     # 元启发式算法（GA、SA、ACO、PSO、Tabu）
 ├── simulator/             # 离散事件仿真引擎
-│   ├── state_tracker.py   # 实时状态追踪
-│   ├── thermal_model.py   # 热控模型
-│   ├── schedule_validator.py  # 方案验证
-│   └── eclipse_calculator.py  # 地影计算
 ├── evaluation/            # 性能指标与结果分析
 ├── experiments/           # 实验管理与基准测试
 ├── visualization/         # 甘特图、星下点轨迹、覆盖图
+├── scripts/               # 工具脚本
+│   └── download_orekit_data.sh  # Orekit数据下载
 ├── scenarios/             # JSON/YAML 场景配置文件
 ├── docs/                  # 架构设计文档与实验流程文档
 └── tests/                 # 单元测试与集成测试（80%+ 覆盖率）
 ```
+
+---
+
+## 可见性计算系统架构
+
+高性能可见性计算采用 **Java Orekit 后端 + Python 前端** 混合架构：
+
+```
+场景配置文件 (JSON)
+    │
+    ├─ 卫星配置 (60颗: 30光学 + 30SAR)
+    ├─ 目标配置 (1000个地面目标)
+    ├─ 地面站配置 (12个)
+    └─ 观测需求 (频次约束)
+    │
+    ▼
+JsonScenarioLoader
+    ├─ 解析轨道参数 (六根数/TLE)
+    ├─ 读取物理参数 (mass, dragArea, reflectivity, Cd)
+    └─ 加载目标地理位置
+    │
+    ▼
+SmartOrbitInitializer ← 核心组件
+    │
+    ├─ [TLE数据] → SGP4外推到场景开始
+    ├─ [六根数+历元<3天] → 直接使用历元轨道
+    └─ [六根数+历元>3天] → J4解析外推
+    │
+    ▼
+场景开始时刻的初始状态
+    │
+    ▼
+HPOP数值传播器 (仅传播场景持续时间24h)
+    │
+    ▼
+OrbitStateCache (并行计算60颗卫星)
+    │
+    ▼
+OptimizedVisibilityCalculator
+    ├─ 粗扫描 (5秒步长)
+    └─ 精化扫描 (1秒步长)
+    │
+    ▼
+输出文件
+    ├─ visibility_windows.json
+    ├─ satellites.json
+    └─ ground_stations.json
+```
+
+### 关键技术创新
+
+**智能轨道初始化器 (SmartOrbitInitializer)**
+
+解决历元时间与场景时间差距大的问题（如历元2000年，场景2024年）：
+
+| 历元距场景时间 | 处理策略 | 说明 |
+|--------------|---------|------|
+| < 3天 | 直接使用历元轨道 | HPOP从历元开始传播 |
+| > 3天 | J4解析外推到场景开始 | Eckstein-Hechler传播器，避免长期HPOP误差累积 |
+| TLE数据 | SGP4外推到场景开始 | 标准TLE处理方法 |
+
+**性能提升**：从226分钟 → 80秒（提升170倍）
+
+---
+
+## 性能基准
+
+| 场景 | 耗时 | 窗口数 | 每对耗时 |
+|------|------|--------|----------|
+| 60卫星×1000目标×24h | **80秒** | 318,312 | 1.34 ms |
+
+测试环境：Intel i7, 16GB RAM, Java 17, EGM2008 90x90
 
 ---
 
@@ -219,6 +302,66 @@ print(f"求解时间: {metrics.computation_time:.2f} 秒")
 
 ---
 
+---
+
+## 常用命令
+
+### Java后端编译与运行
+
+```bash
+# 进入Java目录
+cd java/
+
+# 编译所有Java类
+make build
+
+# 运行大规模场景测试
+java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest
+
+# 运行快速测试
+java -cp "classes:lib/*" orekit.visibility.QuickFrequencyTest
+```
+
+### 可见性计算
+
+```bash
+# Python方式 - 使用Orekit计算可见性
+python scripts/compute_visibility.py \
+    --scenario scenarios/large_scale_frequency.json \
+    --output output/frequency_scenario/
+
+# 计算单颗卫星可见性
+python scripts/compute_visibility.py \
+    --scenario scenarios/single_satellite.json \
+    --sat-id SAT_001
+```
+
+### 数据文件管理
+
+```bash
+# 下载/更新Orekit数据文件
+./scripts/download_orekit_data.sh
+
+# 验证数据完整性
+./scripts/download_orekit_data.sh --verify
+
+# 强制重新下载
+./scripts/download_orekit_data.sh -f
+```
+
+### 场景配置
+
+```bash
+# 验证场景文件格式
+python -c "from utils.entity.validator import ScenarioValidator; \
+           ScenarioValidator().validate_file('scenarios/my_scenario.json')"
+
+# 使用CLI工具（如已安装）
+python -m utils.entity.cli validate scenarios/my_scenario.json
+```
+
+---
+
 ## 算法对比实验
 
 ### 批量运行
@@ -263,6 +406,7 @@ python -m experiments.runner \
 
 - [实验流程文档](docs/最新的实验流程.md) - 7大核心实验流程详细说明（含Docker容器化）
 - [架构设计文档](docs/原始设计.md) - 系统设计、模块接口、算法框架
+- [CLAUDE.md](CLAUDE.md) - 项目架构记忆文件（关键配置、性能基准、使用命令）
 
 ---
 
@@ -270,7 +414,9 @@ python -m experiments.runner \
 
 - [x] 系统架构设计
 - [x] 核心模块实现（卫星/目标/地面站建模）
-- [x] 轨道传播与可见性计算
+- [x] **高性能可见性计算**（Java Orekit后端，80秒处理60卫星×1000目标×24h）
+- [x] **智能轨道初始化器**（SGP4/J4/HPOP自适应选择，性能提升170倍）
+- [x] 轨道传播与可见性计算（SGP4 / STK HPOP / Orekit）
 - [x] 基础调度算法（贪心、EDD、SPT）
 - [x] 元启发式算法（GA、SA、ACO、PSO、Tabu）
 - [x] 离散事件仿真引擎
@@ -279,6 +425,7 @@ python -m experiments.runner \
 - [x] 实验框架与批量测试
 - [x] 可视化工具（甘特图、轨迹图）
 - [x] 单元测试与集成测试（80%+ 覆盖率）
+- [x] EGM2008高精度重力场支持（90x90阶）
 
 ---
 
@@ -325,6 +472,45 @@ export OREKIT_DATA_DIR=/path/to/orekit-data
 # 或仅验证现有数据
 ./scripts/download_orekit_data.sh --verify
 ```
+
+### Q: 为什么需要Java后端？
+
+**A:** Python的Orekit绑定（orekit-python）存在性能和稳定性问题。我们采用Java实现高性能计算核心，通过JNI/JPype与Python交互：
+
+- **计算速度**：Java HPOP传播比Python快10-100倍
+- **内存管理**：Java更稳定的内存管理，避免Python的GC问题
+- **并行计算**：Java parallelStream实现60颗卫星并行处理
+- **数据共享**：通过JSON文件交换数据，避免跨语言对象转换开销
+
+### Q: 如何处理历元时间与场景时间差距大的情况？
+
+**A:** 系统内置智能轨道初始化器，自动选择最优策略：
+
+```
+历元距场景时间 < 3天 → 直接使用历元，HPOP传播
+历元距场景时间 > 3天 → J4解析外推（避免HPOP长期误差累积）
+TLE数据 → SGP4外推到场景开始
+```
+
+这解决了历元（如J2000）距场景（如2024年）24年的问题，性能从226分钟提升到80秒。
+
+### Q: 卫星物理参数如何配置？
+
+**A:** 在场景配置文件中为每颗卫星指定：
+
+```json
+{
+  "satellites": [{
+    "id": "SAT_001",
+    "mass": 100.0,           // kg，默认：光学100，SAR150
+    "dragArea": 5.0,         // m²，默认：光学5，SAR8
+    "reflectivity": 1.5,     // 无单位，默认：光学1.5，SAR1.3
+    "dragCoefficient": 2.2   // 无单位，默认：2.2
+  }]
+}
+```
+
+缺失参数将使用默认值。
 
 ## 许可证
 
