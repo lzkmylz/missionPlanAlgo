@@ -85,10 +85,11 @@ missionPlanAlgo/
 
 ## 快速开始
 
-### 安装
+### 1. 安装依赖
+
+#### 1.1 克隆项目
 
 ```bash
-# 克隆项目
 git clone <repository-url>
 cd missionPlanAlgo
 
@@ -96,11 +97,81 @@ cd missionPlanAlgo
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 安装依赖
+# 安装Python依赖
 pip install -r requirements.txt
 ```
 
-### 运行示例
+#### 1.2 下载 Orekit 数据文件
+
+本项目使用 [Orekit](https://www.orekit.org/) 进行高精度轨道计算，需要下载以下数据文件：
+
+| 数据文件 | 大小 | 说明 | 必需 |
+|---------|------|------|------|
+| **EGM2008** | 70MB (压缩) | 地球重力场模型 (90x90阶) | ✅ 必须 |
+| Orekit JARs | ~15MB | Java 运行时库 | ✅ 必须 |
+| IERS | ~3MB | 地球自转参数 | ⚠️ 推荐 |
+| DE440 | 120MB | 行星历表 | ⚠️ 推荐 |
+
+**一键下载（推荐）：**
+
+```bash
+# 下载所有必需数据到 ~/orekit-data
+./scripts/download_orekit_data.sh
+
+# 或使用自定义目录
+./scripts/download_orekit_data.sh -d /opt/orekit-data
+
+# 设置环境变量（添加到 ~/.bashrc 或 ~/.zshrc）
+export OREKIT_DATA_DIR=$HOME/orekit-data
+```
+
+**验证安装：**
+
+```bash
+# 验证数据文件完整性
+./scripts/download_orekit_data.sh --verify
+
+# 测试 Python 配置
+python -c "from core.orbit.visibility.orekit_config import get_orekit_data_dir; print(get_orekit_data_dir())"
+```
+
+**手动安装（备用）：**
+
+如果自动下载失败，可手动下载：
+
+1. **EGM2008 重力场数据**（必须）
+   - 访问：https://earth-info.nga.mil/
+   - 下载：EGM2008 Spherical Harmonics (104MB ZIP)
+   - 解压：`EGM2008_to2190_TideFree` 文件
+   - 压缩：`gzip -c EGM2008_to2190_TideFree > ~/orekit-data/potential/egm-format/EGM2008_to2190_TideFree.gz`
+
+2. **Orekit JAR 包**
+   - https://repo1.maven.org/maven2/org/orekit/orekit/12.0/orekit-12.0.jar
+   - https://repo1.maven.org/maven2/org/hipparchus/hipparchus-core/3.0/hipparchus-core-3.0.jar
+   - https://repo1.maven.org/maven2/org/hipparchus/hipparchus-geometry/3.0/hipparchus-geometry-3.0.jar
+   - https://repo1.maven.org/maven2/org/hipparchus/hipparchus-ode/3.0/hipparchus-ode-3.0.jar
+   - 放入：`~/orekit-data/lib/`
+
+3. **IERS 地球自转数据**（推荐）
+   - 下载：https://datacenter.iers.org/products/eop/rapid/standard/finals2000A.all
+   - 放入：`~/orekit-data/IERS/finals2000A.all`
+
+#### 1.3 安装 Java 运行时
+
+Orekit Java 后端需要 Java 17+：
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install openjdk-17-jre
+
+# macOS
+brew install openjdk@17
+
+# 验证
+java -version  # 应显示 17 或更高版本
+```
+
+### 2. 运行示例
 
 ```bash
 # 使用贪心算法运行场景
@@ -210,6 +281,50 @@ python -m experiments.runner \
 - [x] 单元测试与集成测试（80%+ 覆盖率）
 
 ---
+
+## 常见问题
+
+### Q: 下载脚本失败怎么办？
+
+**A:** 检查以下几点：
+
+1. **网络连接**：确保能访问外网，特别是 `earth-info.nga.mil` 和 `repo1.maven.org`
+2. **磁盘空间**：确保有至少 500MB 可用空间
+3. **依赖安装**：确保已安装 `curl` 或 `wget`，以及 `unzip`
+
+如果仍失败，使用手动安装步骤（见上文）。
+
+### Q: EGM2008 和 EGM96 有什么区别？
+
+**A:** EGM2008 是更高精度的地球重力场模型：
+
+| 特性 | EGM96 | EGM2008 | 提升 |
+|------|-------|---------|------|
+| 最大阶数 | 360 | 2190 | 6倍 |
+| 空间分辨率 | ~55km | ~5km | 10倍 |
+| 大地水准面精度 | ~1米 | ~0.02米 | 50倍 |
+
+本项目配置使用 EGM2008 90x90 阶，相比 EGM96 36x36 能显著提升轨道传播精度。
+
+### Q: 可以离线使用吗？
+
+**A:** 可以。在一台联网机器上运行下载脚本，然后将整个 `~/orekit-data` 目录复制到离线机器。确保设置相同的环境变量：
+
+```bash
+export OREKIT_DATA_DIR=/path/to/orekit-data
+```
+
+### Q: 如何更新数据文件？
+
+**A:** IERS 地球自转数据需要定期更新（建议每月）：
+
+```bash
+# 强制重新下载所有文件
+./scripts/download_orekit_data.sh -f
+
+# 或仅验证现有数据
+./scripts/download_orekit_data.sh --verify
+```
 
 ## 许可证
 
