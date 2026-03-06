@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 轨道状态缓存
  *
  * 预计算并缓存卫星轨道状态，避免重复传播计算。
- * 默认使用HPOP高精度数值传播模型（EGM96引力场 + 完整摄动力）。
+ * 默认使用HPOP高精度数值传播模型（EGM2008/EGM96引力场 + 完整摄动力）。
  * 支持多线程并行计算和线性插值查询。
  */
 public class OrbitStateCache {
@@ -276,7 +276,7 @@ public class OrbitStateCache {
      * 创建HPOP高精度数值传播器
      *
      * 配置完整的摄动力模型：
-     * - EGM96地球引力场 (36x36)
+     * - EGM2008/EGM96地球引力场
      * - NRLMSISE00大气阻力
      * - 太阳光压
      * - 日月第三体引力
@@ -318,7 +318,7 @@ public class OrbitStateCache {
             org.orekit.propagation.numerical.NumericalPropagator propagator)
             throws Exception {
 
-        // 1. 地球引力场 (EGM96, 36x36)
+        // 1. 地球引力场 (EGM2008/EGM96)
         addGravityForce(propagator);
 
         // 2. 大气阻力
@@ -335,34 +335,33 @@ public class OrbitStateCache {
     }
 
     /**
-     * 添加地球引力摄动力 (EGM96高精度模型)
+     * 添加地球引力摄动力 (EGM2008/EGM96高精度模型)
      *
-     * 默认使用EGM96 21x21（Orekit数据仓库提供）
-     * 若不可用则回退到5x5，或升级到36x36（如果用户下载了更高精度数据）
+     * 优先使用EGM2008 90x90（最高精度），若不可用则回退到EGM96 21x21
      */
     private void addGravityForce(org.orekit.propagation.numerical.NumericalPropagator propagator)
             throws Exception {
         // 获取引力场提供者
         org.orekit.forces.gravity.potential.NormalizedSphericalHarmonicsProvider gravityField;
 
-        // 默认使用EGM96 21x21（Orekit数据仓库提供的最高精度）
+        // 1. 优先尝试EGM2008 90x90（最高精度，需要下载完整数据文件）
         try {
-            gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(21, 21);
-            System.out.println("  Using EGM96 high-precision gravity field (21x21)");
+            gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(90, 90);
+            System.out.println("  Using EGM2008 ultra-high-precision gravity field (90x90)");
         } catch (Exception e) {
-            // 回退到5x5（Orekit基础测试数据）
+            // 2. 回退到EGM2008 36x36（常用精度）
             try {
-                gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(5, 5);
-                System.out.println("  WARNING: Using reduced gravity field (5x5) - Download EGM96 21x21 for full precision");
+                gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(36, 36);
+                System.out.println("  Using EGM2008 high-precision gravity field (36x36)");
             } catch (Exception e2) {
-                // 尝试使用36x36（如果用户单独下载了更高精度数据）
+                // 3. 回退到EGM96 21x21（Orekit数据仓库默认提供）
                 try {
-                    gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(36, 36);
-                    System.out.println("  Using EGM96 ultra-high-precision gravity field (36x36)");
+                    gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(21, 21);
+                    System.out.println("  Using EGM96 gravity field (21x21) - Download EGM2008 for higher precision");
                 } catch (Exception e3) {
-                    // 最低回退到2x0（牛顿引力）
-                    gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(2, 0);
-                    System.out.println("  WARNING: Using minimal gravity field (2x0)");
+                    // 4. 最后回退到5x5（Orekit基础测试数据）
+                    gravityField = org.orekit.forces.gravity.potential.GravityFieldFactory.getNormalizedProvider(5, 5);
+                    System.out.println("  WARNING: Using reduced gravity field (5x5)");
                 }
             }
         }
