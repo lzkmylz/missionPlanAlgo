@@ -5,6 +5,9 @@ import org.hipparchus.ode.nonstiff.AdaptiveStepsizeIntegrator;
 import org.orekit.bodies.BodyShape;
 import org.orekit.bodies.GeodeticPoint;
 import org.orekit.bodies.OneAxisEllipsoid;
+import org.orekit.data.DataContext;
+import org.orekit.data.DataProvidersManager;
+import org.orekit.data.DirectoryCrawler;
 import org.orekit.errors.OrekitException;
 import org.orekit.frames.Frame;
 import org.orekit.frames.FramesFactory;
@@ -21,6 +24,7 @@ import org.orekit.time.TimeScalesFactory;
 import org.orekit.utils.Constants;
 import org.orekit.utils.IERSConventions;
 
+import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Logger;
@@ -49,9 +53,63 @@ public class BatchVisibilityCalculator {
     private final Frame itrf;
     private final BodyShape earth;
 
+    // Orekit数据初始化标志
+    private static volatile boolean orekitInitialized = false;
+    private static final Object initLock = new Object();
+
+    /**
+     * 初始化Orekit数据
+     *
+     * 配置EOP加载：使用finals.data，禁用bulletinB加载
+     */
+    private static void initializeOrekit() {
+        if (orekitInitialized) {
+            return;
+        }
+        synchronized (initLock) {
+            if (orekitInitialized) {
+                return;
+            }
+            try {
+                // 配置Orekit使用finals.data而不是bulletinB
+                // 禁用bulletinB加载（因为这会导致EOP数据缺失错误）
+                System.setProperty("orekit.iers.bulletinB", "false");
+                System.setProperty("orekit.iers.final", "true");
+                System.setProperty("orekit.iers.eop1980", "false");
+                System.setProperty("orekit.iers.eop2000", "false");
+
+                String dataPath = System.getenv("OREKIT_DATA_PATH");
+                if (dataPath == null) {
+                    dataPath = System.getProperty("user.home") + "/orekit-data";
+                }
+                File dataDir = new File(dataPath);
+                if (dataDir.exists()) {
+                    DataProvidersManager manager = DataContext.getDefault().getDataProvidersManager();
+                    manager.addProvider(new DirectoryCrawler(dataDir));
+                    System.out.println("Orekit data initialized from: " + dataDir.getAbsolutePath());
+
+                } else {
+                    System.err.println("Warning: Orekit data directory not found: " + dataDir.getAbsolutePath());
+                }
+            } catch (Exception e) {
+                System.err.println("Warning: Failed to initialize Orekit data: " + e.getMessage());
+            }
+            orekitInitialized = true;
+        }
+    }
+
     public BatchVisibilityCalculator() {
-        this.utc = TimeScalesFactory.getUTC();
-        this.eme2000 = FramesFactory.getEME2000();
+        // 确保Orekit数据已初始化
+        initializeOrekit();
+
+        try {
+            this.utc = TimeScalesFactory.getUTC();
+            this.eme2000 = FramesFactory.getEME2000();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize time scales", e);
+        }
+
+        // 获取ITRF框架 - 需要正确的IERS数据
         this.itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, true);
         this.earth = new OneAxisEllipsoid(EARTH_RADIUS, EARTH_FLATTENING, itrf);
     }

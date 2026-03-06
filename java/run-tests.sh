@@ -14,20 +14,63 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# 设置Java环境
-if [ -z "$JAVA_HOME" ]; then
-    if [ -d "$HOME/jdk-17.0.9+9" ]; then
-        export JAVA_HOME="$HOME/jdk-17.0.9+9"
-    elif [ -d "/usr/lib/jvm/java-17" ]; then
-        export JAVA_HOME="/usr/lib/jvm/java-17"
+# 查找Java安装
+find_java_home() {
+    # 如果已经设置了 JAVA_HOME，直接使用
+    if [ -n "$JAVA_HOME" ] && [ -d "$JAVA_HOME" ]; then
+        return 0
     fi
-fi
+
+    # 检测常见安装位置
+    local java_paths=(
+        "$HOME/jdk-17.0.9+9"
+        "$HOME/jdk-17"
+        "$HOME/jdk-21"
+        "/usr/lib/jvm/java-17"
+        "/usr/lib/jvm/java-17-openjdk"
+        "/usr/lib/jvm/java-17-openjdk-amd64"
+        "/usr/lib/jvm/java-21"
+        "/usr/lib/jvm/java-21-openjdk"
+        "/usr/lib/jvm/java-21-openjdk-amd64"
+        "/opt/jdk-17"
+        "/opt/jdk-21"
+    )
+
+    for path in "${java_paths[@]}"; do
+        if [ -d "$path" ]; then
+            export JAVA_HOME="$path"
+            return 0
+        fi
+    done
+
+    # 尝试从 which java 推断
+    if command -v java &> /dev/null; then
+        local java_path=$(readlink -f "$(command -v java)" 2>/dev/null || command -v java)
+        # 通常是 /path/to/jdk/bin/java，所以取上两级目录
+        if [[ "$java_path" == */bin/java ]]; then
+            local inferred_home="$(dirname "$(dirname "$java_path")")"
+            if [ -d "$inferred_home" ]; then
+                export JAVA_HOME="$inferred_home"
+                return 0
+            fi
+        fi
+    fi
+
+    return 1
+}
+
+# 设置Java环境
+find_java_home
 
 if [ -n "$JAVA_HOME" ]; then
     export PATH="$JAVA_HOME/bin:$PATH"
 else
     echo -e "${RED}错误: 找不到Java JDK${NC}"
-    echo "请安装Java 17或设置JAVA_HOME环境变量"
+    echo "请安装Java 17+ 或设置 JAVA_HOME 环境变量"
+    echo "常见安装位置:"
+    echo "  - ~/jdk-17.0.9+9"
+    echo "  - /usr/lib/jvm/java-17"
+    echo "  - /usr/lib/jvm/java-17-openjdk"
     exit 1
 fi
 

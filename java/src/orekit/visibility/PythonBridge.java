@@ -1,9 +1,10 @@
 package orekit.visibility;
 
-import orekit.visibility.model.BatchResult;
+// 注意：BatchResult有两个版本
+// - orekit.visibility.BatchResult (用于BatchVisibilityCalculator)
+// - orekit.visibility.model.BatchResult (用于OptimizedVisibilityCalculator)
 import orekit.visibility.model.SatelliteConfig;
 import orekit.visibility.model.TargetConfig;
-import orekit.visibility.model.VisibilityWindow;
 
 import org.orekit.time.AbsoluteDate;
 import org.orekit.time.TimeScalesFactory;
@@ -17,8 +18,19 @@ import java.util.*;
  */
 public class PythonBridge {
 
-    private static final BatchVisibilityCalculator calculator = new BatchVisibilityCalculator();
+    // 延迟初始化：避免类加载时就创建计算器（可能触发Orekit异常）
+    private static BatchVisibilityCalculator calculator = null;
     private static OptimizedVisibilityCalculator optimizedCalculator = null;
+
+    /**
+     * 获取 BatchVisibilityCalculator 实例（延迟初始化）
+     */
+    private static synchronized BatchVisibilityCalculator getCalculator() {
+        if (calculator == null) {
+            calculator = new BatchVisibilityCalculator();
+        }
+        return calculator;
+    }
 
     /**
      * Python调用的批量计算方法（原始版本）
@@ -44,8 +56,8 @@ public class PythonBridge {
             AbsoluteDate startTime = new AbsoluteDate(startTimeIso, TimeScalesFactory.getUTC());
             AbsoluteDate endTime = new AbsoluteDate(endTimeIso, TimeScalesFactory.getUTC());
 
-            // 执行计算
-            BatchResult result = calculator.computeAllWindows(
+            // 执行计算 (使用orekit.visibility.BatchResult，不是model包中的)
+            orekit.visibility.BatchResult result = getCalculator().computeAllWindows(
                 satellites, targets, groundStations,
                 startTime, endTime, config
             );
@@ -98,7 +110,8 @@ public class PythonBridge {
                 optimizedCalculator = new OptimizedVisibilityCalculator();
             }
 
-            BatchResult result = optimizedCalculator.computeAllVisibilityWindows(
+            // 使用model包中的BatchResult (OptimizedVisibilityCalculator返回的)
+            orekit.visibility.model.BatchResult result = optimizedCalculator.computeAllVisibilityWindows(
                 satellites, targets, startTime, endTime, coarseStep, fineStep
             );
 
@@ -233,17 +246,17 @@ public class PythonBridge {
     }
 
     /**
-     * 将结果转换为JSON字符串
+     * 将结果转换为JSON字符串 (使用model包中的类)
      */
-    private static String convertToJson(BatchResult result) {
+    private static String convertToJson(orekit.visibility.model.BatchResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
 
         // windows
         sb.append("\"windows\":[");
         boolean first = true;
-        for (List<VisibilityWindow> windowList : result.getAllWindows().values()) {
-            for (VisibilityWindow w : windowList) {
+        for (List<orekit.visibility.model.VisibilityWindow> windowList : result.getAllWindows().values()) {
+            for (orekit.visibility.model.VisibilityWindow w : windowList) {
                 if (!first) sb.append(",");
                 first = false;
                 sb.append(windowToJson(w));
@@ -252,7 +265,7 @@ public class PythonBridge {
         sb.append("],");
 
         // stats
-        BatchResult.ComputationStatistics stats = result.getStatistics();
+        orekit.visibility.model.BatchResult.ComputationStatistics stats = result.getStatistics();
         sb.append("\"stats\":{");
         sb.append("\"computationTimeMs\":").append(stats.getComputationTimeMs()).append(",");
         sb.append("\"totalPairs\":").append(stats.getTotalPairs()).append(",");
@@ -265,9 +278,9 @@ public class PythonBridge {
     }
 
     /**
-     * 将单个窗口转换为JSON
+     * 将单个窗口转换为JSON (使用model包中的VisibilityWindow)
      */
-    private static String windowToJson(VisibilityWindow w) {
+    private static String windowToJson(orekit.visibility.model.VisibilityWindow w) {
         return "{" +
             "\"satelliteId\":\"" + escapeJson(w.getSatelliteId()) + "\"," +
             "\"targetId\":\"" + escapeJson(w.getTargetId()) + "\"," +
@@ -294,17 +307,31 @@ public class PythonBridge {
 
     /**
      * 转换为Python友好的Map（原始版本兼容）
+     * 使用 orekit.visibility.BatchResult (不是model包中的)
      */
-    private static Map<String, Object> convertToPythonMap(BatchResult result) {
+    private static Map<String, Object> convertToPythonMap(orekit.visibility.BatchResult result) {
         Map<String, Object> map = new HashMap<>();
 
-        // 转换窗口
+        // 转换窗口 (使用 orekit.visibility.VisibilityWindow)
         List<Map<String, Object>> windowsList = new ArrayList<>();
-        for (Map.Entry<String, List<VisibilityWindow>> entry : result.getAllWindows().entrySet()) {
-            for (VisibilityWindow w : entry.getValue()) {
+        for (Map.Entry<String, List<orekit.visibility.VisibilityWindow>> entry : result.getTargetWindows().entrySet()) {
+            for (orekit.visibility.VisibilityWindow w : entry.getValue()) {
                 Map<String, Object> windowMap = new HashMap<>();
                 windowMap.put("satelliteId", w.getSatelliteId());
-                windowMap.put("targetId", w.getTargetId());
+                windowMap.put("targetId", w.getPointId());  // 使用 getPointId 而不是 getTargetId
+                windowMap.put("startTime", w.getStartTime().toString());
+                windowMap.put("endTime", w.getEndTime().toString());
+                windowMap.put("maxElevation", w.getMaxElevation());
+                windowMap.put("durationSeconds", w.getDurationSeconds());
+                windowsList.add(windowMap);
+            }
+        }
+        // 添加地面站窗口
+        for (Map.Entry<String, List<orekit.visibility.VisibilityWindow>> entry : result.getGroundStationWindows().entrySet()) {
+            for (orekit.visibility.VisibilityWindow w : entry.getValue()) {
+                Map<String, Object> windowMap = new HashMap<>();
+                windowMap.put("satelliteId", w.getSatelliteId());
+                windowMap.put("targetId", w.getPointId());  // 使用 getPointId 而不是 getTargetId
                 windowMap.put("startTime", w.getStartTime().toString());
                 windowMap.put("endTime", w.getEndTime().toString());
                 windowMap.put("maxElevation", w.getMaxElevation());
@@ -314,13 +341,14 @@ public class PythonBridge {
         }
         map.put("windows", windowsList);
 
-        // 统计信息
-        BatchResult.ComputationStatistics stats = result.getStatistics();
+        // 统计信息 (使用正确的getter方法名)
+        orekit.visibility.ComputationStats stats = result.getStats();
         Map<String, Object> statsMap = new HashMap<>();
         statsMap.put("computationTimeMs", stats.getComputationTimeMs());
-        statsMap.put("totalPairs", stats.getTotalPairs());
-        statsMap.put("totalWindows", stats.getTotalWindows());
-        statsMap.put("errorCount", stats.getErrorCount());
+        statsMap.put("nSatellites", stats.getNSatellites());
+        statsMap.put("nTargets", stats.getNTargets());
+        statsMap.put("nGroundStations", stats.getNGroundStations());
+        statsMap.put("nWindowsFound", stats.getNWindowsFound());
         map.put("stats", statsMap);
 
         return map;
