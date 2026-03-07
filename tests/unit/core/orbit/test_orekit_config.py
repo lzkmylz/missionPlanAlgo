@@ -357,7 +357,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'max_memory': '2g'},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'propagator': {},
             'perturbations': {}
         }
@@ -371,7 +371,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'classpath': [], 'max_memory': '2g'},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'propagator': {'min_step': 100, 'max_step': 10},  # min > max
             'perturbations': {}
         }
@@ -385,7 +385,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'classpath': [], 'max_memory': '2g'},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'propagator': {'min_step': 0, 'max_step': 0},
             'perturbations': {}
         }
@@ -398,7 +398,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'classpath': '/not/a/list', 'max_memory': '2g'},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'propagator': {},
             'perturbations': {}
         }
@@ -412,7 +412,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'classpath': []},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'propagator': {},
             'perturbations': {}
         }
@@ -426,7 +426,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'classpath': [], 'max_memory': '2g'},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'propagator': {}
         }
         is_valid, errors = validate_config(config)
@@ -439,7 +439,7 @@ class TestOrekitConfigAdditionalFunctions:
 
         config = {
             'jvm': {'classpath': [], 'max_memory': '2g'},
-            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM96', 'ephemeris_dir': 'DE440'},
+            'data': {'root_dir': '/test', 'iers_dir': 'IERS', 'gravity_dir': 'EGM2008', 'ephemeris_dir': 'DE440'},
             'perturbations': {}
         }
         is_valid, errors = validate_config(config)

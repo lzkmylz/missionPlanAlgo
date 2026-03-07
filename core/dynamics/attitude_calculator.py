@@ -918,8 +918,8 @@ class AttitudeCalculator:
             propagator = NumericalPropagator(integrator)
             propagator.setInitialState(keplerian_orbit)
 
-            # 添加J2摄动（使用重力场模型）
-            gravity_field = GravityFieldFactory.getNormalizedProvider(10, 10)  # 10x10重力场
+            # 添加地球重力场摄动（EGM2008 90x90，与Java端保持一致）
+            gravity_field = GravityFieldFactory.getNormalizedProvider(90, 90)
             gravity_model = HolmesFeatherstoneAttractionModel(inertial_frame, gravity_field)
             propagator.addForceModel(gravity_model)
 

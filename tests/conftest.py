@@ -44,7 +44,7 @@ def jvm_bridge():
 
     所有JVM测试共享同一个OrekitJavaBridge实例，避免：
     1. 重复JVM启动（节省2-5秒/测试）
-    2. 重复数据加载（EGM96/IERS/DE440等大数据文件）
+    2. 重复数据加载（EGM2008/IERS/DE440等大数据文件）
     3. 重复引力场模型初始化
 
     使用示例:

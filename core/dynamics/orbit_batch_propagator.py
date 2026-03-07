@@ -329,8 +329,8 @@ class OrekitBatchPropagator:
         propagator = NumericalPropagator(integrator)
         propagator.setInitialState(initial_state)
 
-        # 添加重力场模型（J2/J3/J4）
-        gravity_field = GravityFieldFactory.getNormalizedProvider(10, 10)
+        # 添加重力场模型（EGM2008 90x90，与Java端保持一致）
+        gravity_field = GravityFieldFactory.getNormalizedProvider(90, 90)
         gravity_model = HolmesFeatherstoneAttractionModel(inertial_frame, gravity_field)
         propagator.addForceModel(gravity_model)
 

@@ -80,7 +80,7 @@ positionTolerance = 10.0m // 位置容差
 ```
 
 ### 引力场配置
-- HPOP传播: EGM96 21x21 (高精度)
+- HPOP传播: EGM2008 90x90 (最高精度)
 - J4解析外推: 6x6 (Eckstein-Hechler需要)
 
 ---

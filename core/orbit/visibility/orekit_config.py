@@ -87,7 +87,7 @@ DEFAULT_OREKIT_CONFIG = {
     'data': {
         'root_dir': _get_default_data_dir(),
         'iers_dir': 'IERS',
-        'gravity_dir': 'EGM96',
+        'gravity_dir': 'EGM2008',  # 统一使用EGM2008高精度重力场
         'ephemeris_dir': 'DE440',
     },
     'propagator': {

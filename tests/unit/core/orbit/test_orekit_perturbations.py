@@ -60,7 +60,7 @@ class TestPerturbationConfig:
         assert 'order' in gravity
 
         assert isinstance(gravity['enabled'], bool)
-        assert gravity['model'] == 'EGM96'
+        assert gravity['model'] == 'EGM2008'
         assert isinstance(gravity['degree'], int)
         assert isinstance(gravity['order'], int)
 
@@ -121,18 +121,18 @@ class TestPerturbationConfig:
 class TestEarthGravityModel:
     """地球引力场模型测试"""
 
-    def test_egm96_default_degree_order(self):
-        """测试EGM96默认阶数"""
+    def test_egm2008_default_degree_order(self):
+        """测试EGM2008默认阶数"""
         from core.orbit.visibility.orekit_config import DEFAULT_OREKIT_CONFIG
 
         gravity = DEFAULT_OREKIT_CONFIG['perturbations']['earth_gravity']
 
-        # EGM96默认使用36x36
-        assert gravity['degree'] == 36
-        assert gravity['order'] == 36
+        # EGM2008默认使用90x90
+        assert gravity['degree'] == 90
+        assert gravity['order'] == 90
 
-    def test_egm96_degree_range(self):
-        """测试EGM96阶数范围有效性"""
+    def test_egm2008_degree_range(self):
+        """测试EGM2008阶数范围有效性"""
         from core.orbit.visibility.orekit_config import validate_config
 
         # 有效配置
@@ -140,9 +140,9 @@ class TestEarthGravityModel:
             'perturbations': {
                 'earth_gravity': {
                     'enabled': True,
-                    'model': 'EGM96',
-                    'degree': 36,
-                    'order': 36
+                    'model': 'EGM2008',
+                    'degree': 90,
+                    'order': 90
                 }
             }
         }
@@ -152,7 +152,7 @@ class TestEarthGravityModel:
             'perturbations': {
                 'earth_gravity': {
                     'enabled': True,
-                    'model': 'EGM96',
+                    'model': 'EGM2008',
                     'degree': 10,
                     'order': 20  # order > degree，无效
                 }

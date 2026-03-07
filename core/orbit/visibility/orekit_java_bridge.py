@@ -206,7 +206,7 @@ class OrekitJavaBridge:
     def _configure_data_context(self) -> None:
         """配置Orekit数据上下文
 
-        配置DataProvidersManager，加载IERS/EGM96/DE440数据。
+        配置DataProvidersManager，加载IERS/EGM2008/DE440数据。
         """
         if not JPYPE_AVAILABLE:
             return
@@ -298,7 +298,7 @@ class OrekitJavaBridge:
     def get_gravity_field(self, degree: int, order: int) -> Any:
         """获取地球引力场模型（带缓存）
 
-        使用EGM96模型获取地球引力场提供者。
+        使用EGM2008模型获取地球引力场提供者（90x90阶）。
         结果会被缓存以避免重复加载。
 
         Args:
@@ -330,7 +330,7 @@ class OrekitJavaBridge:
                 logger.warning(f"Failed to load gravity field data: {e}")
                 raise OrbitPropagationError(
                     f"无法加载引力场数据: {e}. "
-                    f"请确保EGM96数据文件已安装在 {self._data_root_dir}/EGM96/"
+                    f"请确保EGM2008数据文件已安装在 {self._data_root_dir}/potential/egm-format/"
                 ) from e
 
         return self._cached_frames[cache_key]
@@ -491,7 +491,7 @@ class OrekitJavaBridge:
             config: 引力场配置
             frame: 坐标系
         """
-        model = config.get('model', 'EGM96')
+        model = config.get('model', 'EGM2008')
         degree = config.get('degree', 36)
         order = config.get('order', 36)
 
