@@ -2300,7 +2300,25 @@
         50
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-BEIJING-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-BEIJING-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-SANYA",
@@ -2311,7 +2329,25 @@
         10
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-SANYA-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-SANYA-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-KUNMING",
@@ -2322,7 +2358,25 @@
         1900
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-KUNMING-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-KUNMING-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-KASHI",
@@ -2333,7 +2387,25 @@
         1300
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-KASHI-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-KASHI-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-MUDANJIANG",
@@ -2344,7 +2416,25 @@
         240
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-MUDANJIANG-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-MUDANJIANG-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-XIAN",
@@ -2355,7 +2445,25 @@
         400
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-XIAN-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-XIAN-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-LHASA",
@@ -2366,7 +2474,25 @@
         3650
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-LHASA-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-LHASA-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-URUMQI",
@@ -2377,7 +2503,25 @@
         800
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-URUMQI-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-URUMQI-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-SHANGHAI",
@@ -2388,7 +2532,25 @@
         10
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-SHANGHAI-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-SHANGHAI-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-GUANGZHOU",
@@ -2399,7 +2561,25 @@
         20
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-GUANGZHOU-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-GUANGZHOU-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-HARBIN",
@@ -2410,7 +2590,25 @@
         150
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-HARBIN-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-HARBIN-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     },
     {
       "id": "GS-CHENGDU",
@@ -2421,7 +2619,25 @@
         500
       ],
       "min_elevation": 5.0,
-      "data_rate": 500.0
+      "data_rate": 500.0,
+      "antennas": [
+        {
+          "id": "GS-CHENGDU-ANT-01",
+          "name": "主天线",
+          "data_rate": 300.0,
+          "frequency_band": "X",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        },
+        {
+          "id": "GS-CHENGDU-ANT-02",
+          "name": "备用天线",
+          "data_rate": 150.0,
+          "frequency_band": "S",
+          "max_elevation": 90.0,
+          "min_elevation": 5.0
+        }
+      ]
     }
   ],
   "targets": [
