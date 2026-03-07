@@ -469,11 +469,14 @@ class SAScheduler(BaseScheduler):
     def _select_imaging_mode(self, sat: Any):
         """选择成像模式"""
         from core.models import ImagingMode
-        modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
-        if not modes:
+        try:
+            modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
+            if not modes or not hasattr(modes, '__getitem__'):
+                return ImagingMode.PUSH_BROOM
+            mode = modes[0]
+            return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+        except (TypeError, AttributeError, IndexError):
             return ImagingMode.PUSH_BROOM
-        mode = modes[0]
-        return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
 
     def _is_time_feasible(
         self,
@@ -585,12 +588,22 @@ class SAScheduler(BaseScheduler):
                 # 更新最后任务目标跟踪
                 sat_last_target[sat_idx] = task
 
+                # 计算正确的成像开始和结束时间
+                # imaging_start应考虑机动时间（从前一任务结束到当前任务开始）
+                imaging_start = feasible_window.start_time + timedelta(seconds=slew_time_seconds)
+                imaging_end = imaging_start + timedelta(seconds=duration)
+
+                # 确保不超出窗口结束时间
+                if imaging_end > feasible_window.end_time:
+                    imaging_end = feasible_window.end_time
+                    imaging_start = imaging_end - timedelta(seconds=duration)
+
                 scheduled_task = ScheduledTask(
                     task_id=task_id,
                     satellite_id=sat.id,
                     target_id=target_id,
-                    imaging_start=feasible_window.start_time,
-                    imaging_end=feasible_window.end_time,
+                    imaging_start=imaging_start,
+                    imaging_end=imaging_end,
                     imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
                     slew_angle=slew_angle,
                     slew_time=slew_time_seconds,
@@ -600,9 +613,7 @@ class SAScheduler(BaseScheduler):
                     storage_after=sat_resources[sat_idx]['storage']
                 )
                 scheduled_tasks.append(scheduled_task)
-                sat_task_times[sat_idx].append(
-                    (feasible_window.start_time, feasible_window.end_time)
-                )
+                sat_task_times[sat_idx].append((imaging_start, imaging_end))
             else:
                 # 确定失败原因
                 has_window = any(

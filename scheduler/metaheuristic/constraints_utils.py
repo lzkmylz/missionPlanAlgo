@@ -14,6 +14,9 @@ from scheduler.base_scheduler import ScheduledTask, TaskFailureReason
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from scheduler.constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.constraints.saa_constraint_checker import SAAConstraintChecker
+from scheduler.constraints import UnifiedSpatiotemporalChecker, SpatiotemporalCheckResult
+from scheduler.constraints import UnifiedManeuverChecker, ManeuverCheckResult
+from core.dynamics.attitude_manager import AttitudeManagementConfig
 
 logger = logging.getLogger(__name__)
 
@@ -55,18 +58,24 @@ class MetaheuristicConstraintChecker:
         # 约束检查器（延迟初始化）
         self._slew_checker: Optional[SlewConstraintChecker] = None
         self._saa_checker: Optional[SAAConstraintChecker] = None
+        self._unified_checker: Optional[UnifiedSpatiotemporalChecker] = None
+        self._maneuver_checker: Optional[UnifiedManeuverChecker] = None
 
         # 卫星资源使用跟踪
         self._sat_resource_usage: Dict[str, Dict[str, Any]] = {}
 
         # 姿态计算器配置
         self._enable_attitude_calculation = self.config.get('enable_attitude_calculation', True)
+        self._use_unified_constraints = self.config.get('use_unified_constraints', False)
+        self._use_unified_maneuver = self.config.get('use_unified_maneuver', False)
 
     def initialize(self) -> None:
         """初始化约束检查器和资源跟踪"""
         self._initialize_resource_tracking()
         self._initialize_slew_checker()
         self._initialize_saa_checker()
+        self._initialize_unified_checker()
+        self._initialize_maneuver_checker()
 
     def _initialize_resource_tracking(self) -> None:
         """初始化卫星资源使用跟踪"""
@@ -126,6 +135,132 @@ class MetaheuristicConstraintChecker:
 
         for sat in self.mission.satellites:
             self._saa_checker.initialize_satellite(sat)
+
+    def _initialize_unified_checker(self) -> None:
+        """初始化统一时空约束检查器"""
+        if not self._use_unified_constraints:
+            return
+
+        self._unified_checker = UnifiedSpatiotemporalChecker(
+            mission=self.mission,
+            slew_checker=self._slew_checker,
+            use_simplified_slew=self.use_simplified_slew
+        )
+
+    def _initialize_maneuver_checker(self) -> None:
+        """初始化统一机动约束检查器"""
+        if not self._use_unified_maneuver:
+            return
+
+        attitude_config = AttitudeManagementConfig(
+            max_slew_rate=self.config.get('max_slew_rate', 3.0),
+            settling_time=self.config.get('settling_time', 5.0),
+            idle_time_threshold=self.config.get('idle_time_threshold', 300.0),
+            soc_threshold=self.config.get('soc_threshold', 0.30),
+            enable_sun_pointing_optimization=self.config.get('enable_sun_pointing_optimization', True),
+        )
+
+        self._maneuver_checker = UnifiedManeuverChecker(
+            mission=self.mission,
+            config=attitude_config,
+            use_simplified_slew=self.use_simplified_slew
+        )
+
+    def check_maneuver_placement(
+        self,
+        sat_id: str,
+        target: Target,
+        window_start: datetime,
+        window_end: datetime,
+        imaging_duration: float,
+        satellite_position: Tuple[float, float, float],
+        task_id: Optional[str] = None,
+        from_mode: Any = None,
+        to_mode: Any = None
+    ) -> ManeuverCheckResult:
+        """
+        使用统一机动约束检查器检查任务放置
+
+        Args:
+            sat_id: 卫星ID
+            target: 目标对象
+            window_start: 窗口开始时间
+            window_end: 窗口结束时间
+            imaging_duration: 成像时长（秒）
+            satellite_position: 卫星ECEF位置（米）
+            task_id: 任务ID（可选）
+            from_mode: 起始姿态模式（可选）
+            to_mode: 目标姿态模式（可选）
+
+        Returns:
+            ManeuverCheckResult: 机动约束检查结果
+        """
+        if self._maneuver_checker is None:
+            logger.warning("Maneuver checker not initialized, using legacy checks")
+            # 返回一个模拟的不可行结果
+            return ManeuverCheckResult(
+                feasible=False,
+                conflict_reason="Maneuver checker not initialized"
+            )
+
+        from core.dynamics.attitude_mode import AttitudeMode
+
+        # 转换姿态模式
+        actual_from_mode = from_mode if from_mode else AttitudeMode.NADIR_POINTING
+        actual_to_mode = to_mode if to_mode else AttitudeMode.IMAGING
+
+        return self._maneuver_checker.check_maneuver_placement(
+            satellite_id=sat_id,
+            target=target,
+            window_start=window_start,
+            window_end=window_end,
+            imaging_duration=imaging_duration,
+            satellite_position=satellite_position,
+            task_id=task_id,
+            from_mode=actual_from_mode,
+            to_mode=actual_to_mode
+        )
+
+    def commit_maneuver_task(
+        self,
+        sat_id: str,
+        task_id: str,
+        target_id: str,
+        actual_start: datetime,
+        actual_end: datetime,
+        target: Optional[Target] = None,
+        end_mode: Any = None
+    ) -> None:
+        """
+        提交任务到统一机动约束检查器
+
+        Args:
+            sat_id: 卫星ID
+            task_id: 任务ID
+            target_id: 目标ID
+            actual_start: 实际开始时间
+            actual_end: 实际结束时间
+            target: 目标对象（可选）
+            end_mode: 任务结束姿态模式（可选）
+        """
+        if self._maneuver_checker is not None:
+            from core.dynamics.attitude_mode import AttitudeMode
+            actual_end_mode = end_mode if end_mode else AttitudeMode.NADIR_POINTING
+
+            self._maneuver_checker.commit_task(
+                satellite_id=sat_id,
+                task_id=task_id,
+                target_id=target_id,
+                actual_start=actual_start,
+                actual_end=actual_end,
+                target=target,
+                end_mode=actual_end_mode
+            )
+
+    def reset_maneuver_checker(self) -> None:
+        """重置统一机动约束检查器状态"""
+        if self._maneuver_checker is not None:
+            self._maneuver_checker.reset()
 
     def check_task_feasibility(
         self,
@@ -325,6 +460,163 @@ class MetaheuristicConstraintChecker:
                 return True
         return False
 
+    def check_task_placement(
+        self,
+        sat_id: str,
+        target: Target,
+        window_start: datetime,
+        window_end: datetime,
+        imaging_duration: float,
+        task_id: Optional[str] = None
+    ) -> SpatiotemporalCheckResult:
+        """
+        使用统一时空约束检查器检查任务放置
+
+        这是推荐的约束检查方法，它将以下约束统一考虑：
+        - 时间窗口冲突（与已调度任务）
+        - 机动能力约束
+        - 机动时间约束
+
+        Args:
+            sat_id: 卫星ID
+            target: 目标对象
+            window_start: 窗口开始时间
+            window_end: 窗口结束时间
+            imaging_duration: 成像时长（秒）
+            task_id: 任务ID（可选，用于冲突诊断）
+
+        Returns:
+            SpatiotemporalCheckResult: 统一约束检查结果
+        """
+        if self._unified_checker is None:
+            # 如果统一检查器未初始化，使用旧的分别检查方法
+            logger.warning("Unified checker not initialized, using separate checks")
+            return self._check_task_placement_legacy(
+                sat_id, target, window_start, window_end, imaging_duration, task_id
+            )
+
+        return self._unified_checker.check_task_placement(
+            satellite_id=sat_id,
+            target=target,
+            window_start=window_start,
+            window_end=window_end,
+            imaging_duration=imaging_duration,
+            task_id=task_id
+        )
+
+    def _check_task_placement_legacy(
+        self,
+        sat_id: str,
+        target: Target,
+        window_start: datetime,
+        window_end: datetime,
+        imaging_duration: float,
+        task_id: Optional[str] = None
+    ) -> SpatiotemporalCheckResult:
+        """使用旧方式分别检查约束（备用方法）"""
+        # 检查机动可行性
+        slew_result = self._check_slew_constraint(sat_id, target, window_start, imaging_duration)
+        if not slew_result or not slew_result.feasible:
+            return SpatiotemporalCheckResult(
+                feasible=False,
+                slew_feasible=False,
+                conflict_reason="Slew not feasible"
+            )
+
+        # 计算实际时间
+        actual_start = slew_result.actual_start
+        actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+        # 检查窗口边界
+        if actual_end > window_end:
+            return SpatiotemporalCheckResult(
+                feasible=False,
+                actual_start=actual_start,
+                actual_end=actual_end,
+                slew_angle=slew_result.slew_angle,
+                slew_time=slew_result.slew_time,
+                window_available=False,
+                conflict_reason=f"Window too short: need {imaging_duration}s"
+            )
+
+        # 检查SAA约束
+        if not self._check_saa_constraint(sat_id, actual_start, actual_end):
+            return SpatiotemporalCheckResult(
+                feasible=False,
+                actual_start=actual_start,
+                actual_end=actual_end,
+                slew_angle=slew_result.slew_angle,
+                slew_time=slew_result.slew_time,
+                conflict_reason="SAA constraint violation"
+            )
+
+        # 检查时间冲突
+        if self._has_time_conflict(sat_id, actual_start, actual_end):
+            return SpatiotemporalCheckResult(
+                feasible=False,
+                actual_start=actual_start,
+                actual_end=actual_end,
+                slew_angle=slew_result.slew_angle,
+                slew_time=slew_result.slew_time,
+                conflict_reason="Time conflict with existing task"
+            )
+
+        # 所有检查通过
+        return SpatiotemporalCheckResult(
+            feasible=True,
+            actual_start=actual_start,
+            actual_end=actual_end,
+            slew_angle=slew_result.slew_angle,
+            slew_time=slew_result.slew_time,
+            window_available=True,
+            slew_feasible=True
+        )
+
+    def commit_task_placement(
+        self,
+        sat_id: str,
+        task_id: str,
+        target_id: str,
+        actual_start: datetime,
+        actual_end: datetime,
+        target: Optional[Target] = None
+    ) -> None:
+        """
+        提交任务到统一约束检查器
+
+        在确认任务可行后，调用此方法更新检查器的内部状态，
+        使后续的任务检查能正确考虑此任务。
+
+        Args:
+            sat_id: 卫星ID
+            task_id: 任务ID
+            target_id: 目标ID
+            actual_start: 实际开始时间
+            actual_end: 实际结束时间
+            target: 目标对象（可选）
+        """
+        if self._unified_checker is not None:
+            self._unified_checker.commit_task(
+                satellite_id=sat_id,
+                task_id=task_id,
+                target_id=target_id,
+                actual_start=actual_start,
+                actual_end=actual_end,
+                target=target
+            )
+
+        # 同时更新资源跟踪
+        if target:
+            imaging_mode = self._select_imaging_mode(
+                self.mission.get_satellite_by_id(sat_id), target
+            )
+            self.update_resource_usage(sat_id, target, imaging_mode, actual_start, actual_end)
+
+    def reset_unified_checker(self) -> None:
+        """重置统一约束检查器状态"""
+        if self._unified_checker is not None:
+            self._unified_checker.reset()
+
     def update_resource_usage(
         self,
         sat_id: str,
@@ -512,6 +804,8 @@ class MetaheuristicConstraintChecker:
     def reset(self) -> None:
         """重置资源使用状态（用于重新评估解）"""
         self._initialize_resource_tracking()
+        self.reset_unified_checker()
+        self.reset_maneuver_checker()
 
     def get_resource_usage(self, sat_id: str) -> Dict[str, Any]:
         """获取卫星资源使用情况"""

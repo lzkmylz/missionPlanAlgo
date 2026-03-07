@@ -469,11 +469,14 @@ class GAScheduler(BaseScheduler):
     def _select_imaging_mode(self, sat: Any):
         """选择成像模式"""
         from core.models import ImagingMode
-        modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
-        if not modes:
+        try:
+            modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
+            if not modes or not hasattr(modes, '__getitem__'):
+                return ImagingMode.PUSH_BROOM
+            mode = modes[0]
+            return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+        except (TypeError, AttributeError, IndexError):
             return ImagingMode.PUSH_BROOM
-        mode = modes[0]
-        return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
 
     def _is_time_feasible(
         self,

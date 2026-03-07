@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from collections import deque
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
+from payload.imaging_time_calculator import ImagingTimeCalculator
 from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 from .constraints_utils import MetaheuristicConstraintChecker
@@ -106,6 +107,13 @@ class TabuScheduler(BaseScheduler):
         # 资源约束配置
         self.consider_power = config.get('consider_power', True)
         self.consider_storage = config.get('consider_storage', True)
+
+        # 初始化成像时间计算器
+        self._imaging_calculator = ImagingTimeCalculator(
+            min_duration=config.get('min_imaging_duration'),
+            max_duration=config.get('max_imaging_duration'),
+            default_duration=config.get('default_imaging_duration')
+        )
 
     def _validate_positive_int(self, value: int, name: str) -> int:
         """验证正整数参数"""
@@ -511,6 +519,8 @@ class TabuScheduler(BaseScheduler):
         }
         # Track last scheduled target per satellite for slew calculation
         sat_last_target: Dict[int, Any] = {}
+        # Initialize resource tracking
+        self._sat_resources = {i: 0.0 for i in range(self.sat_count)}
 
         for task_idx, sat_idx in enumerate(solution.assignment):
             if task_idx >= len(self.tasks):
@@ -564,29 +574,52 @@ class TabuScheduler(BaseScheduler):
                     break
 
             if feasible_window:
+                # 计算成像时长
+                imaging_mode = self._select_imaging_mode(sat)
+                duration = self._imaging_calculator.calculate(task, imaging_mode)
+
                 # 计算动态机动时间和角度 - 使用基类统一方法
                 prev_target = sat_last_target.get(sat_idx)
                 slew_angle, slew_time_seconds = self._calculate_slew_angle_and_time(
                     sat.id, prev_target, task
                 )
 
+                # 计算资源消耗（固存）
+                storage_before = self._calculate_storage_before(sat_idx)
+                storage_needed = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, getattr(sat.capabilities, 'data_rate', 300.0)
+                )
+                storage_after = storage_before + storage_needed
+
                 # 更新最后任务目标跟踪
                 sat_last_target[sat_idx] = task
+
+                # 更新资源跟踪
+                self._update_sat_resources(sat_idx, storage_after)
+
+                # 计算正确的成像开始和结束时间
+                imaging_start = feasible_window.start_time + timedelta(seconds=slew_time_seconds)
+                imaging_end = imaging_start + timedelta(seconds=duration)
+
+                # 确保不超出窗口结束时间
+                if imaging_end > feasible_window.end_time:
+                    imaging_end = feasible_window.end_time
+                    imaging_start = imaging_end - timedelta(seconds=duration)
 
                 scheduled_task = ScheduledTask(
                     task_id=task_id,
                     satellite_id=sat.id,
                     target_id=target_id,
-                    imaging_start=feasible_window.start_time,
-                    imaging_end=feasible_window.end_time,
+                    imaging_start=imaging_start,
+                    imaging_end=imaging_end,
                     imaging_mode="push_broom",
                     slew_angle=slew_angle,
-                    slew_time=slew_time_seconds
+                    slew_time=slew_time_seconds,
+                    storage_before=storage_before,
+                    storage_after=storage_after
                 )
                 scheduled_tasks.append(scheduled_task)
-                sat_task_times[sat_idx].append(
-                    (feasible_window.start_time, feasible_window.end_time)
-                )
+                sat_task_times[sat_idx].append((imaging_start, imaging_end))
             else:
                 self._record_failure(
                     task_id=task_id,
@@ -596,6 +629,30 @@ class TabuScheduler(BaseScheduler):
                 unscheduled[task_id] = self._failure_log[-1]
 
         return scheduled_tasks, unscheduled
+
+    def _calculate_storage_before(self, sat_idx: int) -> float:
+        """计算卫星当前存储使用量"""
+        if not hasattr(self, '_sat_resources'):
+            self._sat_resources = {}
+        return self._sat_resources.get(sat_idx, 0.0)
+
+    def _update_sat_resources(self, sat_idx: int, storage_after: float) -> None:
+        """更新卫星资源跟踪"""
+        if not hasattr(self, '_sat_resources'):
+            self._sat_resources = {}
+        self._sat_resources[sat_idx] = storage_after
+
+    def _select_imaging_mode(self, sat: Any):
+        """选择成像模式"""
+        from core.models import ImagingMode
+        try:
+            modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
+            if not modes or not hasattr(modes, '__getitem__'):
+                return ImagingMode.PUSH_BROOM
+            mode = modes[0]
+            return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+        except (TypeError, AttributeError, IndexError):
+            return ImagingMode.PUSH_BROOM
 
     def _calculate_makespan(self, scheduled_tasks: List[ScheduledTask]) -> float:
         """计算总完成时间"""
