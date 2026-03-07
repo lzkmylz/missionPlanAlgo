@@ -170,7 +170,30 @@ OptimizedVisibilityCalculator
 
 ### 1. 安装依赖
 
-#### 1.1 克隆项目
+#### 1.1 安装 Git LFS（必需）
+
+本项目使用 [Git LFS](https://git-lfs.github.com/) 管理大文件（Java依赖库、计算输出数据）。**克隆前必须安装 Git LFS**。
+
+**安装 Git LFS：**
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install git-lfs
+
+# macOS
+brew install git-lfs
+
+# Windows
+# 下载安装程序：https://git-lfs.github.com/
+```
+
+**初始化 Git LFS：**
+
+```bash
+git lfs install
+```
+
+#### 1.2 克隆项目
 
 ```bash
 git clone <repository-url>
@@ -430,6 +453,33 @@ python -m experiments.runner \
 ---
 
 ## 常见问题
+
+### Q: Git LFS 文件拉取失败怎么办？
+
+**A:** 如果使用 `git clone` 后，Java 库文件或输出数据文件显示为指针文件（1-2KB），说明 Git LFS 文件未正确下载。
+
+**解决方案：**
+
+```bash
+# 确保已安装并初始化 Git LFS
+git lfs install
+
+# 拉取所有 LFS 文件
+git lfs fetch
+git lfs checkout
+
+# 或克隆时直接拉取 LFS 文件
+git lfs clone <repository-url>
+```
+
+**常见问题：**
+
+1. **Git LFS 未安装**：运行 `git lfs install` 初始化
+2. **网络超时**：使用 SSH 保活参数：
+   ```bash
+   GIT_SSH_COMMAND="ssh -o ServerAliveInterval=60" git lfs fetch
+   ```
+3. **配额超限**：GitHub LFS 免费额度为 1GB/月，本项目依赖库约 30MB
 
 ### Q: 下载脚本失败怎么办？
 
