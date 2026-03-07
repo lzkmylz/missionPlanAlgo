@@ -8,17 +8,17 @@
 - run_large_scale_comparison.py
 
 用法:
-    # 单一算法模式 (默认)
+    # 单一算法模式 (默认启用频次和数传)
     python scripts/run_scheduler.py -c cache.json -s scenario.json -a greedy
 
     # 对比模式
     python scripts/run_scheduler.py -c cache.json -s scenario.json --mode compare -a greedy,ga,edd
 
-    # 启用频次需求
-    python scripts/run_scheduler.py -c cache.json -s scenario.json --frequency
+    # 禁用频次需求
+    python scripts/run_scheduler.py -c cache.json -s scenario.json --no-frequency
 
-    # 启用数传规划
-    python scripts/run_scheduler.py -c cache.json -s scenario.json --downlink
+    # 禁用数传规划
+    python scripts/run_scheduler.py -c cache.json -s scenario.json --no-downlink
 
     # GA算法指定参数
     python scripts/run_scheduler.py -c cache.json -s scenario.json -a ga --generations 200
@@ -61,7 +61,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 基本用法 - 使用贪心算法
+  # 基本用法 - 使用贪心算法 (默认启用频次和数传)
   python scripts/run_scheduler.py -c cache.json -s scenario.json
 
   # 使用遗传算法
@@ -70,8 +70,9 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
   # 多算法对比
   python scripts/run_scheduler.py -c cache.json -s scenario.json --mode compare -a greedy,ga,edd
 
-  # 启用频次需求和数传规划
-  python scripts/run_scheduler.py -c cache.json -s scenario.json --frequency --downlink
+  # 禁用频次需求或数传规划
+  python scripts/run_scheduler.py -c cache.json -s scenario.json --no-frequency
+  python scripts/run_scheduler.py -c cache.json -s scenario.json --no-downlink
 
   # 简化模式 (跳过昂贵计算)
   python scripts/run_scheduler.py -c cache.json -s scenario.json --simplified
@@ -133,12 +134,26 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         '--frequency',
         action='store_true',
-        help='启用观测频次需求处理'
+        default=True,
+        help='启用观测频次需求处理 (默认: 启用)'
     )
     parser.add_argument(
         '--downlink',
         action='store_true',
-        help='启用地面站数传规划'
+        default=True,
+        help='启用地面站数传规划 (默认: 启用)'
+    )
+    parser.add_argument(
+        '--no-frequency',
+        dest='frequency',
+        action='store_false',
+        help='禁用观测频次需求处理'
+    )
+    parser.add_argument(
+        '--no-downlink',
+        dest='downlink',
+        action='store_false',
+        help='禁用地面站数传规划'
     )
     parser.add_argument(
         '--simplified',

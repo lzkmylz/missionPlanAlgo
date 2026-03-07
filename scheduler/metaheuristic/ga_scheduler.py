@@ -14,6 +14,7 @@ from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskF
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
+from .constraints_utils import MetaheuristicConstraintChecker
 
 
 @dataclass
@@ -88,8 +89,14 @@ class GAScheduler(BaseScheduler):
         self.task_count = 0
         self.sat_count = 0
 
-        # 初始化成像时间计算器和功率配置文件
-        # 使用ImagingTimeCalculator的默认值（基于实际卫星数据）
+        # 约束检查器（延迟初始化）
+        self._constraint_checker: Optional[MetaheuristicConstraintChecker] = None
+
+        # 姿态角计算配置
+        self._enable_attitude_calculation = config.get('enable_attitude_calculation', True)
+        self._use_simplified_slew = config.get('use_simplified_slew', False)
+
+        # 初始化成像时间计算器和功率配置文件（用于向后兼容）
         self._imaging_calculator = ImagingTimeCalculator(
             min_duration=config.get('min_imaging_duration'),
             max_duration=config.get('max_imaging_duration'),
@@ -97,9 +104,9 @@ class GAScheduler(BaseScheduler):
         )
         self._power_profile = PowerProfile(config.get('power_coefficients'))
 
-        # Slew calculators per satellite (initialized in schedule())
+        # Slew calculators per satellite (用于向后兼容)
         self._slew_calculators: Dict[str, SlewCalculator] = {}
-        self._last_task_target: Dict[str, Any] = {}  # Track last scheduled target per satellite
+        self._last_task_target: Dict[str, Any] = {}
 
     def _validate_positive_int(self, value: int, name: str) -> int:
         """验证正整数参数"""
@@ -125,6 +132,8 @@ class GAScheduler(BaseScheduler):
             'random_seed': self.random_seed,
             'consider_power': self.consider_power,
             'consider_storage': self.consider_storage,
+            'enable_attitude_calculation': self._enable_attitude_calculation,
+            'use_simplified_slew': self._use_simplified_slew,
         }
 
     def schedule(self) -> ScheduleResult:
@@ -152,22 +161,17 @@ class GAScheduler(BaseScheduler):
         if self.sat_count == 0:
             return self._build_empty_result()
 
-        # Initialize slew constraint checker
-        self._initialize_slew_checker()
-
-        # Initialize SAA constraint checker
-        self._initialize_saa_checker()
-
-        # Keep _slew_calculators for backward compatibility in _decode_solution
-        self._slew_calculators = {}
-        self._last_task_target = {}
-        for sat in self.satellites:
-            agility = getattr(sat.capabilities, 'agility', {})
-            self._slew_calculators[sat.id] = SlewCalculator(
-                max_slew_rate=agility.get('max_slew_rate', 3.0) if agility else 3.0,
-                max_slew_angle=sat.capabilities.max_off_nadir,
-                settling_time=agility.get('settling_time', 5.0) if agility else 5.0
-            )
+        # 初始化约束检查器
+        self._constraint_checker = MetaheuristicConstraintChecker(
+            self.mission,
+            config={
+                'consider_power': self.consider_power,
+                'consider_storage': self.consider_storage,
+                'use_simplified_slew': self._use_simplified_slew,
+                'enable_attitude_calculation': self._enable_attitude_calculation,
+            }
+        )
+        self._constraint_checker.initialize()
 
         # 初始化种群
         population = self._initialize_population()
@@ -557,26 +561,15 @@ class GAScheduler(BaseScheduler):
         self,
         individual: GAIndividual
     ) -> Tuple[List[ScheduledTask], Dict[str, Any]]:
-        """将染色体解码为调度方案"""
+        """将染色体解码为调度方案，使用完整的约束检查"""
         from ..frequency_utils import ObservationTask
-        import math
 
         scheduled_tasks = []
         unscheduled = {}
 
-        sat_task_times: Dict[int, List[Tuple[datetime, datetime]]] = {
-            i: [] for i in range(self.sat_count)
-        }
-        # 跟踪资源使用情况
-        sat_resources: Dict[int, Dict[str, float]] = {
-            i: {
-                'power': sat.capabilities.power_capacity if hasattr(sat.capabilities, 'power_capacity') else 2800.0,
-                'storage': 0.0
-            }
-            for i, sat in enumerate(self.satellites)
-        }
-        # Track last scheduled target per satellite for slew calculation
-        sat_last_target: Dict[int, Any] = {}
+        # 重置约束检查器状态
+        if self._constraint_checker:
+            self._constraint_checker.reset()
 
         for task_idx, sat_idx in enumerate(individual.chromosome):
             if task_idx >= len(self.tasks):
@@ -599,7 +592,7 @@ class GAScheduler(BaseScheduler):
 
             sat = self.satellites[sat_idx]
 
-            # 获取可见窗口 (ObservationTask使用target_id)
+            # 获取可见窗口
             if self.window_cache:
                 windows = self.window_cache.get_windows(sat.id, target_id)
             else:
@@ -614,66 +607,46 @@ class GAScheduler(BaseScheduler):
                 unscheduled[task_id] = self._failure_log[-1]
                 continue
 
-            # 查找可行窗口（考虑时间和资源约束）
-            feasible_window = None
+            # 使用约束检查器检查每个窗口
+            feasible = False
             for window in windows:
-                if self._is_time_feasible(sat_idx, window.start_time, window.end_time, sat_task_times):
-                    if self._check_resource_constraints(sat_idx, sat, task, sat_resources):
-                        feasible_window = window
-                        break
+                if not self._constraint_checker:
+                    continue
 
-            if feasible_window:
-                # 计算资源消耗
-                imaging_mode = self._select_imaging_mode(sat)
-
-                power_before = sat_resources[sat_idx]['power']
-                storage_before = sat_resources[sat_idx]['storage']
-
-                # 计算动态机动时间和角度 - 使用基类统一方法
-                prev_target = sat_last_target.get(sat_idx)
-                slew_angle, slew_time_seconds = self._calculate_slew_angle_and_time(
-                    sat.id, prev_target, task
+                is_feasible, reason, info = self._constraint_checker.check_task_feasibility(
+                    sat.id, task, window.start_time, window.end_time
                 )
 
-                # 更新资源使用
-                self._update_resource_usage(sat_idx, sat, task, sat_resources)
+                if is_feasible and info:
+                    # 创建调度任务
+                    imaging_mode = info['imaging_mode']
+                    slew_result = info['slew_result']
+                    actual_start = info['actual_start']
+                    actual_end = info['actual_end']
 
-                # 更新最后任务目标跟踪
-                sat_last_target[sat_idx] = task
+                    scheduled_task = self._constraint_checker.create_scheduled_task(
+                        task_id=task_id,
+                        sat_id=sat.id,
+                        target=task,
+                        imaging_mode=imaging_mode,
+                        actual_start=actual_start,
+                        actual_end=actual_end,
+                        slew_result=slew_result
+                    )
 
-                scheduled_task = ScheduledTask(
-                    task_id=task_id,
-                    satellite_id=sat.id,
-                    target_id=target_id,
-                    imaging_start=feasible_window.start_time,
-                    imaging_end=feasible_window.end_time,
-                    imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
-                    slew_angle=slew_angle,
-                    slew_time=slew_time_seconds,
-                    power_before=power_before,
-                    power_after=sat_resources[sat_idx]['power'],
-                    storage_before=storage_before,
-                    storage_after=sat_resources[sat_idx]['storage']
-                )
-                scheduled_tasks.append(scheduled_task)
-                sat_task_times[sat_idx].append(
-                    (feasible_window.start_time, feasible_window.end_time)
-                )
-            else:
+                    scheduled_tasks.append(scheduled_task)
+                    feasible = True
+                    break
+
+            if not feasible:
                 # 确定失败原因
-                has_window = any(
-                    self._is_time_feasible(sat_idx, w.start_time, w.end_time, sat_task_times)
-                    for w in windows
-                )
-                if has_window:
-                    # 有窗口但无法调度，可能是资源约束
-                    reason = TaskFailureReason.POWER_CONSTRAINT
-                else:
-                    reason = TaskFailureReason.TIME_CONFLICT
+                failure_reason = TaskFailureReason.NO_VISIBLE_WINDOW
+                if self._constraint_checker:
+                    failure_reason = self._constraint_checker.get_failure_reason(task)
 
                 self._record_failure(
                     task_id=task_id,
-                    reason=reason,
+                    reason=failure_reason,
                     detail=f"No feasible time window for satellite {sat.id}"
                 )
                 unscheduled[task_id] = self._failure_log[-1]

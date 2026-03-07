@@ -12,8 +12,8 @@
     # 逐对计算模式 (较慢但更详细)
     python scripts/compute_visibility.py -s scenario.json --mode pairwise
 
-    # 自定义参数
-    python scripts/compute_visibility.py -s scenario.json --coarse-step 600 --fine-step 120
+    # 自定义参数 (默认: 粗扫描5秒, 精化1秒)
+    python scripts/compute_visibility.py -s scenario.json --coarse-step 10 --fine-step 2
 
     # 指定输出路径
     python scripts/compute_visibility.py -s scenario.json -o results/my_visibility.json
@@ -54,8 +54,8 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
   # 逐对计算模式
   python scripts/compute_visibility.py -s scenario.json --mode pairwise
 
-  # 自定义扫描步长
-  python scripts/compute_visibility.py -s scenario.json --coarse-step 600 --fine-step 120
+  # 自定义扫描步长 (默认: 粗扫描5秒, 精化1秒)
+  python scripts/compute_visibility.py -s scenario.json --coarse-step 10 --fine-step 2
 
   # 指定最小仰角
   python scripts/compute_visibility.py -s scenario.json --min-elevation 10
@@ -77,18 +77,18 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help='计算模式: batch=批量计算(快,默认), pairwise=逐对计算(慢)'
     )
 
-    # 计算参数
+    # 计算参数 (与Java后端保持一致)
     parser.add_argument(
         '--coarse-step',
         type=float,
-        default=300.0,
-        help='粗扫描步长(秒)，默认300秒(5分钟)'
+        default=5.0,
+        help='粗扫描步长(秒)，默认5秒'
     )
     parser.add_argument(
         '--fine-step',
         type=float,
-        default=60.0,
-        help='精化步长(秒)，默认60秒(1分钟)'
+        default=1.0,
+        help='精化步长(秒)，默认1秒'
     )
     parser.add_argument(
         '--min-elevation',
@@ -327,8 +327,8 @@ def compute_visibility(
     scenario_path: str,
     output_path: str,
     mode: str = 'batch',
-    coarse_step: float = 300.0,
-    fine_step: float = 60.0,
+    coarse_step: float = 5.0,
+    fine_step: float = 1.0,
     min_elevation: float = 5.0
 ) -> Dict[str, Any]:
     """

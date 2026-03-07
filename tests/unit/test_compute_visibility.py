@@ -68,8 +68,8 @@ class TestBuildComputationConfig:
         args = parse_args(['--scenario', 'scenario.json'])
         config = build_computation_config(args)
 
-        assert config.coarse_step_seconds == 300.0
-        assert config.fine_step_seconds == 60.0
+        assert config.coarse_step_seconds == 5.0
+        assert config.fine_step_seconds == 1.0
         assert config.min_elevation_degrees == 5.0
 
     def test_build_config_custom(self):

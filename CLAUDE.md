@@ -124,6 +124,28 @@ cd java && java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest
 
 ---
 
+## 环境配置
+
+### Python 命令
+| 命令 | 说明 |
+|------|------|
+| `python3` | 调用Python解释器 (注意: 不是 `python`) |
+| `pip3` | 管理Python包 (注意: 不是 `pip`) |
+
+示例:
+```bash
+# 运行脚本
+python3 scripts/run_scheduler.py -c cache.json -s scenario.json
+
+# 查看已安装库
+pip3 list
+
+# 安装依赖
+pip3 install -r requirements.txt
+```
+
+---
+
 ## 重要约束
 
 1. **HPOP强制使用**: 无论TLE还是六根数，最终都用HPOP计算（从场景开始时刻）

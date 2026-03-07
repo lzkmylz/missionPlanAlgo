@@ -14,6 +14,7 @@ from collections import deque
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
+from .constraints_utils import MetaheuristicConstraintChecker
 
 
 @dataclass(order=True)
@@ -95,6 +96,17 @@ class TabuScheduler(BaseScheduler):
         # Slew calculators per satellite (initialized in schedule())
         self._slew_calculators: Dict[str, SlewCalculator] = {}
 
+        # 约束检查器（延迟初始化）
+        self._constraint_checker: Optional[MetaheuristicConstraintChecker] = None
+
+        # 姿态角计算配置
+        self._enable_attitude_calculation = config.get('enable_attitude_calculation', True)
+        self._use_simplified_slew = config.get('use_simplified_slew', False)
+        
+        # 资源约束配置
+        self.consider_power = config.get('consider_power', True)
+        self.consider_storage = config.get('consider_storage', True)
+
     def _validate_positive_int(self, value: int, name: str) -> int:
         """验证正整数参数"""
         if not isinstance(value, int) or value <= 0:
@@ -142,11 +154,17 @@ class TabuScheduler(BaseScheduler):
         if self.sat_count == 0:
             return self._build_empty_result()
 
-        # Initialize slew constraint checker
-        self._initialize_slew_checker()
-
-        # Initialize SAA constraint checker
-        self._initialize_saa_checker()
+        # Initialize constraint checker (includes power, storage, slew, SAA)
+        self._constraint_checker = MetaheuristicConstraintChecker(
+            self.mission,
+            config={
+                'consider_power': self.consider_power,
+                'consider_storage': self.consider_storage,
+                'use_simplified_slew': self._use_simplified_slew,
+                'enable_attitude_calculation': self._enable_attitude_calculation,
+            }
+        )
+        self._constraint_checker.initialize()
 
         # Keep _slew_calculators for backward compatibility in _decode_solution
         self._slew_calculators = {}
