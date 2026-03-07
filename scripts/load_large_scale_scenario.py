@@ -6,7 +6,7 @@
 
 用法:
     python scripts/load_large_scale_scenario.py
-    python scripts/load_large_scale_scenario.py --scenario scenarios/large_scale_experiment.json
+    python scripts/load_large_scale_scenario.py --scenario scenarios/large_scale_frequency.json
 """
 
 import sys
@@ -206,8 +206,8 @@ def main():
     )
     parser.add_argument(
         '--scenario', '-s',
-        default='scenarios/large_scale_experiment.json',
-        help='场景文件路径 (默认: scenarios/large_scale_experiment.json)'
+        default='scenarios/large_scale_frequency.json',
+        help='场景文件路径 (默认: scenarios/large_scale_frequency.json)'
     )
 
     args = parser.parse_args()
