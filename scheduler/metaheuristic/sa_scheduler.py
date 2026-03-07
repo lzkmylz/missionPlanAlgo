@@ -549,11 +549,19 @@ class SAScheduler(BaseScheduler):
                 unscheduled[task_id] = self._failure_log[-1]
                 continue
 
-            # 查找可行窗口（考虑时间和资源约束）
+            # 查找可行窗口（考虑时间、资源和SAA约束）
             feasible_window = None
             for window in windows:
                 if self._is_time_feasible(sat_idx, window.start_time, window.end_time, sat_task_times):
                     if self._check_resource_constraints(sat_idx, sat, task, sat_resources):
+                        # Check SAA constraints
+                        self._ensure_saa_checker_initialized()
+                        if self._saa_checker is not None:
+                            saa_result = self._saa_checker.check_window_feasibility(
+                                sat.id, window.start_time, window.end_time
+                            )
+                            if not saa_result.feasible:
+                                continue
                         feasible_window = window
                         break
 

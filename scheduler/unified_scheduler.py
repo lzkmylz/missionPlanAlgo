@@ -29,6 +29,10 @@ from scheduler.base_scheduler import (
 from scheduler.greedy.greedy_scheduler import GreedyScheduler
 from scheduler.metaheuristic.ga_scheduler import GAScheduler
 from scheduler.greedy.edd_scheduler import EDDScheduler
+from scheduler.metaheuristic.sa_scheduler import SAScheduler
+from scheduler.metaheuristic.aco_scheduler import ACOScheduler
+from scheduler.metaheuristic.pso_scheduler import PSOScheduler
+from scheduler.metaheuristic.tabu_scheduler import TabuScheduler
 from scheduler.ground_station.scheduler import (
     GroundStationScheduler, GroundStationScheduleResult
 )
@@ -85,6 +89,10 @@ class UnifiedScheduler:
         'greedy': GreedyScheduler,
         'ga': GAScheduler,
         'edd': EDDScheduler,
+        'sa': SAScheduler,
+        'aco': ACOScheduler,
+        'pso': PSOScheduler,
+        'tabu': TabuScheduler,
     }
 
     def __init__(

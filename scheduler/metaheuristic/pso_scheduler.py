@@ -453,10 +453,18 @@ class PSOScheduler(BaseScheduler):
                 unscheduled[task_id] = self._failure_log[-1]
                 continue
 
-            # 查找可行窗口
+            # 查找可行窗口（考虑时间和SAA约束）
             feasible_window = None
             for window in windows:
                 if self._is_time_feasible(sat_idx, window.start_time, window.end_time, sat_task_times):
+                    # Check SAA constraints
+                    self._ensure_saa_checker_initialized()
+                    if self._saa_checker is not None:
+                        saa_result = self._saa_checker.check_window_feasibility(
+                            sat.id, window.start_time, window.end_time
+                        )
+                        if not saa_result.feasible:
+                            continue
                     feasible_window = window
                     break
 
