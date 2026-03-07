@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import time
 import logging
+import os
 
 from core.models import Mission, Satellite, Target
 from core.orbit.visibility.window_cache import VisibilityWindowCache
@@ -131,6 +132,51 @@ class UnifiedScheduler:
         self._imaging_scheduler: Optional[BaseScheduler] = None
         self._ground_station_scheduler: Optional[GroundStationScheduler] = None
         self._target_obs_count: Dict[str, int] = {}
+
+        # 加载预计算轨道数据（如果配置启用）
+        self._load_precomputed_orbits()
+
+    def _load_precomputed_orbits(self) -> None:
+        """加载预计算的轨道数据"""
+        # 检查是否启用
+        if not self.config.get('use_precomputed_orbits', True):
+            logger.info("跳过加载预计算轨道数据（已禁用）")
+            return
+
+        # 获取JSON文件路径
+        json_path = self.config.get('orbit_json_path')
+        if json_path is None:
+            # 尝试从窗口缓存路径推断
+            # 例如: java/output/frequency_scenario/visibility_windows.json
+            # 对应的轨道数据: java/output/frequency_scenario/orbits.json.gz
+            logger.debug("未指定orbit_json_path，跳过加载预计算轨道数据")
+            return
+
+        if not os.path.exists(json_path):
+            logger.warning(f"预计算轨道数据文件不存在: {json_path}")
+            return
+
+        try:
+            from core.dynamics.orbit_batch_propagator import get_batch_propagator
+
+            propagator = get_batch_propagator()
+            if propagator is None:
+                logger.warning("无法获取批量传播器，跳过加载预计算轨道数据")
+                return
+
+            # 获取场景开始时间
+            start_time = self.mission.start_time if hasattr(self.mission, 'start_time') else None
+
+            # 加载预计算数据
+            success = propagator.load_precomputed_orbits(json_path, start_time)
+            if success:
+                logger.info(f"成功加载预计算轨道数据: {json_path}")
+            else:
+                logger.warning(f"加载预计算轨道数据失败: {json_path}")
+
+        except Exception as e:
+            logger.error(f"加载预计算轨道数据时出错: {e}")
+            # 不抛出异常，允许回退到HPOP计算
 
     def schedule(self) -> UnifiedScheduleResult:
         """

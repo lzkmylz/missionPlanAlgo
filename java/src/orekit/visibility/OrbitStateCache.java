@@ -22,6 +22,7 @@ import org.orekit.utils.Constants;
 import org.orekit.utils.IERSConventions;
 import org.orekit.utils.PVCoordinates;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -659,5 +660,12 @@ public class OrbitStateCache {
             total += states.size() * 120L;
         }
         return total;
+    }
+
+    /**
+     * 获取缓存数据（用于导出）
+     */
+    public Map<String, List<OrbitState>> getCache() {
+        return cache;
     }
 }

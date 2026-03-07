@@ -13,6 +13,27 @@ CP := $(CP):lib/hipparchus-geometry-3.0.jar
 CP := $(CP):lib/hipparchus-ode-3.0.jar
 CP := $(CP):lib/json.jar
 
+# Parquet依赖
+CP := $(CP):lib/parquet-common-1.13.1.jar
+CP := $(CP):lib/parquet-format-structures-1.13.1.jar
+CP := $(CP):lib/parquet-column-1.13.1.jar
+CP := $(CP):lib/parquet-encoding-1.13.1.jar
+CP := $(CP):lib/parquet-hadoop-1.13.1.jar
+CP := $(CP):lib/parquet-jackson-1.13.1.jar
+CP := $(CP):lib/hadoop-common-3.3.6.jar
+CP := $(CP):lib/hadoop-mapreduce-client-core-3.3.6.jar
+CP := $(CP):lib/avro-1.11.3.jar
+CP := $(CP):lib/jackson-core-2.15.2.jar
+CP := $(CP):lib/jackson-databind-2.15.2.jar
+CP := $(CP):lib/jackson-annotations-2.15.2.jar
+CP := $(CP):lib/slf4j-api-2.0.9.jar
+CP := $(CP):lib/slf4j-simple-2.0.9.jar
+CP := $(CP):lib/commons-lang3-3.12.0.jar
+CP := $(CP):lib/guava-32.1.3-jre.jar
+CP := $(CP):lib/woodstox-core-6.5.1.jar
+CP := $(CP):lib/stax2-api-4.2.1.jar
+CP := $(CP):lib/commons-collections-3.2.2.jar
+
 # 源代码目录
 SRC_DIR := src/orekit/visibility
 MODEL_DIR := $(SRC_DIR)/model
@@ -41,7 +62,7 @@ help:
 	@echo "  $(GREEN)make help$(NC)    - 显示此帮助"
 
 # 编译所有文件
-build: compile-model compile-cache compile-calculator compile-test
+build: compile-model compile-cache compile-exporter compile-main compile-test
 	@echo "$(GREEN)所有文件编译成功!$(NC)"
 
 # 编译模型类
@@ -65,10 +86,20 @@ compile-cache: compile-initializer
 	@echo "$(YELLOW)编译 OrbitStateCache.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/OrbitStateCache.java
 
+# 编译OrbitDataExporter（依赖OrbitStateCache）
+compile-exporter: compile-cache
+	@echo "$(YELLOW)编译 OrbitDataExporter.java...$(NC)"
+	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/OrbitDataExporter.java
+
 # 编译OptimizedVisibilityCalculator
 compile-calculator: compile-cache
 	@echo "$(YELLOW)编译 OptimizedVisibilityCalculator.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/OptimizedVisibilityCalculator.java
+
+# 编译LargeScaleFrequencyTest（依赖OrbitDataExporter）
+compile-main: compile-exporter compile-calculator
+	@echo "$(YELLOW)编译 LargeScaleFrequencyTest.java...$(NC)"
+	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/LargeScaleFrequencyTest.java
 
 # 编译测试类
 compile-test: compile-calculator

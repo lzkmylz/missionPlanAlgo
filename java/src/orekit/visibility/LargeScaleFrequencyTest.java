@@ -89,6 +89,19 @@ public class LargeScaleFrequencyTest {
             System.out.println("\n[4/4] 持久化数据...");
             persistData(result, satellites, targets, groundStations, requirements);
 
+            // 导出轨道数据到JSON+GZIP（供Python端使用）
+            System.out.println("\n[4/4+] 导出轨道数据到JSON+GZIP...");
+            try {
+                OrbitStateCache orbitCache = calculator.getOrbitCache();
+                OrbitDataExporter exporter = new OrbitDataExporter();
+                String jsonPath = OUTPUT_DIR + "/orbits.json.gz";
+                exporter.exportToJson(orbitCache.getCache(), jsonPath);
+                System.out.println("  轨道数据已导出: " + jsonPath);
+            } catch (Exception e) {
+                System.err.println("  警告: 导出轨道数据失败: " + e.getMessage());
+                e.printStackTrace();
+            }
+
             // 输出统计
             printStatistics(result, satellites, targets, calcTime);
 

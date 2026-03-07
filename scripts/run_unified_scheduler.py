@@ -452,6 +452,15 @@ def main():
         action='store_true',
         help='使用简化模式（跳过昂贵的轨道预计算，速度更快但精度稍低）'
     )
+    parser.add_argument(
+        '--orbit-json',
+        help='预计算轨道数据文件路径 (JSON+GZIP格式，由Java端导出)'
+    )
+    parser.add_argument(
+        '--no-precomputed-orbit',
+        action='store_true',
+        help='禁用预计算轨道数据（强制使用HPOP计算）'
+    )
 
     # 其他
     parser.add_argument(
@@ -548,6 +557,8 @@ def main():
             'enable_downlink': enable_downlink,
             'downlink_config': downlink_config,
             'consider_frequency': not args.no_frequency,
+            'use_precomputed_orbits': not args.no_precomputed_orbit,
+            'orbit_json_path': args.orbit_json,
         }
 
         # 创建并运行调度器

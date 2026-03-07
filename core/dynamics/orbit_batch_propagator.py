@@ -175,6 +175,7 @@ class OrekitBatchPropagator:
         """预计算卫星轨道
 
         批量传播卫星轨道并缓存结果，后续查询使用插值。
+        优先使用预计算的Parquet数据（如果可用）。
 
         Args:
             satellite: 卫星对象
@@ -186,24 +187,31 @@ class OrekitBatchPropagator:
         Returns:
             bool: 计算是否成功
         """
-        if not self._ensure_jvm():
-            return False
-
         sat_id = satellite.id
 
-        # 检查缓存
+        # 1. 优先检查预计算的Parquet数据
+        if not force_recompute and self.has_precomputed_data(sat_id):
+            if self.check_precomputed_coverage(sat_id, start_time, end_time):
+                logger.info(f"Using precomputed orbit from Parquet for {sat_id}")
+                return True
+
+        # 2. 检查内存缓存
         if not force_recompute and sat_id in self._orbit_cache:
             cache = self._orbit_cache[sat_id]
             if cache.start_time <= start_time and cache.end_time >= end_time:
                 logger.debug(f"Using cached orbit for {sat_id}")
                 return True
 
+        # 3. 进行HPOP传播计算
+        if not self._ensure_jvm():
+            return False
+
         try:
             # 挂载线程到 JVM
             ensure_jvm_attached(lambda: None)()
 
             # 批量传播
-            logger.info(f"Precomputing orbit for {sat_id} from {start_time} to {end_time}")
+            logger.info(f"Precomputing orbit via HPOP for {sat_id} from {start_time} to {end_time}")
             timestamps, positions, velocities = self._batch_propagate(
                 satellite, start_time, end_time, time_step
             )
@@ -405,6 +413,63 @@ class OrekitBatchPropagator:
             'cached_satellites': len(self._orbit_cache),
             'total_points': sum(len(cache.timestamps) for cache in self._orbit_cache.values())
         }
+
+    def load_precomputed_orbits(self, json_path: str, start_time: Optional[datetime] = None) -> bool:
+        """从JSON+GZIP文件加载预计算轨道数据
+
+        Args:
+            json_path: JSON+GZIP文件路径
+            start_time: 场景开始时间（用于转换相对时间戳）
+
+        Returns:
+            bool: 加载是否成功
+        """
+        try:
+            from .orbit_data_loader import OrbitDataLoader
+
+            loader = OrbitDataLoader()
+
+            if start_time is not None:
+                caches = loader.load_from_json_with_start_time(json_path, start_time)
+            else:
+                caches = loader.load_from_json(json_path)
+
+            self._orbit_cache.update(caches)
+
+            logger.info(f"从JSON加载了 {len(caches)} 颗卫星的轨道数据")
+            return True
+
+        except Exception as e:
+            logger.error(f"加载预计算轨道数据失败: {e}")
+            return False
+
+    def has_precomputed_data(self, satellite_id: str) -> bool:
+        """检查是否有预计算的轨道数据
+
+        Args:
+            satellite_id: 卫星ID
+
+        Returns:
+            bool: 是否有预计算数据
+        """
+        return satellite_id in self._orbit_cache
+
+    def check_precomputed_coverage(self, satellite_id: str, start_time: datetime, end_time: datetime) -> bool:
+        """检查预计算数据是否覆盖指定时间范围
+
+        Args:
+            satellite_id: 卫星ID
+            start_time: 开始时间
+            end_time: 结束时间
+
+        Returns:
+            bool: 是否完全覆盖
+        """
+        if satellite_id not in self._orbit_cache:
+            return False
+
+        cache = self._orbit_cache[satellite_id]
+        return cache.contains_time(start_time) and cache.contains_time(end_time)
 
 
 # 全局传播器实例
