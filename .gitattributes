@@ -1,3 +1,6 @@
+java/output/**/visibility_windows.json filter=lfs diff=lfs merge=lfs -text
+java/output/**/orbits.json.gz filter=lfs diff=lfs merge=lfs -text
+java/output/**/visibility_windows_with_gs.json filter=lfs diff=lfs merge=lfs -text
 java/lib/*.jar filter=lfs diff=lfs merge=lfs -text
 java/output/**/*.json filter=lfs diff=lfs merge=lfs -text
 java/output/**/*.gz filter=lfs diff=lfs merge=lfs -text
