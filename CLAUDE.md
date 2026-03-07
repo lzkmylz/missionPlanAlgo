@@ -155,6 +155,26 @@ pip3 install -r requirements.txt
 
 ---
 
+## Git LFS大文件推送
+
+### 推送成功的关键 - SSH保活
+当推送大文件到GitHub时，可能会遇到连接超时问题。解决方案是使用SSH保活参数：
+
+```bash
+GIT_SSH_COMMAND="ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30" git push origin main
+```
+
+**参数说明：**
+- `ServerAliveInterval=60`: 每60秒发送一次保活包
+- `ServerAliveCountMax=30`: 最多允许30次保活失败（约30分钟总超时）
+
+**适用场景：**
+- 推送Git LFS大文件（>50MB）
+- 网络连接不稳定
+- 远程主机关闭连接
+
+---
+
 ## 历史关键修复
 
 ### 2026-03-06: 智能轨道初始化器
