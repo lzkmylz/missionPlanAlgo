@@ -50,8 +50,8 @@ class GroundStationScheduler:
 
         Args:
             ground_station_pool: 地面站资源池
-            data_rate_mbps: 默认数据传输速率 (Mbps)
-            storage_capacity_gb: 默认固存容量 (GB)
+            data_rate_mbps: 默认数据传输速率 (Mbps)，可被每颗卫星的独立配置覆盖
+            storage_capacity_gb: 默认固存容量 (GB)，可被每颗卫星的独立配置覆盖
             overflow_threshold: 固存溢出阈值 (0-1)
             link_setup_time_seconds: 链路建立时间（秒）
         """
@@ -63,6 +63,9 @@ class GroundStationScheduler:
 
         # 跟踪每个卫星的固存状态
         self._storage_states: Dict[str, StorageState] = {}
+
+        # 每颗卫星的独立数据率配置 (satellite_id -> data_rate_mbps)
+        self._satellite_data_rates: Dict[str, float] = {}
 
         # 跟踪已分配的数传窗口
         self._downlink_allocations: Dict[Tuple[str, str], List[Tuple[datetime, datetime, str, float]]] = {}
@@ -169,7 +172,10 @@ class GroundStationScheduler:
         if data_size_gb <= 0:
             return None
 
-        downlink_duration = self._calculate_downlink_duration_with_setup(data_size_gb)
+        # 使用卫星独立的数据率计算数传时长
+        downlink_duration = self._calculate_downlink_duration_with_setup(
+            data_size_gb, imaging_task.satellite_id
+        )
         if not self._check_visibility_duration(vis_start, vis_end, downlink_duration):
             return None
 
@@ -190,9 +196,13 @@ class GroundStationScheduler:
         selected_gs, selected_antenna, selected_data_rate = antenna_selection
 
         # 步骤5: 重新计算数传时长并验证
+        # 优先使用卫星独立的数据率
+        satellite_data_rate = self._get_satellite_data_rate(imaging_task.satellite_id)
+        final_data_rate = selected_data_rate if selected_data_rate > 0 else satellite_data_rate
         final_timing = self._recalculate_and_validate_timing(
             downlink_start, downlink_end, vis_end,
-            imaging_task.imaging_end, data_size_gb, selected_data_rate
+            imaging_task.imaging_end, data_size_gb, final_data_rate,
+            imaging_task.satellite_id
         )
         if final_timing is None:
             return None
@@ -205,9 +215,13 @@ class GroundStationScheduler:
         )
 
         # 步骤7: 创建数传任务
+        # 优先使用卫星独立的数据率
+        effective_data_rate = self._get_satellite_data_rate(imaging_task.satellite_id)
+        if selected_data_rate > 0:
+            effective_data_rate = selected_data_rate
         return self._create_downlink_task(
             imaging_task, selected_gs, selected_antenna,
-            downlink_start, downlink_end, data_size_gb, selected_data_rate
+            downlink_start, downlink_end, data_size_gb, effective_data_rate
         )
 
     # ==================== 辅助方法 ====================
@@ -225,10 +239,37 @@ class GroundStationScheduler:
         """计算需要传输的数据量"""
         return imaging_task.storage_after - imaging_task.storage_before
 
-    def _calculate_downlink_duration_with_setup(self, data_size_gb: float) -> float:
-        """计算数传所需时长（含链路建立时间）"""
+    def _get_satellite_data_rate(self, satellite_id: str) -> float:
+        """获取指定卫星的数据传输速率
+
+        优先使用卫星的独立配置，如果没有则使用全局默认值。
+
+        Args:
+            satellite_id: 卫星ID
+
+        Returns:
+            数据传输速率 (Mbps)
+        """
+        # 优先使用卫星独立配置
+        if satellite_id in self._satellite_data_rates:
+            return self._satellite_data_rates[satellite_id]
+        # 回退到全局默认值
+        return self.data_rate_mbps
+
+    def _calculate_downlink_duration_with_setup(self, data_size_gb: float, satellite_id: Optional[str] = None) -> float:
+        """计算数传所需时长（含链路建立时间）
+
+        Args:
+            data_size_gb: 数据大小 (GB)
+            satellite_id: 卫星ID (用于获取该卫星的数据率，可选)
+
+        Returns:
+            数传时长（秒）
+        """
+        # 如果指定了卫星ID，使用该卫星的数据率
+        data_rate = self._get_satellite_data_rate(satellite_id) if satellite_id else self.data_rate_mbps
         return calculate_downlink_duration(
-            data_size_gb, self.data_rate_mbps, self.link_setup_time_seconds
+            data_size_gb, data_rate, self.link_setup_time_seconds
         )
 
     def _check_visibility_duration(
@@ -294,11 +335,27 @@ class GroundStationScheduler:
         vis_end: datetime,
         imaging_end: datetime,
         data_size_gb: float,
-        data_rate: float
+        data_rate: float,
+        satellite_id: Optional[str] = None
     ) -> Optional[Tuple[datetime, datetime]]:
-        """使用实际数据率重新计算数传时长并验证"""
+        """使用实际数据率重新计算数传时长并验证
+
+        Args:
+            downlink_start: 初始数传开始时间
+            downlink_end: 初始数传结束时间
+            vis_end: 可见窗口结束时间
+            imaging_end: 成像结束时间
+            data_size_gb: 数据大小 (GB)
+            data_rate: 数据传输速率 (Mbps)
+            satellite_id: 卫星ID (可选，用于获取卫星特定的数据率)
+
+        Returns:
+            (downlink_start, downlink_end) 元组，如果验证失败则返回 None
+        """
+        # 如果提供了卫星ID，优先使用卫星特定的数据率
+        effective_data_rate = self._get_satellite_data_rate(satellite_id) if satellite_id else data_rate
         downlink_duration = calculate_downlink_duration(
-            data_size_gb, data_rate, self.link_setup_time_seconds
+            data_size_gb, effective_data_rate, self.link_setup_time_seconds
         )
         downlink_end = downlink_start + timedelta(seconds=downlink_duration)
 
