@@ -533,7 +533,20 @@ class Satellite:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Satellite':
         """从字典创建，支持多种轨道配置格式"""
-        sat_type = SatelliteType(data['sat_type'])
+        # 映射简化的sat_type到枚举值
+        sat_type_mapping = {
+            'optical': SatelliteType.OPTICAL_1,
+            'sar': SatelliteType.SAR_1,
+            'optical_1': SatelliteType.OPTICAL_1,
+            'optical_2': SatelliteType.OPTICAL_2,
+            'sar_1': SatelliteType.SAR_1,
+            'sar_2': SatelliteType.SAR_2,
+        }
+        sat_type_str = data['sat_type']
+        if sat_type_str in sat_type_mapping:
+            sat_type = sat_type_mapping[sat_type_str]
+        else:
+            sat_type = SatelliteType(sat_type_str)
 
         orbit_data = data.get('orbit', {})
 

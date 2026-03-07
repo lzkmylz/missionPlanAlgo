@@ -129,12 +129,25 @@ class GroundStation:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'GroundStation':
+        """从字典创建，支持多种格式"""
         antennas = [Antenna.from_dict(ant_data) for ant_data in data.get('antennas', [])]
+
+        # 支持 location 数组格式 [longitude, latitude, altitude?]
+        location = data.get('location')
+        if location and len(location) >= 2:
+            longitude = location[0]
+            latitude = location[1]
+            altitude = location[2] if len(location) > 2 else 0.0
+        else:
+            longitude = data['longitude']
+            latitude = data['latitude']
+            altitude = data.get('altitude', 0.0)
+
         return cls(
             id=data['id'],
             name=data.get('name', ''),
-            longitude=data['longitude'],
-            latitude=data['latitude'],
-            altitude=data.get('altitude', 0.0),
+            longitude=longitude,
+            latitude=latitude,
+            altitude=altitude,
             antennas=antennas,
         )

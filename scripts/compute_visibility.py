@@ -65,7 +65,6 @@ def _compute_with_batch(mission, scenario_path, output_dir, total_start):
         fine_step_seconds=60,
         min_elevation_degrees=0.0,
         use_parallel_propagation=True,
-        fallback_on_error=True,
     )
 
     # 3. 计算时间范围
@@ -96,9 +95,6 @@ def _compute_with_batch(mission, scenario_path, output_dir, total_start):
         print(f"   - Java端耗时: {stats.java_computation_time_ms} ms")
         print(f"   - Python开销: {stats.python_overhead_ms} ms")
         print(f"   - 内存使用: {stats.memory_usage_mb:.1f} MB")
-
-    if result.is_fallback_result:
-        print("   ⚠ 使用了回退模式（逐对计算）")
 
     # 5. 保存结果
     print("\n5. 保存缓存")

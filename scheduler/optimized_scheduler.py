@@ -40,8 +40,7 @@ class OptimizedSchedulerMixin:
         3. 批量计算所有卫星-目标对的可见性
         """
         if not self.use_optimized_visibility:
-            # 回退到基础实现
-            return self._initialize_visibility_base()
+            raise RuntimeError("Optimized visibility is required")
 
         try:
             from core.orbit.visibility.orekit_java_bridge import OrekitJavaBridge
@@ -119,9 +118,7 @@ class OptimizedSchedulerMixin:
 
         except Exception as e:
             logger.error(f"优化版可见性计算失败: {e}")
-            logger.info("回退到基础实现...")
-            self.use_optimized_visibility = False
-            return self._initialize_visibility_base()
+            raise RuntimeError(f"可见性计算失败: {e}") from e
 
     def _initialize_visibility_base(self) -> None:
         """基础可见性计算实现（回退用）"""

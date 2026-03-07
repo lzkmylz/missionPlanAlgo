@@ -152,8 +152,8 @@ class OrekitJavaBridge:
         self._cached_gravity_field: Optional[Any] = None
         self._cached_atmosphere: Optional[Any] = None
 
-        # 数据目录
-        self._data_root_dir = self._config.get('data', {}).get('root_dir', '/usr/local/share/orekit')
+        # 数据目录（从配置获取，配置已从环境变量或项目目录获取默认值）
+        self._data_root_dir = self._config.get('data', {}).get('root_dir')
 
         logger.debug("OrekitJavaBridge initialized")
 

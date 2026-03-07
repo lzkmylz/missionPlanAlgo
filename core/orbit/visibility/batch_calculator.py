@@ -34,7 +34,6 @@ class BatchComputationConfig:
     # 容错控制
     max_retries: int = 3  # 最大重试次数
     retry_delay_seconds: float = 1.0  # 重试间隔
-    fallback_on_error: bool = True  # 错误时回退到逐对计算
 
 
 @dataclass
@@ -60,7 +59,6 @@ class BatchVisibilityResult:
     target_windows: Dict[Tuple[str, str], List[VisibilityWindow]]
     ground_station_windows: Dict[Tuple[str, str], List[VisibilityWindow]]
     computation_stats: Optional[BatchComputationStats]
-    is_fallback_result: bool = False
 
     @property
     def total_window_count(self) -> int:
@@ -116,7 +114,7 @@ class BatchVisibilityCalculator:
 
     设计原则：
     1. 单次JNI调用完成全部计算
-    2. 错误时自动回退到逐对计算
+    2. 错误时直接抛出异常
     3. 详细的性能监控
     """
 
@@ -150,7 +148,7 @@ class BatchVisibilityCalculator:
         """
         config = config or BatchComputationConfig()
 
-        # 尝试批量计算
+        # 执行批量计算
         try:
             result = self._compute_batch(
                 satellites, targets, ground_stations, start_time, end_time, config
@@ -158,11 +156,7 @@ class BatchVisibilityCalculator:
             return result
 
         except Exception as e:
-            logger.warning(f"Batch computation failed: {e}. Falling back to pairwise.")
-            if config.fallback_on_error:
-                return self._fallback_pairwise(
-                    satellites, targets, ground_stations, start_time, end_time, config
-                )
+            logger.error(f"Batch computation failed: {e}")
             raise BatchComputationError(f"Batch computation failed: {e}") from e
 
     def _compute_batch(
@@ -234,54 +228,6 @@ class BatchVisibilityCalculator:
 
         logger.info(f"Batch computation completed: {self._stats}")
         return parsed_result
-
-    def _fallback_pairwise(
-        self,
-        satellites: List,
-        targets: List,
-        ground_stations: List,
-        start_time: datetime,
-        end_time: datetime,
-        config: BatchComputationConfig,
-    ) -> BatchVisibilityResult:
-        """回退到逐对计算（确保可用性）"""
-        logger.info("Using fallback pairwise computation")
-
-        from .orekit_visibility import OrekitVisibilityCalculator
-
-        calc = OrekitVisibilityCalculator(
-            config={
-                "use_java_orekit": True,
-                "use_adaptive_step": True,
-                "min_elevation": config.min_elevation_degrees,
-            }
-        )
-
-        target_windows: Dict[Tuple[str, str], List[VisibilityWindow]] = {}
-        gs_windows: Dict[Tuple[str, str], List[VisibilityWindow]] = {}
-
-        # 逐对计算
-        for sat in satellites:
-            for target in targets:
-                windows = calc.compute_satellite_target_windows(
-                    sat, target, start_time, end_time
-                )
-                if windows:
-                    target_windows[(sat.id, target.id)] = windows
-
-            for gs in ground_stations:
-                windows = calc.compute_satellite_ground_station_windows(
-                    sat, gs, start_time, end_time
-                )
-                if windows:
-                    gs_windows[(sat.id, gs.id)] = windows
-
-        return BatchVisibilityResult(
-            target_windows=target_windows,
-            ground_station_windows=gs_windows,
-            computation_stats=None,
-            is_fallback_result=True,
-        )
 
     def _serialize_satellite(self, satellite) -> Dict[str, Any]:
         """序列化卫星参数"""
@@ -373,7 +319,6 @@ class BatchVisibilityCalculator:
             target_windows=target_windows,
             ground_station_windows=gs_windows,
             computation_stats=self._stats,
-            is_fallback_result=False,
         )
 
     @property

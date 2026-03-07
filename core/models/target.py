@@ -173,15 +173,26 @@ class Target:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Target':
-        """从字典创建"""
-        target_type = TargetType(data['target_type'])
+        """从字典创建，支持多种格式"""
+        # 处理 target_type（默认为 POINT）
+        target_type_str = data.get('target_type', 'point')
+        target_type = TargetType(target_type_str)
+
+        # 支持 location 数组格式 [longitude, latitude]
+        location = data.get('location')
+        if location and len(location) >= 2:
+            longitude = location[0]
+            latitude = location[1]
+        else:
+            longitude = data.get('longitude')
+            latitude = data.get('latitude')
 
         return cls(
             id=data['id'],
             name=data.get('name', ''),
             target_type=target_type,
-            longitude=data.get('longitude'),
-            latitude=data.get('latitude'),
+            longitude=longitude,
+            latitude=latitude,
             area_vertices=data.get('area_vertices', []),
             priority=data.get('priority', 1),
             required_observations=data.get('required_observations', 1),

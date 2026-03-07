@@ -92,15 +92,28 @@ class Mission:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Mission':
-        """从字典创建"""
+        """从字典创建，支持多种格式"""
         satellites = [Satellite.from_dict(sat_data) for sat_data in data.get('satellites', [])]
         targets = [Target.from_dict(target_data) for target_data in data.get('targets', [])]
         ground_stations = [GroundStation.from_dict(gs_data) for gs_data in data.get('ground_stations', [])]
 
+        # 支持 duration.start/end 格式或直接的 start_time/end_time 格式
+        if 'duration' in data:
+            duration = data['duration']
+            start_time_str = duration['start']
+            end_time_str = duration['end']
+        else:
+            start_time_str = data['start_time']
+            end_time_str = data['end_time']
+
+        # 处理ISO 8601格式中的 'Z' 后缀
+        start_time_str = start_time_str.replace('Z', '+00:00')
+        end_time_str = end_time_str.replace('Z', '+00:00')
+
         return cls(
             name=data['name'],
-            start_time=datetime.fromisoformat(data['start_time']),
-            end_time=datetime.fromisoformat(data['end_time']),
+            start_time=datetime.fromisoformat(start_time_str),
+            end_time=datetime.fromisoformat(end_time_str),
             satellites=satellites,
             targets=targets,
             ground_stations=ground_stations,

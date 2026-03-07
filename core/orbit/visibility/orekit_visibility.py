@@ -137,14 +137,10 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
         # 缓存OrekitJavaBridge实例
         self._orekit_bridge: Optional[OrekitJavaBridge] = None
         if self.use_java_orekit and OREKIT_BRIDGE_AVAILABLE:
-            try:
-                self._orekit_bridge = OrekitJavaBridge(self.orekit_config)
-                # 启动JVM（OrekitJavaBridge是延迟初始化，需要显式启动）
-                self._orekit_bridge._ensure_jvm_started()
-                logger.info("OrekitJavaBridge initialized successfully")
-            except Exception as e:
-                logger.warning(f"Failed to initialize OrekitJavaBridge: {e}. Will fallback to simplified model.")
-                self._orekit_bridge = None
+            self._orekit_bridge = OrekitJavaBridge(self.orekit_config)
+            # 启动JVM（OrekitJavaBridge是延迟初始化，需要显式启动）
+            self._orekit_bridge._ensure_jvm_started()
+            logger.info("OrekitJavaBridge initialized successfully")
 
         # Phase 2: 轨道和propagator缓存
         self._orbit_cache: Dict[str, Any] = {}
@@ -278,12 +274,7 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         # Phase 3: 如果启用Java Orekit，尝试使用
         if self.use_java_orekit:
-            try:
-                return self._propagate_with_java_orekit(satellite, dt)
-            except Exception as e:
-                logger.warning(f"Java Orekit propagation failed: {e}. Falling back to simplified model.")
-                # 回退到简化模型
-                return self._propagate_simplified(satellite, dt)
+            return self._propagate_with_java_orekit(satellite, dt)
 
         # 使用简化轨道模型
         return self._propagate_simplified(satellite, dt)

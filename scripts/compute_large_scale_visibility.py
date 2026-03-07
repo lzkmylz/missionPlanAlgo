@@ -90,7 +90,6 @@ def compute_visibility(
         min_elevation_degrees=min_elevation,
         use_parallel_propagation=True,  # 启用Java端并行
         max_batch_size=100,              # 每批最大对数
-        fallback_on_error=True          # 出错时回退到逐对计算
     )
     print(f"  - 粗扫描步长: {coarse_step} 秒")
     print(f"  - 精化步长: {fine_step} 秒")
@@ -125,7 +124,6 @@ def compute_visibility(
         print(f"  - 卫星-目标窗口: {sum(len(w) for w in result.target_windows.values()):,} 个")
         print(f"  - 卫星-地面站窗口: {sum(len(w) for w in result.ground_station_windows.values()):,} 个")
         print(f"  - 总窗口数: {result.total_window_count:,}")
-        print(f"  - 是否回退计算: {result.is_fallback_result}")
 
         if stats:
             print(f"\n性能统计:")
@@ -164,7 +162,6 @@ def compute_visibility(
                 'target_windows': sum(len(w) for w in result.target_windows.values()),
                 'ground_station_windows': sum(len(w) for w in result.ground_station_windows.values()),
                 'computation_time_ms': stats.total_computation_time_ms if stats else None,
-                'is_fallback': result.is_fallback_result
             },
             'windows': result.to_cache_format()
         }
