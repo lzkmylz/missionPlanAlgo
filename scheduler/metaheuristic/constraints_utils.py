@@ -3,6 +3,9 @@
 
 提供统一的约束检查功能，供GA/ACO/PSO/SA/Tabu等元启发式算法使用。
 确保所有算法都具备与贪心算法相同的约束检查能力。
+
+重构说明：此模块现在委托给 scheduler.common.constraint_checker 中的
+统一约束检查器，消除代码重复。
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -16,6 +19,8 @@ from scheduler.constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.constraints.saa_constraint_checker import SAAConstraintChecker
 from scheduler.constraints import UnifiedSpatiotemporalChecker, SpatiotemporalCheckResult
 from scheduler.constraints import UnifiedManeuverChecker, ManeuverCheckResult
+from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
+from scheduler.common.config import ConstraintConfig
 from core.dynamics.attitude_manager import AttitudeManagementConfig
 
 logger = logging.getLogger(__name__)
@@ -55,7 +60,19 @@ class MetaheuristicConstraintChecker:
         )
         self._power_profile = PowerProfile(self.config.get('power_coefficients'))
 
-        # 约束检查器（延迟初始化）
+        # 统一约束检查器（优先使用，消除代码重复）
+        constraint_config = ConstraintConfig(
+            consider_power=self.consider_power,
+            consider_storage=self.consider_storage,
+            mode='simplified' if self.use_simplified_slew else 'standard',
+            enable_saa_check=True
+        )
+        self._unified_constraint_checker: Optional[ConstraintChecker] = ConstraintChecker(
+            mission=mission,
+            config=constraint_config
+        )
+
+        # 传统约束检查器（向后兼容）
         self._slew_checker: Optional[SlewConstraintChecker] = None
         self._saa_checker: Optional[SAAConstraintChecker] = None
         self._unified_checker: Optional[UnifiedSpatiotemporalChecker] = None
@@ -72,6 +89,12 @@ class MetaheuristicConstraintChecker:
     def initialize(self) -> None:
         """初始化约束检查器和资源跟踪"""
         self._initialize_resource_tracking()
+
+        # 优先初始化统一约束检查器（消除代码重复）
+        if self._unified_constraint_checker is not None:
+            self._unified_constraint_checker.initialize()
+
+        # 向后兼容：初始化传统约束检查器
         self._initialize_slew_checker()
         self._initialize_saa_checker()
         self._initialize_unified_checker()
@@ -273,6 +296,8 @@ class MetaheuristicConstraintChecker:
         """
         检查单个任务分配的可行性
 
+        优先使用统一约束检查器，消除与GreedyScheduler的代码重复。
+
         Args:
             sat_id: 卫星ID
             target: 目标对象
@@ -287,16 +312,76 @@ class MetaheuristicConstraintChecker:
         if not sat:
             return False, "Satellite not found", None
 
-        # 检查卫星能力
-        if not self._check_satellite_capability(sat, target):
-            return False, "Satellite capability mismatch", None
-
         # 选择成像模式
         if imaging_mode is None:
             imaging_mode = self._select_imaging_mode(sat, target)
 
         # 计算成像时长
         imaging_duration = self._imaging_calculator.calculate(target, imaging_mode, sat)
+
+        # 获取资源使用情况
+        usage = self._sat_resource_usage.get(sat_id, {})
+        last_task_end = usage.get('last_task_end', self.mission.start_time)
+        prev_target = usage.get('last_target')
+        scheduled_tasks = usage.get('scheduled_tasks', [])
+
+        # 优先使用统一约束检查器
+        if self._unified_constraint_checker is not None:
+            context = ConstraintContext(
+                satellite=sat,
+                target=target,
+                window_start=window_start,
+                window_end=window_end,
+                prev_target=prev_target,
+                prev_end_time=last_task_end,
+                imaging_duration=imaging_duration,
+                current_power=usage.get('power', sat.capabilities.power_capacity),
+                current_storage=usage.get('storage', 0.0),
+                scheduled_tasks=scheduled_tasks,
+                imaging_mode=imaging_mode
+            )
+
+            result = self._unified_constraint_checker.check_task(context)
+
+            if not result.feasible:
+                # 将ConstraintType转换为失败原因字符串
+                violation_reasons = [v.value for v in result.violations]
+                return False, f"Constraint violation: {', '.join(violation_reasons)}", result.details
+
+            actual_start = result.actual_start or window_start
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+            # 构建额外信息
+            info = {
+                'imaging_mode': imaging_mode,
+                'imaging_duration': imaging_duration,
+                'slew_angle': result.slew_angle,
+                'slew_time': result.slew_time,
+                'actual_start': actual_start,
+                'actual_end': actual_end,
+            }
+
+            return True, None, info
+
+        # 回退到传统检查方式（向后兼容）
+        return self._check_task_feasibility_legacy(
+            sat_id, sat, target, window_start, window_end, imaging_mode, imaging_duration
+        )
+
+    def _check_task_feasibility_legacy(
+        self,
+        sat_id: str,
+        sat: Satellite,
+        target: Target,
+        window_start: datetime,
+        window_end: datetime,
+        imaging_mode: Any,
+        imaging_duration: float
+    ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
+        """传统任务可行性检查（向后兼容）"""
+        # 检查卫星能力
+        if not self._check_satellite_capability(sat, target):
+            return False, "Satellite capability mismatch", None
 
         # 检查资源约束
         if not self._check_resource_constraints(sat, target, imaging_mode):
@@ -761,8 +846,8 @@ class MetaheuristicConstraintChecker:
             power_after=usage.get('power', power_before),
         )
 
-        # 计算姿态角（如果启用）
-        if self._enable_attitude_calculation and not self.use_simplified_slew:
+        # 计算姿态角（如果启用）- 与简化模式解耦，只要启用就计算
+        if self._enable_attitude_calculation:
             self._calculate_and_apply_attitude(sat_id, target, actual_start, scheduled_task)
 
         return scheduled_task
@@ -782,15 +867,20 @@ class MetaheuristicConstraintChecker:
             if not sat or not hasattr(target, 'latitude') or not hasattr(target, 'longitude'):
                 return
 
-            attitude_calc = AttitudeCalculator(
-                propagator_type=PropagatorType.SGP4
-            )
+            # 尝试使用预计算位置缓存（如果可用）
+            attitude = self._calculate_attitude_from_cache(sat, target, imaging_time)
 
-            attitude = attitude_calc.calculate_attitude(
-                satellite=sat,
-                target=target,
-                imaging_time=imaging_time
-            )
+            if attitude is None:
+                # 回退到实时计算
+                attitude_calc = AttitudeCalculator(
+                    satellite=sat,
+                    propagator_type=PropagatorType.BATCH_PRECOMPUTED
+                )
+                attitude = attitude_calc.calculate_attitude(
+                    satellite=sat,
+                    target=target,
+                    imaging_time=imaging_time
+                )
 
             if attitude:
                 scheduled_task.roll_angle = attitude.roll

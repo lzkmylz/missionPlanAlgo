@@ -353,4 +353,193 @@ public class PythonBridge {
 
         return map;
     }
+
+    /**
+     * 批量计算可见性窗口并导出轨道数据
+     *
+     * 使用 OptimizedVisibilityCalculator 进行计算，并在计算完成后导出轨道数据到指定路径。
+     * 这是 computeVisibilityBatch 的增强版本，支持轨道数据持久化。
+     *
+     * @param satellites 卫星列表
+     * @param targets 目标列表
+     * @param groundStations 地面站列表
+     * @param startTimeIso 开始时间（ISO 8601格式）
+     * @param endTimeIso 结束时间（ISO 8601格式）
+     * @param config 计算配置
+     * @param orbitOutputPath 轨道数据输出路径（可选，为null则不导出）
+     * @return 结果Map，包含 windows, groundStationWindows, stats，以及 orbitExportStatus
+     */
+    public static Map<String, Object> computeVisibilityBatchWithOrbitExport(
+            List<SatelliteParameters> satellites,
+            List<GroundPoint> targets,
+            List<GroundPoint> groundStations,
+            String startTimeIso,
+            String endTimeIso,
+            ComputationConfig config,
+            String orbitOutputPath) {
+
+        try {
+            // 解析时间
+            AbsoluteDate startTime = new AbsoluteDate(startTimeIso, TimeScalesFactory.getUTC());
+            AbsoluteDate endTime = new AbsoluteDate(endTimeIso, TimeScalesFactory.getUTC());
+
+            // 转换卫星参数到 ExtendedSatelliteConfig
+            List<JsonScenarioLoader.ExtendedSatelliteConfig> satConfigs = new ArrayList<>();
+            for (SatelliteParameters sat : satellites) {
+                // 解析epoch字符串为AbsoluteDate
+                AbsoluteDate epoch;
+                if (sat.getEpoch() != null && !sat.getEpoch().isEmpty()) {
+                    epoch = new AbsoluteDate(sat.getEpoch(), TimeScalesFactory.getUTC());
+                } else {
+                    epoch = startTime; // 默认使用场景开始时间
+                }
+
+                // 根据orbitType确定卫星类型和默认物理参数
+                String satType = sat.getOrbitType();
+                double mass = sat.getMass();
+                double dragArea = sat.getDragArea();
+                double reflectivity = sat.getReflectivity();
+                double dragCoefficient = sat.getDragCoefficient();
+
+                // 如果没有设置物理参数，根据卫星类型使用默认值
+                if (mass <= 0) {
+                    mass = "SAR".equalsIgnoreCase(satType) ? 150.0 : 100.0;
+                }
+                if (dragArea <= 0) {
+                    dragArea = "SAR".equalsIgnoreCase(satType) ? 8.0 : 5.0;
+                }
+                if (reflectivity <= 0) {
+                    reflectivity = "SAR".equalsIgnoreCase(satType) ? 1.3 : 1.5;
+                }
+                if (dragCoefficient <= 0) {
+                    dragCoefficient = 2.2;
+                }
+
+                satConfigs.add(new JsonScenarioLoader.ExtendedSatelliteConfig(
+                    sat.getId(),
+                    satType != null ? satType : "SSO",
+                    sat.getSemiMajorAxis(),
+                    sat.getEccentricity(),
+                    sat.getInclination(),
+                    sat.getRaan(),
+                    sat.getArgOfPerigee(),
+                    sat.getMeanAnomaly(),
+                    5.0,   // minElevation
+                    45.0,  // maxOffNadir
+                    epoch,
+                    mass,
+                    dragArea,
+                    reflectivity,
+                    dragCoefficient
+                ));
+            }
+
+            // 转换目标参数到 TargetConfig
+            List<orekit.visibility.model.TargetConfig> targetConfigs = new ArrayList<>();
+            for (GroundPoint target : targets) {
+                targetConfigs.add(new orekit.visibility.model.TargetConfig(
+                    target.getId(),
+                    target.getLongitude(),
+                    target.getLatitude(),
+                    target.getAltitude(),
+                    60, // minDuration
+                    5   // priority
+                ));
+            }
+
+            // 转换地面站参数
+            List<orekit.visibility.model.GroundStationConfig> gsConfigs = new ArrayList<>();
+            for (GroundPoint gs : groundStations) {
+                gsConfigs.add(new orekit.visibility.model.GroundStationConfig(
+                    gs.getId(),
+                    gs.getLongitude(),
+                    gs.getLatitude(),
+                    gs.getAltitude(),
+                    gs.getMinElevation(),
+                    1000000.0 // maxRange (1000km)
+                ));
+            }
+
+            // 使用 OptimizedVisibilityCalculator 进行计算
+            if (optimizedCalculator == null) {
+                optimizedCalculator = new OptimizedVisibilityCalculator();
+            }
+
+            orekit.visibility.model.BatchResult result = optimizedCalculator.computeAllVisibilityWindows(
+                (List) satConfigs,  // ExtendedSatelliteConfig extends SatelliteConfig
+                targetConfigs,
+                gsConfigs,
+                startTime,
+                endTime,
+                config.getCoarseStep(),
+                config.getFineStep()
+            );
+
+            // 转换为Python友好的Map格式
+            Map<String, Object> map = new HashMap<>();
+
+            // 转换窗口（从统一的getAllWindows中获取，通过key区分目标和地面站）
+            List<Map<String, Object>> targetWindowsList = new ArrayList<>();
+            List<Map<String, Object>> gsWindowsList = new ArrayList<>();
+
+            for (Map.Entry<String, List<orekit.visibility.model.VisibilityWindow>> entry : result.getAllWindows().entrySet()) {
+                for (orekit.visibility.model.VisibilityWindow w : entry.getValue()) {
+                    Map<String, Object> windowMap = new HashMap<>();
+                    windowMap.put("satelliteId", w.getSatelliteId());
+                    windowMap.put("targetId", w.getTargetId());
+                    windowMap.put("startTime", w.getStartTime().toString());
+                    windowMap.put("endTime", w.getEndTime().toString());
+                    windowMap.put("maxElevation", w.getMaxElevation());
+                    windowMap.put("durationSeconds", w.getDurationSeconds());
+
+                    // 通过targetId前缀区分是目标还是地面站
+                    if (w.getTargetId().startsWith("GS:")) {
+                        gsWindowsList.add(windowMap);
+                    } else {
+                        targetWindowsList.add(windowMap);
+                    }
+                }
+            }
+            map.put("targetWindows", targetWindowsList);
+            map.put("groundStationWindows", gsWindowsList);
+
+            // 统计信息
+            Map<String, Object> statsMap = new HashMap<>();
+            statsMap.put("computationTimeMs", result.getStatistics().getComputationTimeMs());
+            statsMap.put("nSatellites", satellites.size());
+            statsMap.put("nTargets", targets.size());
+            statsMap.put("nGroundStations", groundStations.size());
+            statsMap.put("nWindowsFound", result.getStatistics().getTotalWindows());
+            map.put("stats", statsMap);
+
+            // 导出轨道数据（如果指定了输出路径）
+            if (orbitOutputPath != null && !orbitOutputPath.isEmpty()) {
+                try {
+                    OrbitStateCache orbitCache = optimizedCalculator.getOrbitCache();
+                    OrbitDataExporter exporter = new OrbitDataExporter();
+                    exporter.exportToJson(orbitCache.getCache(), orbitOutputPath);
+
+                    Map<String, Object> exportStatus = new HashMap<>();
+                    exportStatus.put("success", true);
+                    exportStatus.put("path", orbitOutputPath);
+                    map.put("orbitExportStatus", exportStatus);
+                } catch (Exception e) {
+                    Map<String, Object> exportStatus = new HashMap<>();
+                    exportStatus.put("success", false);
+                    exportStatus.put("error", e.getMessage());
+                    map.put("orbitExportStatus", exportStatus);
+                }
+            }
+
+            return map;
+
+        } catch (Exception e) {
+            // 返回错误信息
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("error", true);
+            errorResult.put("errorMessage", e.getMessage());
+            errorResult.put("errorType", e.getClass().getName());
+            return errorResult;
+        }
+    }
 }

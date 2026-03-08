@@ -10,6 +10,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from enum import Enum
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .frequency_utils import (
     ObservationTask,
@@ -104,15 +107,25 @@ class ScheduledTask:
     attitude_coordinate_system: str = "LVLH"  # 坐标系：LVLH
 
     def to_dict(self) -> Dict[str, Any]:
+        # Calculate imaging_duration if not explicitly set
+        imaging_duration = 0.0
+        if self.imaging_start and self.imaging_end:
+            imaging_duration = (self.imaging_end - self.imaging_start).total_seconds()
+
         return {
             'task_id': self.task_id,
             'satellite_id': self.satellite_id,
             'target_id': self.target_id,
             'imaging_start': self.imaging_start.isoformat() if self.imaging_start else None,
             'imaging_end': self.imaging_end.isoformat() if self.imaging_end else None,
+            'imaging_duration': imaging_duration,
             'imaging_mode': self.imaging_mode,
             'slew_angle': self.slew_angle,
             'slew_time': self.slew_time,
+            'storage_before': self.storage_before,
+            'storage_after': self.storage_after,
+            'power_before': self.power_before,
+            'power_after': self.power_after,
             'ground_station_id': self.ground_station_id,
             'antenna_id': self.antenna_id,
             'downlink_start': self.downlink_start.isoformat() if self.downlink_start else None,
@@ -219,7 +232,7 @@ class BaseScheduler(ABC):
         for sat in self.mission.satellites:
             self._slew_checker.initialize_satellite(sat)
 
-    def _precompute_satellite_positions(self, time_step_minutes: int = 10) -> None:
+    def _precompute_satellite_positions(self, time_step_seconds: float = 1.0) -> None:
         """
         预计算卫星位置以加速调度
 
@@ -227,22 +240,30 @@ class BaseScheduler(ABC):
         避免在调度循环中重复进行昂贵的轨道传播计算。
 
         策略:
-        1. 从窗口缓存中提取所有窗口的开始时间作为关键时间点
-        2. 按时间步长离散化，减少计算点数量
+        1. 按时间步长覆盖整个任务时间范围
+        2. 使用与HPOP可见性计算相同的步长（默认5秒，与粗扫描匹配）
         3. 批量计算并缓存所有卫星位置
 
         Args:
-            time_step_minutes: 时间步长（分钟），默认10分钟
+            time_step_seconds: 时间步长（秒），默认5秒（与HPOP粗扫描步长匹配）
 
         Raises:
-            ValueError: 如果 time_step_minutes 小于或等于 0
+            ValueError: 如果 time_step_seconds 小于或等于 0
         """
         if self.mission is None:
             return
 
-        # Issue 2 Fix: Validate time_step_minutes parameter
-        if time_step_minutes <= 0:
-            raise ValueError(f"time_step_minutes must be positive, got {time_step_minutes}")
+        # 首先尝试加载Java端预计算的轨道数据
+        if self._load_precomputed_orbits_from_java():
+            print("    已加载Java预计算轨道数据，跳过Python端预计算")
+            # 确保位置缓存被初始化（用于姿态角计算）
+            if self._position_cache is None:
+                from core.orbit.visibility.position_cache import SatellitePositionCache
+                self._position_cache = SatellitePositionCache()
+            return
+
+        if time_step_seconds <= 0:
+            raise ValueError(f"time_step_seconds must be positive, got {time_step_seconds}")
 
         import time
         from datetime import timedelta
@@ -250,43 +271,15 @@ class BaseScheduler(ABC):
         start_time = time.time()
         total_positions = 0
 
-        # 收集所有关键时间点（从窗口缓存）
-        critical_times = set()
+        # 在整个任务时间范围内按步长生成时间点
+        current_time = self.mission.start_time
+        end_time = self.mission.end_time
+        time_step = timedelta(seconds=time_step_seconds)
 
-        # 从窗口缓存中提取时间
-        if self.window_cache and hasattr(self.window_cache, '_windows'):
-            for (sat_id, target_id), windows in self.window_cache._windows.items():
-                for window in windows:
-                    critical_times.add(window.start_time)
-                    critical_times.add(window.end_time)
-
-        # 如果没有窗口缓存，使用任务时间范围
-        if not critical_times:
-            current_time = self.mission.start_time
-            end_time = self.mission.end_time
-            time_step = timedelta(minutes=time_step_minutes)
-            while current_time <= end_time:
-                critical_times.add(current_time)
-                current_time += time_step
-
-        # 按时间排序
-        sorted_times = sorted(critical_times)
-
-        # 时间离散化：将时间按步长分桶，减少计算量
-        time_buckets = {}
-        bucket_size = timedelta(minutes=time_step_minutes)
-
-        for t in sorted_times:
-            # 创建时间桶键（按步长取整）
-            bucket_key = t.replace(
-                minute=(t.minute // time_step_minutes) * time_step_minutes,
-                second=0,
-                microsecond=0
-            )
-            if bucket_key not in time_buckets:
-                time_buckets[bucket_key] = t
-
-        discrete_times = sorted(time_buckets.keys())
+        discrete_times = []
+        while current_time <= end_time:
+            discrete_times.append(current_time)
+            current_time += time_step
 
         # Issue 1 Fix: Ensure we have a position cache to store computed positions
         # when _slew_checker is None
@@ -369,6 +362,43 @@ class BaseScheduler(ABC):
         # 如果SAA检查器已存在，也传递给它
         if self._saa_checker is not None:
             self._saa_checker.set_position_cache(cache)
+
+    def _load_precomputed_orbits_from_java(self) -> bool:
+        """加载Java端预计算的轨道数据
+
+        尝试从默认路径加载Java端导出的轨道数据，避免重复计算。
+
+        Returns:
+            bool: 是否成功加载
+        """
+        if not self.config.get('use_precomputed_orbits', True):
+            return False
+
+        # 默认路径
+        json_path = self.config.get('orbit_json_path', 'java/output/frequency_scenario/orbits.json.gz')
+
+        import os
+        if not os.path.exists(json_path):
+            logger.debug(f"Java预计算轨道数据不存在: {json_path}")
+            return False
+
+        try:
+            from core.dynamics.orbit_batch_propagator import get_batch_propagator
+
+            propagator = get_batch_propagator()
+            if propagator is None:
+                return False
+
+            start_time = self.mission.start_time if hasattr(self.mission, 'start_time') else None
+            success = propagator.load_precomputed_orbits(json_path, start_time)
+
+            if success:
+                logger.info(f"成功加载Java预计算轨道数据: {json_path}")
+            return success
+
+        except Exception as e:
+            logger.debug(f"加载Java预计算轨道数据失败: {e}")
+            return False
 
     @abstractmethod
     def schedule(self) -> ScheduleResult:
@@ -592,6 +622,17 @@ class BaseScheduler(ABC):
         try:
             # 从缓存获取卫星位置和速度
             result = self._position_cache.get_position(satellite.id, imaging_time)
+
+            # 如果缓存未命中，尝试从批量传播器获取（Java预计算数据）
+            if result is None:
+                try:
+                    from core.dynamics.orbit_batch_propagator import get_batch_propagator
+                    propagator = get_batch_propagator()
+                    if propagator is not None:
+                        result = propagator.get_state_at_time(satellite.id, imaging_time)
+                except Exception:
+                    pass
+
             if result is None:
                 return None
 
@@ -604,8 +645,12 @@ class BaseScheduler(ABC):
             # 构建LVLH坐标系
             lvlh_frame = self._attitude_calculator._construct_lvlh_frame(position, velocity)
 
-            # 计算目标视线向量
+            # 计算目标视线向量（从卫星指向目标）
             los_vector = self._attitude_calculator._calculate_los_vector(position, target)
+
+            # 反转视线向量方向（从目标指向卫星）用于姿态角计算
+            # 这是因为卫星需要指向目标，所以姿态角应该基于卫星看向目标的反方向
+            los_vector = (-los_vector[0], -los_vector[1], -los_vector[2])
 
             # 将视线向量转换到LVLH坐标系
             los_in_lvlh = self._attitude_calculator._transform_to_lvlh(los_vector, lvlh_frame)

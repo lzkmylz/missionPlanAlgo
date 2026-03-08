@@ -16,9 +16,12 @@ from ..frequency_utils import ObservationTask
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
+from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
+from scheduler.common.config import ConstraintConfig
+from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 
 
-class SPTScheduler(BaseScheduler):
+class SPTScheduler(BaseScheduler, ClusteringMixin):
     """
     SPT（最短处理时间优先）调度器
 
@@ -45,8 +48,12 @@ class SPTScheduler(BaseScheduler):
                 - consider_power: 是否考虑电量约束（默认True）
                 - consider_storage: 是否考虑存储约束（默认True）
                 - allow_tardiness: 是否允许延迟执行（默认False）
+                - enable_clustering: 是否启用聚类（默认False）
+                - cluster_radius_km: 聚类半径，公里（默认10.0）
+                - min_cluster_size: 最小聚类大小（默认2）
         """
         super().__init__("SPT", config)
+        ClusteringMixin.__init__(self, config)
         config = config or {}
         self.heuristic = "processing_time"
         self.consider_power = config.get('consider_power', True)
@@ -66,6 +73,9 @@ class SPTScheduler(BaseScheduler):
         self._slew_calculators: Dict[str, SlewCalculator] = {}
         self._last_task_target: Dict[str, Any] = {}  # Track last scheduled target per satellite
         self._sat_resource_usage: Dict[str, Dict[str, Any]] = {}
+
+        # Unified constraint checker (initialized in schedule())
+        self._constraint_checker: Optional[ConstraintChecker] = None
 
     def get_parameters(self) -> Dict[str, Any]:
         """返回算法可调参数"""
@@ -88,7 +98,15 @@ class SPTScheduler(BaseScheduler):
         self._validate_initialization()
 
         # 获取任务列表并按SPT规则排序（使用频次感知的任务创建）
-        pending_tasks = self._sort_tasks_by_processing_time(self._create_frequency_aware_tasks())
+        # Reset clustering state if needed
+        if self.enable_clustering:
+            self.reset_clustering_state()
+
+        # Get tasks based on whether clustering is enabled
+        if self.enable_clustering:
+            pending_tasks = self._sort_tasks_by_processing_time(self._get_clustered_tasks())
+        else:
+            pending_tasks = self._sort_tasks_by_processing_time(self._create_frequency_aware_tasks())
         scheduled_tasks: List[ScheduledTask] = []
         unscheduled: Dict[str, Any] = {}
         target_obs_count: Dict[str, int] = {}
@@ -103,16 +121,31 @@ class SPTScheduler(BaseScheduler):
             }
             for sat in self.mission.satellites
         }
+
+        # Initialize unified constraint checker
+        constraint_config = ConstraintConfig(
+            consider_power=self.consider_power,
+            consider_storage=self.consider_storage,
+            enable_saa_check=True,
+            mode='simplified' if self._use_simplified_slew else 'standard'
+        )
+        self._constraint_checker = ConstraintChecker(self.mission, constraint_config)
+        self._constraint_checker.initialize()
+
+        # Pass position cache to unified constraint checker if available
+        if self._position_cache is not None and self._constraint_checker is not None:
+            self._constraint_checker.set_position_cache(self._position_cache)
+
         # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
         self._initialize_slew_checker()
 
         # Initialize SAA constraint checker
         self._initialize_saa_checker()
 
-        # 预计算卫星位置以加速调度（仅在非简化模式下且明确启用时）
-        if not self._use_simplified_slew and self.config.get('precompute_positions', False):
+        # 默认启用预计算以加速姿态角计算，除非显式禁用
+        if not self._use_simplified_slew and self.config.get('precompute_positions', True):
             print("    预计算卫星位置...")
-            self._precompute_satellite_positions(time_step_minutes=self.config.get('precompute_step_minutes', 30))
+            self._precompute_satellite_positions(time_step_seconds=self.config.get('precompute_step_seconds', 1.0))
 
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
@@ -227,7 +260,7 @@ class SPTScheduler(BaseScheduler):
         """
         为任务找到最佳卫星-窗口组合
 
-        SPT策略：选择最早的可用窗口，使用SlewConstraintChecker检查机动约束
+        SPT策略：选择最早的可用窗口，使用统一约束检查器检查所有约束
 
         Args:
             task: 目标任务
@@ -239,10 +272,6 @@ class SPTScheduler(BaseScheduler):
         best_start = None
 
         for sat in self.mission.satellites:
-            # 检查卫星能力匹配
-            if not self._can_satellite_perform_task(sat, task):
-                continue
-
             # 获取可见窗口
             windows = self._get_feasible_windows(sat, task)
             if not windows:
@@ -257,52 +286,94 @@ class SPTScheduler(BaseScheduler):
                 imaging_mode = self._select_imaging_mode(sat, task)
                 imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
 
-                # 检查资源约束
-                if not self._check_resource_constraints(sat, task):
-                    continue
-
-                # 检查 slew 约束（使用简化或精确计算）
+                # Use unified constraint checker
                 usage = self._sat_resource_usage.get(sat.id, {})
-                last_task_end = usage.get('last_task_end', self.mission.start_time)
+                prev_target = self._get_previous_task_target(sat.id)
+                scheduled_tasks = usage.get('scheduled_tasks', [])
 
-                if self._use_simplified_slew:
-                    # 使用简化的机动检查（性能优化）
-                    slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
+                if self._constraint_checker is not None:
+                    context = ConstraintContext(
+                        satellite=sat,
+                        target=task,
+                        window_start=window_start,
+                        window_end=window_end,
+                        prev_target=prev_target,
+                        prev_end_time=usage.get('last_task_end', self.mission.start_time),
+                        imaging_duration=imaging_duration,
+                        current_power=usage.get('power', sat.capabilities.power_capacity),
+                        current_storage=usage.get('storage', 0.0),
+                        scheduled_tasks=scheduled_tasks,
+                        imaging_mode=imaging_mode
+                    )
+
+                    result = self._constraint_checker.check_task(context)
+
+                    if not result.feasible:
+                        continue
+
+                    actual_start = result.actual_start or window_start
+                    actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+                    # Check deadline constraint
+                    if task.time_window_end and actual_start > task.time_window_end:
+                        if not self.allow_tardiness:
+                            continue
+
+                    # Create a compatible slew result for backward compatibility
+                    slew_result = SlewFeasibilityResult(
+                        feasible=True,
+                        slew_angle=result.slew_angle,
+                        slew_time=result.slew_time,
+                        actual_start=actual_start,
+                        reason=None
+                    )
                 else:
-                    # 使用精确的机动约束检查
-                    prev_target = self._get_previous_task_target(sat.id)
-                    slew_result = self._slew_checker.check_slew_feasibility(
-                        sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                    )
-
-                if not slew_result.feasible:
-                    continue
-
-                # Check SAA constraints
-                self._ensure_saa_checker_initialized()
-                if self._saa_checker is not None:
-                    saa_result = self._saa_checker.check_window_feasibility(
-                        sat.id, window_start, window_end
-                    )
-                    if not saa_result.feasible:
+                    # Fallback to legacy constraint checking
+                    # Check satellite capability
+                    if not self._can_satellite_perform_task(sat, task):
                         continue
 
-                # 使用实际开始时间从 slew 计算
-                actual_start = slew_result.actual_start
-                actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-                # 检查是否超出窗口结束时间
-                if actual_end > window_end:
-                    continue
-
-                # 检查是否在截止时间之前
-                if task.time_window_end and actual_start > task.time_window_end:
-                    if not self.allow_tardiness:
+                    # Check resource constraints
+                    if not self._check_resource_constraints(sat, task):
                         continue
 
-                # 检查时间冲突
-                if self._has_time_conflict(sat.id, actual_start, actual_end):
-                    continue
+                    # Check slew constraint
+                    last_task_end = usage.get('last_task_end', self.mission.start_time)
+                    if self._use_simplified_slew:
+                        slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
+                    else:
+                        prev_target = self._get_previous_task_target(sat.id)
+                        slew_result = self._slew_checker.check_slew_feasibility(
+                            sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                        )
+
+                    if not slew_result.feasible:
+                        continue
+
+                    # Check SAA constraints
+                    self._ensure_saa_checker_initialized()
+                    if self._saa_checker is not None:
+                        saa_result = self._saa_checker.check_window_feasibility(
+                            sat.id, window_start, window_end
+                        )
+                        if not saa_result.feasible:
+                            continue
+
+                    actual_start = slew_result.actual_start
+                    actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+                    # Check window boundary
+                    if actual_end > window_end:
+                        continue
+
+                    # Check deadline
+                    if task.time_window_end and actual_start > task.time_window_end:
+                        if not self.allow_tardiness:
+                            continue
+
+                    # Check time conflict
+                    if self._has_time_conflict(sat.id, actual_start, actual_end):
+                        continue
 
                 # 选择最早的窗口
                 if best_start is None or actual_start < best_start:
@@ -347,13 +418,14 @@ class SPTScheduler(BaseScheduler):
 
         # 获取最后一个已调度任务
         last_task_info = scheduled_tasks[-1]
-        prev_task_id = last_task_info.get('task_id')
+        # 优先使用 target_id，如果不存在则回退到 task_id
+        prev_target_id = last_task_info.get('target_id') or last_task_info.get('task_id')
 
-        if not prev_task_id or not self.mission:
+        if not prev_target_id or not self.mission:
             return None
 
         # 从mission中找到对应的目标
-        return self.mission.get_target_by_id(prev_task_id)
+        return self.mission.get_target_by_id(prev_target_id)
 
     def _can_satellite_perform_task(self, sat: Any, task: Any) -> bool:
         """检查卫星是否能执行任务"""
@@ -427,10 +499,12 @@ class SPTScheduler(BaseScheduler):
         if 'scheduled_tasks' not in usage:
             usage['scheduled_tasks'] = []
         task_id = task.task_id if isinstance(task, ObservationTask) else task.id
+        target_id = task.target_id if isinstance(task, ObservationTask) else task.id
         usage['scheduled_tasks'].append({
             'start': scheduled_task.imaging_start,
             'end': scheduled_task.imaging_end,
-            'task_id': task_id
+            'task_id': task_id,
+            'target_id': target_id
         })
 
     def _determine_failure_reason(self, task: Any) -> TaskFailureReason:
@@ -487,9 +561,16 @@ class SPTScheduler(BaseScheduler):
         storage_used = 0.0
         if sat and self.consider_storage:
             data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
-            storage_used = self._imaging_calculator.get_storage_consumption(
-                task, imaging_mode, data_rate
-            )
+            # 处理聚类任务的存储消耗（累加所有目标）
+            if isinstance(task, ClusterTask):
+                for target in task.targets:
+                    storage_used += self._imaging_calculator.get_storage_consumption(
+                        target, imaging_mode, data_rate
+                    )
+            else:
+                storage_used = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, data_rate
+                )
 
         # 使用 slew_result 中的机动信息
         if slew_result:
@@ -524,13 +605,19 @@ class SPTScheduler(BaseScheduler):
             power_after=power_before - power_consumed
         )
 
-        # 计算并应用姿态角（当有预计算位置缓存时，即使简化模式也计算）
-        should_calculate_attitude = (
-            (not self._use_simplified_slew) or  # 非简化模式
-            (self._position_cache is not None)   # 有预计算位置缓存
-        )
-        if should_calculate_attitude and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+        # 计算并应用姿态角（在姿态角计算启用时始终计算）
+        if self._enable_attitude_calculation and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
             attitude = self._calculate_attitude_angles(sat, task, actual_start)
             self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
+
+        # 如果是聚类任务，记录聚类调度信息
+        if isinstance(task, ClusterTask) and self.enable_clustering:
+            self._record_cluster_schedule(
+                task=task,
+                satellite_id=sat_id,
+                imaging_start=actual_start,
+                imaging_end=actual_end,
+                look_angle=slew_angle
+            )
 
         return scheduled_task

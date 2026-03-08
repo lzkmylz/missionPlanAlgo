@@ -29,6 +29,7 @@ from scheduler.base_scheduler import (
 from scheduler.greedy.greedy_scheduler import GreedyScheduler
 from scheduler.metaheuristic.ga_scheduler import GAScheduler
 from scheduler.greedy.edd_scheduler import EDDScheduler
+from scheduler.greedy.spt_scheduler import SPTScheduler
 from scheduler.metaheuristic.sa_scheduler import SAScheduler
 from scheduler.metaheuristic.aco_scheduler import ACOScheduler
 from scheduler.metaheuristic.pso_scheduler import PSOScheduler
@@ -89,6 +90,7 @@ class UnifiedScheduler:
         'greedy': GreedyScheduler,
         'ga': GAScheduler,
         'edd': EDDScheduler,
+        'spt': SPTScheduler,
         'sa': SAScheduler,
         'aco': ACOScheduler,
         'pso': PSOScheduler,
@@ -154,11 +156,9 @@ class UnifiedScheduler:
         # 获取JSON文件路径
         json_path = self.config.get('orbit_json_path')
         if json_path is None:
-            # 尝试从窗口缓存路径推断
-            # 例如: java/output/frequency_scenario/visibility_windows.json
-            # 对应的轨道数据: java/output/frequency_scenario/orbits.json.gz
-            logger.debug("未指定orbit_json_path，跳过加载预计算轨道数据")
-            return
+            # 使用默认路径
+            json_path = 'java/output/frequency_scenario/orbits.json.gz'
+            logger.debug(f"未指定orbit_json_path，使用默认路径: {json_path}")
 
         if not os.path.exists(json_path):
             logger.warning(f"预计算轨道数据文件不存在: {json_path}")

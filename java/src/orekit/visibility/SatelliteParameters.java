@@ -23,6 +23,12 @@ public class SatelliteParameters implements Serializable {
     private double altitude;
     private String epoch;
 
+    // 物理参数（用于HPOP/J4传播）
+    private double mass = 100.0;              // kg，默认光学卫星质量
+    private double dragArea = 5.0;            // m²，默认光学卫星阻力面积
+    private double reflectivity = 1.5;        // 反射系数
+    private double dragCoefficient = 2.2;     // 阻力系数
+
     public SatelliteParameters() {
     }
 
@@ -113,6 +119,38 @@ public class SatelliteParameters implements Serializable {
 
     public void setEpoch(String epoch) {
         this.epoch = epoch;
+    }
+
+    public double getMass() {
+        return mass;
+    }
+
+    public void setMass(double mass) {
+        this.mass = mass;
+    }
+
+    public double getDragArea() {
+        return dragArea;
+    }
+
+    public void setDragArea(double dragArea) {
+        this.dragArea = dragArea;
+    }
+
+    public double getReflectivity() {
+        return reflectivity;
+    }
+
+    public void setReflectivity(double reflectivity) {
+        this.reflectivity = reflectivity;
+    }
+
+    public double getDragCoefficient() {
+        return dragCoefficient;
+    }
+
+    public void setDragCoefficient(double dragCoefficient) {
+        this.dragCoefficient = dragCoefficient;
     }
 
     @Override

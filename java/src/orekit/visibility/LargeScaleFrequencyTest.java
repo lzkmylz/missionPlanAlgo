@@ -23,28 +23,179 @@ import java.util.concurrent.TimeUnit;
  *
  * 使用 ./scenarios/large_scale_frequency.json 配置文件
  * 60颗卫星(30光学+30SAR) vs 1000目标，含频次约束
+ *
+ * 用法:
+ *   # 使用默认配置
+ *   java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest
+ *
+ *   # 指定场景文件和输出目录
+ *   java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest \
+ *        --scenario ../scenarios/my_scenario.json \
+ *        --output output/my_results \
+ *        --orbit-output output/my_results/orbits.json.gz
  */
 public class LargeScaleFrequencyTest {
 
-    private static final String SCENARIO_FILE = "../scenarios/large_scale_frequency.json";
-    private static final String OUTPUT_DIR = "output/frequency_scenario";
+    // 默认配置
+    private static final String DEFAULT_SCENARIO_FILE = "../scenarios/large_scale_frequency.json";
+    private static final String DEFAULT_OUTPUT_DIR = "output/frequency_scenario";
+    private static final String DEFAULT_ORBIT_FILENAME = "orbits.json.gz";
+
+    // 运行时配置
+    private String scenarioFile;
+    private String outputDir;
+    private String orbitOutputPath;
+    private double coarseStep = 5.0;  // 粗扫描步长(秒)
+    private double fineStep = 1.0;    // 精化步长(秒)
 
     public static void main(String[] args) {
         System.out.println("========================================");
         System.out.println("大规模频次约束场景测试");
         System.out.println("========================================");
 
+        LargeScaleFrequencyTest test = new LargeScaleFrequencyTest();
+
+        // 解析命令行参数
+        if (!test.parseArguments(args)) {
+            printUsage();
+            System.exit(1);
+        }
+
         try {
-            // 初始化Orekit
-            initializeOrekit();
+            test.run();
+        } catch (Exception e) {
+            System.err.println("错误: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
 
-            // 创建输出目录
-            Files.createDirectories(Paths.get(OUTPUT_DIR));
+    /**
+     * 解析命令行参数
+     */
+    private boolean parseArguments(String[] args) {
+        // 默认值
+        this.scenarioFile = DEFAULT_SCENARIO_FILE;
+        this.outputDir = DEFAULT_OUTPUT_DIR;
 
-            // 加载场景
-            System.out.println("\n[1/4] 加载场景配置...");
-            JsonScenarioLoader loader = new JsonScenarioLoader(SCENARIO_FILE);
-            loader.load();
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+
+            switch (arg) {
+                case "--scenario":
+                case "-s":
+                    if (i + 1 >= args.length) {
+                        System.err.println("错误: " + arg + " 需要参数");
+                        return false;
+                    }
+                    this.scenarioFile = args[++i];
+                    break;
+
+                case "--output":
+                case "-o":
+                    if (i + 1 >= args.length) {
+                        System.err.println("错误: " + arg + " 需要参数");
+                        return false;
+                    }
+                    this.outputDir = args[++i];
+                    break;
+
+                case "--orbit-output":
+                    if (i + 1 >= args.length) {
+                        System.err.println("错误: " + arg + " 需要参数");
+                        return false;
+                    }
+                    this.orbitOutputPath = args[++i];
+                    break;
+
+                case "--coarse-step":
+                    if (i + 1 >= args.length) {
+                        System.err.println("错误: " + arg + " 需要参数");
+                        return false;
+                    }
+                    try {
+                        this.coarseStep = Double.parseDouble(args[++i]);
+                    } catch (NumberFormatException e) {
+                        System.err.println("错误: 粗扫描步长必须是数字");
+                        return false;
+                    }
+                    break;
+
+                case "--fine-step":
+                    if (i + 1 >= args.length) {
+                        System.err.println("错误: " + arg + " 需要参数");
+                        return false;
+                    }
+                    try {
+                        this.fineStep = Double.parseDouble(args[++i]);
+                    } catch (NumberFormatException e) {
+                        System.err.println("错误: 精化步长必须是数字");
+                        return false;
+                    }
+                    break;
+
+                case "--help":
+                case "-h":
+                    printUsage();
+                    return false;
+
+                default:
+                    System.err.println("错误: 未知参数 " + arg);
+                    return false;
+            }
+        }
+
+        // 如果没有指定轨道输出路径，使用输出目录下的默认文件名
+        if (this.orbitOutputPath == null) {
+            this.orbitOutputPath = this.outputDir + "/" + DEFAULT_ORBIT_FILENAME;
+        }
+
+        return true;
+    }
+
+    /**
+     * 打印使用说明
+     */
+    private static void printUsage() {
+        System.out.println("\n用法:");
+        System.out.println("  java -cp \"classes:lib/*\" orekit.visibility.LargeScaleFrequencyTest [选项]\n");
+        System.out.println("选项:");
+        System.out.println("  -s, --scenario <路径>       场景配置文件路径 (默认: " + DEFAULT_SCENARIO_FILE + ")");
+        System.out.println("  -o, --output <目录>         输出目录 (默认: " + DEFAULT_OUTPUT_DIR + ")");
+        System.out.println("      --orbit-output <路径>   轨道数据输出路径 (默认: <输出目录>/" + DEFAULT_ORBIT_FILENAME + ")");
+        System.out.println("      --coarse-step <秒>      粗扫描步长 (默认: 5.0秒)");
+        System.out.println("      --fine-step <秒>        精化步长 (默认: 1.0秒)");
+        System.out.println("  -h, --help                  显示此帮助\n");
+        System.out.println("示例:");
+        System.out.println("  # 使用默认配置");
+        System.out.println("  java -cp \"classes:lib/*\" orekit.visibility.LargeScaleFrequencyTest\n");
+        System.out.println("  # 指定场景和输出目录");
+        System.out.println("  java -cp \"classes:lib/*\" orekit.visibility.LargeScaleFrequencyTest \\");
+        System.out.println("    --scenario ../scenarios/custom.json \\");
+        System.out.println("    --output output/custom_results\n");
+    }
+
+    /**
+     * 执行测试
+     */
+    public void run() throws Exception {
+        // 初始化Orekit
+        initializeOrekit();
+
+        // 创建输出目录
+        Files.createDirectories(Paths.get(outputDir));
+
+        System.out.println("\n配置信息:");
+        System.out.println("  场景文件: " + scenarioFile);
+        System.out.println("  输出目录: " + outputDir);
+        System.out.println("  轨道输出: " + orbitOutputPath);
+        System.out.println("  粗扫描步长: " + coarseStep + "秒");
+        System.out.println("  精化步长: " + fineStep + "秒");
+
+        // 加载场景
+        System.out.println("\n[1/4] 加载场景配置...");
+        JsonScenarioLoader loader = new JsonScenarioLoader(scenarioFile);
+        loader.load();
 
             System.out.println("  场景: " + loader.getName());
             System.out.println("  描述: " + loader.getDescription());
@@ -63,19 +214,22 @@ public class LargeScaleFrequencyTest {
             System.out.println("  频次需求: " + requirements.size() + "个目标有频次约束");
             System.out.println("  时间跨度: 24小时");
 
-            // 执行可见性计算
-            System.out.println("\n[2/4] 执行可见性计算...");
-            long calcStart = System.nanoTime();
+        // 执行可见性计算（包含卫星-目标 + 卫星-地面站）
+        System.out.println("\n[2/4] 执行可见性计算...");
+        System.out.println("  计算卫星-目标窗口: " + satellites.size() + "卫星 x " + targets.size() + "目标");
+        System.out.println("  计算卫星-地面站窗口: " + satellites.size() + "卫星 x " + groundStations.size() + "地面站");
+        long calcStart = System.nanoTime();
 
-            OptimizedVisibilityCalculator calculator = new OptimizedVisibilityCalculator();
-            BatchResult result = calculator.computeAllVisibilityWindows(
-                satellites,
-                targets,
-                startTime,
-                endTime,
-                5.0,  // 粗扫描步长5秒
-                1.0   // 精化步长1秒
-            );
+        OptimizedVisibilityCalculator calculator = new OptimizedVisibilityCalculator();
+        BatchResult result = calculator.computeAllVisibilityWindows(
+            satellites,
+            targets,
+            groundStations,
+            startTime,
+            endTime,
+            coarseStep,
+            fineStep
+        );
 
             long calcTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - calcStart);
             System.out.println("  计算完成: " + String.format("%.2f", calcTime/1000.0) + "秒");
@@ -89,32 +243,26 @@ public class LargeScaleFrequencyTest {
             System.out.println("\n[4/4] 持久化数据...");
             persistData(result, satellites, targets, groundStations, requirements);
 
-            // 导出轨道数据到JSON+GZIP（供Python端使用）
-            System.out.println("\n[4/4+] 导出轨道数据到JSON+GZIP...");
-            try {
-                OrbitStateCache orbitCache = calculator.getOrbitCache();
-                OrbitDataExporter exporter = new OrbitDataExporter();
-                String jsonPath = OUTPUT_DIR + "/orbits.json.gz";
-                exporter.exportToJson(orbitCache.getCache(), jsonPath);
-                System.out.println("  轨道数据已导出: " + jsonPath);
-            } catch (Exception e) {
-                System.err.println("  警告: 导出轨道数据失败: " + e.getMessage());
-                e.printStackTrace();
-            }
-
-            // 输出统计
-            printStatistics(result, satellites, targets, calcTime);
-
-            System.out.println("\n========================================");
-            System.out.println("场景计算完成!");
-            System.out.println("输出目录: " + OUTPUT_DIR);
-            System.out.println("========================================");
-
+        // 导出轨道数据到JSON+GZIP（供Python端使用）
+        System.out.println("\n[4/4+] 导出轨道数据到JSON+GZIP...");
+        try {
+            OrbitStateCache orbitCache = calculator.getOrbitCache();
+            OrbitDataExporter exporter = new OrbitDataExporter();
+            exporter.exportToJson(orbitCache.getCache(), orbitOutputPath);
+            System.out.println("  轨道数据已导出: " + orbitOutputPath);
         } catch (Exception e) {
-            System.err.println("错误: " + e.getMessage());
+            System.err.println("  警告: 导出轨道数据失败: " + e.getMessage());
             e.printStackTrace();
-            System.exit(1);
         }
+
+        // 输出统计
+        printStatistics(result, satellites, targets, calcTime);
+
+        System.out.println("\n========================================");
+        System.out.println("场景计算完成!");
+        System.out.println("输出目录: " + outputDir);
+        System.out.println("轨道数据: " + orbitOutputPath);
+        System.out.println("========================================");
     }
 
     /**
@@ -159,11 +307,11 @@ public class LargeScaleFrequencyTest {
     /**
      * 持久化数据
      */
-    private static void persistData(BatchResult result,
-                                     List<SatelliteConfig> satellites,
-                                     List<TargetConfig> targets,
-                                     List<GroundStationConfig> groundStations,
-                                     List<ObservationRequirement> requirements) throws IOException {
+    private void persistData(BatchResult result,
+                             List<SatelliteConfig> satellites,
+                             List<TargetConfig> targets,
+                             List<GroundStationConfig> groundStations,
+                             List<ObservationRequirement> requirements) throws IOException {
         // 1. 可见性窗口
         StringBuilder visJson = new StringBuilder();
         visJson.append("{\n  \"windows\": [\n");
@@ -183,7 +331,7 @@ public class LargeScaleFrequencyTest {
             }
         }
         visJson.append("\n  ]\n}\n");
-        Files.write(Paths.get(OUTPUT_DIR + "/visibility_windows.json"), visJson.toString().getBytes());
+        Files.write(Paths.get(outputDir + "/visibility_windows.json"), visJson.toString().getBytes());
 
         // 2. 卫星配置
         StringBuilder satJson = new StringBuilder();
@@ -195,7 +343,7 @@ public class LargeScaleFrequencyTest {
             satJson.append("\n");
         }
         satJson.append("  ]\n}\n");
-        Files.write(Paths.get(OUTPUT_DIR + "/satellites.json"), satJson.toString().getBytes());
+        Files.write(Paths.get(outputDir + "/satellites.json"), satJson.toString().getBytes());
 
         // 3. 地面站配置
         StringBuilder gsJson = new StringBuilder();
@@ -209,11 +357,34 @@ public class LargeScaleFrequencyTest {
             gsJson.append("\n");
         }
         gsJson.append("  ]\n}\n");
-        Files.write(Paths.get(OUTPUT_DIR + "/ground_stations.json"), gsJson.toString().getBytes());
+        Files.write(Paths.get(outputDir + "/ground_stations.json"), gsJson.toString().getBytes());
 
-        System.out.println("  已保存: visibility_windows.json (" + result.getStatistics().getTotalWindows() + "窗口)");
+        // 统计目标窗口和地面站窗口数量
+        int totalWindows = result.getStatistics().getTotalWindows();
+        int gsWindowCount = 0;
+        for (Map.Entry<String, List<VisibilityWindow>> entry : result.getAllWindows().entrySet()) {
+            if (entry.getKey().contains("_GS:")) {
+                gsWindowCount += entry.getValue().size();
+            }
+        }
+        int targetWindowCount = totalWindows - gsWindowCount;
+
+        System.out.println("  已保存: visibility_windows.json (" + totalWindows + "窗口, 目标:" + targetWindowCount + ", 地面站:" + gsWindowCount + ")");
         System.out.println("  已保存: satellites.json (" + satellites.size() + "卫星)");
         System.out.println("  已保存: ground_stations.json (" + groundStations.size() + "地面站)");
+    }
+
+    // Getter方法，供其他类使用
+    public String getScenarioFile() {
+        return scenarioFile;
+    }
+
+    public String getOutputDir() {
+        return outputDir;
+    }
+
+    public String getOrbitOutputPath() {
+        return orbitOutputPath;
     }
 
     /**

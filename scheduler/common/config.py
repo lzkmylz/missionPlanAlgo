@@ -18,14 +18,21 @@ class ConstraintConfig:
     - use_simplified_slew
     - enable_saa_check
     - enable_attitude_calculation
+    - enable_thermal_check
+    - enable_sun_exclusion_check
     """
     consider_power: bool = True
     consider_storage: bool = True
     mode: str = 'standard'  # 'simplified', 'standard', 'full'
     enable_saa_check: bool = True
     enable_attitude_calculation: bool = False
+    enable_thermal_check: bool = False  # New: thermal control constraint
+    enable_sun_exclusion_check: bool = False  # New: sun exclusion angle
+    enable_solar_elevation_check: bool = True  # Enabled by default: target solar elevation angle (daylight check)
     max_slew_angle: Optional[float] = None  # degrees, None for satellite default
     min_slew_time: float = 10.0  # seconds
+    sun_exclusion_angle: float = 30.0  # degrees, for optical satellites
+    min_solar_elevation: float = 15.0  # degrees, minimum sun elevation for optical imaging (default 15°)
 
     def __post_init__(self):
         """Validate configuration."""
@@ -196,6 +203,10 @@ dispersed across scheduler implementations.
                 'mode': self.constraints.mode,
                 'enable_saa_check': self.constraints.enable_saa_check,
                 'enable_attitude_calculation': self.constraints.enable_attitude_calculation,
+                'enable_thermal_check': self.constraints.enable_thermal_check,
+                'enable_sun_exclusion_check': self.constraints.enable_sun_exclusion_check,
+                'enable_solar_elevation_check': self.constraints.enable_solar_elevation_check,
+                'min_solar_elevation': self.constraints.min_solar_elevation,
             },
             'resources': {
                 'default_power_capacity': self.resources.default_power_capacity,

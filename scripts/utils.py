@@ -369,3 +369,225 @@ def validate_algorithms(algorithms: List[str]) -> List[str]:
         available = ', '.join(SCHEDULER_REGISTRY.keys())
         raise ValueError(f"Invalid algorithms: {', '.join(invalid)}. Available: {available}")
     return algorithms
+
+
+# ============================================================================
+# 结果格式化
+# ============================================================================
+
+def format_metrics_table(results: List[Dict[str, Any]]) -> str:
+    """
+    格式化结果为表格字符串
+
+    Args:
+        results: 结果字典列表，每个字典包含 algorithm 和 metrics
+
+    Returns:
+        格式化的表格字符串
+    """
+    lines = []
+    lines.append(f"{'算法':<20} {'任务数':<10} {'满足率':<10} {'利用率':<10} {'用时(秒)':<12}")
+    lines.append("-" * 70)
+
+    for r in results:
+        algo_name = r.get('algorithm', 'unknown')
+        m = r.get('metrics', {})
+        lines.append(
+            f"{algo_name:<20} "
+            f"{m.get('scheduled_tasks', 0):<10} "
+            f"{m.get('demand_satisfaction_rate', 0):<10.1%} "
+            f"{m.get('satellite_utilization', 0):<10.1%} "
+            f"{m.get('total_computation_time', m.get('computation_time', 0)):<12.2f}"
+        )
+
+    return '\n'.join(lines)
+
+
+def format_comparison_table(results: List[Dict[str, Any]]) -> str:
+    """
+    格式化多算法对比结果为表格字符串
+
+    Args:
+        results: 结果字典列表
+
+    Returns:
+        格式化的表格字符串
+    """
+    lines = []
+    lines.append("=" * 70)
+    lines.append("多算法对比结果")
+    lines.append("=" * 70)
+    lines.append("")
+    lines.append(f"{'算法':<20} {'任务数':<10} {'满足率':<10} {'利用率':<10} {'计算时间':<10}")
+    lines.append("-" * 70)
+
+    for r in results:
+        algo_name = r.get('algorithm_name', r.get('algorithm', 'unknown'))
+        if len(algo_name) > 18:
+            algo_name = algo_name[:15] + "..."
+        lines.append(
+            f"{algo_name:<20} "
+            f"{r.get('scheduled_count', 0):<10} "
+            f"{r.get('demand_satisfaction_rate', 0):<10.1%} "
+            f"{r.get('satellite_utilization', 0):<10.1%} "
+            f"{r.get('computation_time', 0):<10.2f}s"
+        )
+
+    lines.append("=" * 70)
+    return '\n'.join(lines)
+
+
+# ============================================================================
+# 场景加载缓存
+# ============================================================================
+
+from functools import lru_cache
+
+@lru_cache(maxsize=4)
+def load_mission_cached(scenario_path: str):
+    """
+    带缓存的场景加载
+
+    Args:
+        scenario_path: 场景文件路径
+
+    Returns:
+        Mission 对象
+    """
+    from core.models import Mission
+    return Mission.load(scenario_path)
+
+
+# ============================================================================
+# 报告生成
+# ============================================================================
+
+def generate_benchmark_report(
+    results: List[Dict[str, Any]],
+    output_dir: Path,
+    filename_prefix: str = 'benchmark'
+) -> tuple:
+    """
+    生成基准测试报告 (JSON和文本格式)
+
+    Args:
+        results: 测试结果列表
+        output_dir: 输出目录
+        filename_prefix: 文件名前缀
+
+    Returns:
+        (json_file_path, txt_file_path) 元组
+    """
+    from datetime import datetime
+
+    report_file = output_dir / f"{filename_prefix}_report.json"
+    summary_file = output_dir / f"{filename_prefix}_summary.txt"
+
+    # 确保输出目录存在
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 保存JSON报告
+    report_data = {
+        'timestamp': datetime.now().isoformat(),
+        'total_algorithms': len(results),
+        'successful': sum(1 for r in results if r.get('status') == 'success'),
+        'failed': sum(1 for r in results if r.get('status') != 'success'),
+        'results': results
+    }
+
+    with open(report_file, 'w', encoding='utf-8') as f:
+        json.dump(report_data, f, indent=2, ensure_ascii=False)
+
+    # 生成文本摘要
+    successful = [r for r in results if r.get('status') == 'success']
+    failed = [r for r in results if r.get('status') != 'success']
+
+    with open(summary_file, 'w', encoding='utf-8') as f:
+        f.write("=" * 80 + "\n")
+        f.write("基准测试报告\n")
+        f.write("=" * 80 + "\n")
+        f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"总算法数: {len(results)}\n")
+        f.write(f"成功: {len(successful)} | 失败: {len(failed)}\n")
+        f.write("=" * 80 + "\n\n")
+
+        if successful:
+            f.write("【成功运行的算法】\n\n")
+            f.write(format_metrics_table(successful))
+            f.write("\n\n")
+
+        if failed:
+            f.write("【运行失败的算法】\n\n")
+            for r in failed:
+                f.write(f"- {r.get('algorithm', 'unknown')}: {r.get('error', 'Unknown error')}\n")
+            f.write("\n")
+
+        f.write("=" * 80 + "\n")
+
+    return report_file, summary_file
+
+
+# ============================================================================
+# 辅助装饰器
+# ============================================================================
+
+def timer_decorator(func):
+    """
+    计时装饰器 - 记录函数执行时间
+
+    Usage:
+        @timer_decorator
+        def my_function():
+            pass
+    """
+    import time
+    import functools
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        elapsed = time.time() - start
+        logger.info(f"{func.__name__} 耗时: {elapsed:.2f}秒")
+        return result
+
+    return wrapper
+
+
+# ============================================================================
+# 文件操作
+# ============================================================================
+
+def ensure_dir(path: str) -> Path:
+    """
+    确保目录存在，如果不存在则创建
+
+    Args:
+        path: 目录路径
+
+    Returns:
+        Path 对象
+    """
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def load_json_safe(file_path: str, default=None) -> Any:
+    """
+    安全加载JSON文件，如果失败返回默认值
+
+    Args:
+        file_path: JSON文件路径
+        default: 失败时的默认值
+
+    Returns:
+        解析后的JSON数据或默认值
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"加载JSON文件失败: {file_path}, 错误: {e}")
+        return default
+

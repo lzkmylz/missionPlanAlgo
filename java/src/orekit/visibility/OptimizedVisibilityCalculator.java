@@ -102,11 +102,36 @@ public class OptimizedVisibilityCalculator {
             AbsoluteDate endTime,
             double coarseStep,
             double fineStep) throws Exception {
+        // 调用新版本，地面站列表为空
+        return computeAllVisibilityWindows(satellites, targets, null, startTime, endTime, coarseStep, fineStep);
+    }
+
+    /**
+     * 批量计算所有卫星-目标对和卫星-地面站对的可见窗口（完整版）
+     *
+     * @param satellites 卫星配置列表
+     * @param targets 目标配置列表
+     * @param groundStations 地面站配置列表（可为null）
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @param coarseStep 粗扫描步长（秒）
+     * @param fineStep 精化步长（秒）
+     * @return 批量计算结果
+     */
+    public BatchResult computeAllVisibilityWindows(
+            List<SatelliteConfig> satellites,
+            List<TargetConfig> targets,
+            List<orekit.visibility.model.GroundStationConfig> groundStations,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double coarseStep,
+            double fineStep) throws Exception {
 
         long startNs = System.nanoTime();
 
         // Phase 1: 预计算所有卫星轨道（并行）
-        orbitCache.precomputeAllOrbits(satellites, startTime, endTime, coarseStep);
+        // 使用精扫描步长（fineStep）而非粗扫描步长，确保轨道数据精度与可见性计算一致
+        orbitCache.precomputeAllOrbits(satellites, startTime, endTime, fineStep);
 
         // Phase 2: 批量计算所有卫星-目标对的可见性（使用缓存，无需传播）
         // 使用并行流进行卫星-目标对并行计算
@@ -137,6 +162,15 @@ public class OptimizedVisibilityCalculator {
             })
             .sum();
 
+        // Phase 3: 计算卫星-地面站可见窗口（如果提供了地面站列表）
+        int gsWindowCount = 0;
+        if (groundStations != null && !groundStations.isEmpty()) {
+            gsWindowCount = computeGroundStationWindows(
+                satellites, groundStations, startTime, endTime, coarseStep, fineStep, gsWindows
+            );
+            totalWindows += gsWindowCount;
+        }
+
         long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
 
         // 构建统计信息
@@ -144,10 +178,51 @@ public class OptimizedVisibilityCalculator {
         stats.put("computationTimeMs", elapsedMs);
         stats.put("satelliteCount", satellites.size());
         stats.put("targetCount", targets.size());
+        stats.put("groundStationCount", groundStations != null ? groundStations.size() : 0);
         stats.put("totalWindows", totalWindows);
+        stats.put("targetWindows", totalWindows - gsWindowCount);
+        stats.put("gsWindows", gsWindowCount);
         stats.put("cacheMemoryMB", orbitCache.getMemoryUsage() / (1024 * 1024));
 
         return new BatchResult(targetWindows, gsWindows, stats);
+    }
+
+    /**
+     * 计算卫星-地面站可见窗口
+     */
+    private int computeGroundStationWindows(
+            List<SatelliteConfig> satellites,
+            List<orekit.visibility.model.GroundStationConfig> groundStations,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double coarseStep,
+            double fineStep,
+            Map<String, List<VisibilityWindow>> gsWindows) {
+
+        // 创建所有卫星-地面站对
+        List<SatGroundStationPair> pairs = new ArrayList<>();
+        for (SatelliteConfig sat : satellites) {
+            for (orekit.visibility.model.GroundStationConfig gs : groundStations) {
+                pairs.add(new SatGroundStationPair(sat, gs));
+            }
+        }
+
+        // 并行计算所有卫星-地面站对的可见窗口
+        return pairs.parallelStream()
+            .mapToInt(pair -> {
+                List<VisibilityWindow> windows = computeGsWindowsUsingCache(
+                    pair.sat, pair.gs, startTime, endTime, coarseStep, fineStep
+                );
+
+                if (!windows.isEmpty()) {
+                    // 使用GS:前缀标识地面站目标
+                    String key = pair.sat.getId() + "_GS:" + pair.gs.getId();
+                    gsWindows.computeIfAbsent(key, k -> new ArrayList<>()).addAll(windows);
+                }
+
+                return windows.size();
+            })
+            .sum();
     }
 
     /**
@@ -390,6 +465,187 @@ public class OptimizedVisibilityCalculator {
      */
     public OrbitStateCache getOrbitCache() {
         return orbitCache;
+    }
+
+    /**
+     * 使用缓存的轨道状态计算单个卫星-地面站对的可见窗口
+     */
+    private List<VisibilityWindow> computeGsWindowsUsingCache(
+            SatelliteConfig sat,
+            orekit.visibility.model.GroundStationConfig gs,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double coarseStep,
+            double fineStep) {
+
+        List<VisibilityWindow> windows = new ArrayList<>();
+
+        // 地面站点
+        GeodeticPoint gsPoint = new GeodeticPoint(
+            Math.toRadians(gs.getLatitude()),
+            Math.toRadians(gs.getLongitude()),
+            gs.getAltitude()
+        );
+
+        // 地面站笛卡尔坐标（缓存，避免重复计算）
+        double[] gsCart = geodeticToCartesian(gsPoint);
+
+        // 最小仰角（地面站通常有更高的最小仰角要求）
+        double minElevationRad = Math.toRadians(
+            Math.max(5.0, gs.getMinElevation())
+        );
+
+        // 最大通信距离（如果配置）
+        double maxRange = gs.getMaxRange() > 0 ? gs.getMaxRange() : Double.MAX_VALUE;
+
+        // 计算总时长
+        double duration = endTime.durationFrom(startTime);
+
+        // 粗扫描：使用缓存的轨道状态
+        AbsoluteDate windowStart = null;
+        boolean wasVisible = false;
+        double maxElevationInWindow = 0.0;
+        AbsoluteDate maxElevationTime = null;
+
+        for (double t = 0; t <= duration; t += coarseStep) {
+            OrbitStateCache.OrbitState state = orbitCache.getStateAtTime(sat.getId(), t);
+            if (state == null) continue;
+
+            // 检查距离约束
+            double dist = calculateDistance(state, gsCart);
+            if (dist > maxRange) {
+                if (wasVisible && windowStart != null) {
+                    // 窗口结束
+                    AbsoluteDate windowEnd = startTime.shiftedBy(t);
+                    VisibilityWindow window = createGsVisibilityWindow(
+                        sat, gs, windowStart, windowEnd,
+                        Math.toDegrees(maxElevationInWindow), maxElevationTime,
+                        startTime, endTime
+                    );
+                    if (window != null) {
+                        windows.add(window);
+                    }
+                    windowStart = null;
+                    maxElevationInWindow = 0.0;
+                    maxElevationTime = null;
+                }
+                wasVisible = false;
+                continue;
+            }
+
+            // 从缓存状态计算可见性（纯几何计算）
+            double elevation = calculateElevationFromState(state, gsCart);
+            boolean isVisible = elevation >= minElevationRad;
+
+            if (isVisible != wasVisible) {
+                if (wasVisible && windowStart != null) {
+                    // 窗口结束，精化边界
+                    AbsoluteDate windowEnd = startTime.shiftedBy(t);
+                    VisibilityWindow window = createGsVisibilityWindow(
+                        sat, gs, windowStart, windowEnd,
+                        Math.toDegrees(maxElevationInWindow), maxElevationTime,
+                        startTime, endTime
+                    );
+                    if (window != null) {
+                        windows.add(window);
+                    }
+                } else {
+                    // 窗口开始
+                    windowStart = startTime.shiftedBy(t);
+                    maxElevationInWindow = 0.0;
+                    maxElevationTime = null;
+                }
+                wasVisible = isVisible;
+            }
+
+            if (isVisible) {
+                if (elevation > maxElevationInWindow) {
+                    maxElevationInWindow = elevation;
+                    maxElevationTime = startTime.shiftedBy(t);
+                }
+            }
+        }
+
+        // 处理最后一个窗口
+        if (wasVisible && windowStart != null) {
+            VisibilityWindow window = createGsVisibilityWindow(
+                sat, gs, windowStart, endTime,
+                Math.toDegrees(maxElevationInWindow), maxElevationTime,
+                startTime, endTime
+            );
+            if (window != null) {
+                windows.add(window);
+            }
+        }
+
+        return windows;
+    }
+
+    /**
+     * 计算两点间距离
+     */
+    private double calculateDistance(OrbitStateCache.OrbitState state, double[] pointCart) {
+        double dx = state.x - pointCart[0];
+        double dy = state.y - pointCart[1];
+        double dz = state.z - pointCart[2];
+        return Math.sqrt(dx*dx + dy*dy + dz*dz);
+    }
+
+    /**
+     * 创建地面站可见窗口对象
+     */
+    private VisibilityWindow createGsVisibilityWindow(
+            SatelliteConfig sat,
+            orekit.visibility.model.GroundStationConfig gs,
+            AbsoluteDate start,
+            AbsoluteDate end,
+            double maxElevation,
+            AbsoluteDate maxElTime,
+            AbsoluteDate globalStart,
+            AbsoluteDate globalEnd) {
+
+        // 确保窗口在全局时间范围内
+        AbsoluteDate preciseStart = start.compareTo(globalStart) < 0 ? globalStart : start;
+        AbsoluteDate preciseEnd = end.compareTo(globalEnd) > 0 ? globalEnd : end;
+
+        // 计算持续时间
+        double duration = preciseEnd.durationFrom(preciseStart);
+
+        // 地面站窗口最小持续时间（通常较短，如30秒）
+        double minDuration = 30.0;
+        if (duration < minDuration) {
+            return null;
+        }
+
+        // 计算质量分数
+        double qualityScore = Math.min(1.0, maxElevation / 90.0);
+
+        return new VisibilityWindow(
+            sat.getId(),
+            "GS:" + gs.getId(),  // 使用GS:前缀标识地面站目标
+            preciseStart,
+            preciseEnd,
+            duration,
+            maxElevation,
+            maxElTime != null ? maxElTime : preciseStart.shiftedBy(duration / 2),
+            0.0,  // entryAzimuth
+            0.0,  // exitAzimuth
+            qualityScore,
+            maxElevation > 30.0 ? "HIGH" : (maxElevation > 15.0 ? "MEDIUM" : "LOW")
+        );
+    }
+
+    /**
+     * 卫星-地面站对辅助类
+     */
+    private static class SatGroundStationPair {
+        final SatelliteConfig sat;
+        final orekit.visibility.model.GroundStationConfig gs;
+
+        SatGroundStationPair(SatelliteConfig sat, orekit.visibility.model.GroundStationConfig gs) {
+            this.sat = sat;
+            this.gs = gs;
+        }
     }
 
     /**

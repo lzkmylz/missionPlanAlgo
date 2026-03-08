@@ -43,13 +43,45 @@ OrbitStateCache (并行计算60颗卫星)
     ▼
 OptimizedVisibilityCalculator
     ├─ 粗扫描 (5秒步长)
-    └─ 精化扫描 (1秒步长)
+    ├─ 精化扫描 (1秒步长)
+    └─ 卫星-目标窗口 + 卫星-地面站窗口 (默认一起计算)
     │
     ▼
 输出文件
-    ├─ visibility_windows.json (318,312窗口)
+    ├─ visibility_windows.json (279,386窗口: 277,946目标 + 1,440地面站)
     ├─ satellites.json (轨道数据)
     └─ ground_stations.json
+
+### 地面站可见窗口计算
+
+**重要变更**: Java后端现在**默认同时计算**卫星-地面站可见性窗口，不再需要在Python端用简化模型生成。
+
+**计算方法** (`OptimizedVisibilityCalculator.java`):
+```java
+// 新的重载方法，接受地面站列表
+public BatchResult computeAllVisibilityWindows(
+    List<SatelliteConfig> satellites,
+    List<TargetConfig> targets,
+    List<GroundStationConfig> groundStations,  // 新增
+    AbsoluteDate startTime,
+    AbsoluteDate endTime,
+    double coarseStep,
+    double fineStep
+)
+```
+
+**计算流程**:
+1. 预计算所有卫星轨道（HPOP高精度模型）
+2. 并行计算卫星-目标窗口（60卫星 × 1000目标）
+3. **并行计算卫星-地面站窗口（60卫星 × 12地面站）**
+4. 统一输出到 `visibility_windows.json`
+
+**地面站窗口标识**: 目标ID使用 `GS:` 前缀，如 `GS:GS-BEIJING`
+
+**性能影响**:
+- 额外计算720对卫星-地面站组合
+- 地面站计算更快（固定位置 vs 移动目标）
+- 总体增加约1-2秒计算时间
 ```
 
 ---
@@ -62,6 +94,7 @@ OptimizedVisibilityCalculator
 | DIRECT_HPOP_THRESHOLD_DAYS | 3.0 | 历元距场景<3天直接HPOP，>3天用J4外推 |
 | 粗扫描步长 | 5.0s | 快速定位窗口 |
 | 精化扫描步长 | 1.0s | 精确窗口边界 |
+| **轨道数据导出步长** | **1.0s** | **与精扫描步长一致，确保与姿态计算配置匹配** |
 | 场景持续时间 | 24h | HPOP实际传播时长 |
 
 ### 卫星物理参数默认值
@@ -106,21 +139,101 @@ positionTolerance = 10.0m // 位置容差
 
 ---
 
+## 轨道数据持久化与姿态计算
+
+### Java端HPOP轨道数据持久化
+
+可见性计算完成后，Java端**默认自动导出**预计算的HPOP轨道数据：
+
+**默认保存路径**: `java/output/frequency_scenario/orbits.json.gz`
+
+**导出步长**: **1.0秒**（与精扫描步长一致，确保与姿态计算配置匹配）
+
+**关键代码** (`OptimizedVisibilityCalculator.java:133`):
+```java
+// 使用精扫描步长（fineStep）而非粗扫描步长，确保轨道数据精度与可见性计算一致
+orbitCache.precomputeAllOrbits(satellites, startTime, endTime, fineStep);  // fineStep = 1.0s
+```
+
+**文件格式**: JSON + GZIP压缩，包含：
+- 卫星ID、时间戳（秒）
+- 位置向量（ECEF，米）
+- 速度向量（米/秒）
+- 地理坐标（纬度/经度/高度）
+
+**导出代码** (`LargeScaleFrequencyTest.java:92-103`):
+```java
+OrbitStateCache orbitCache = calculator.getOrbitCache();
+OrbitDataExporter exporter = new OrbitDataExporter();
+exporter.exportToJson(orbitCache.getCache(), "output/frequency_scenario/orbits.json.gz");
+```
+
+### Python端轨道数据加载
+
+**所有调度器默认自动加载**Java预计算的轨道数据：
+
+**加载优先级**:
+1. 检查 `use_precomputed_orbits`（默认True）
+2. 尝试加载 `java/output/frequency_scenario/orbits.json.gz`
+3. 成功 → 使用O(1)缓存查询，**跳过Python端预计算**
+4. 失败 → Python端自己预计算（1秒步长）
+
+**关键代码** (`base_scheduler.py:360-395`):
+```python
+def _load_precomputed_orbits_from_java(self) -> bool:
+    json_path = self.config.get('orbit_json_path',
+                                'java/output/frequency_scenario/orbits.json.gz')
+    propagator.load_precomputed_orbits(json_path, start_time)
+```
+
+### 默认姿态计算配置
+
+**所有规划算法默认精确计算姿态角** (`scripts/config.py`):
+
+```python
+DEFAULT_IMAGING_CONFIG = {
+    'use_simplified_slew': False,           # 禁用简化模式
+    'enable_attitude_calculation': True,    # 启用姿态角计算
+    'precompute_positions': True,           # 预计算位置（如未加载Java数据）
+    'precompute_step_seconds': 1.0,         # 1秒步长（与HPOP精扫描匹配）
+    'use_precomputed_orbits': True,         # 默认加载Java预计算轨道
+}
+```
+
+**姿态计算解耦**: 姿态计算与简化模式完全解耦，只要 `enable_attitude_calculation=True` 就始终计算。
+
+---
+
 ## 使用命令
 
 ```bash
 # 编译
 cd java && make build
 
-# 运行大规模场景测试
+# 运行大规模场景测试（使用默认配置）
 cd java && java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest
 
-# 场景文件路径
-./scenarios/large_scale_frequency.json
+# 指定场景文件和输出目录
+cd java && java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest \
+    --scenario ../scenarios/my_scenario.json \
+    --output output/my_results \
+    --orbit-output output/my_results/orbits.json.gz
 
-# 输出目录
-./output/frequency_scenario/
+# 自定义扫描步长
+cd java && java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest \
+    --coarse-step 10.0 \
+    --fine-step 2.0
 ```
+
+**命令行参数:**
+| 参数 | 短选项 | 说明 | 默认值 |
+|------|--------|------|--------|
+| `--scenario` | `-s` | 场景配置文件路径 | `../scenarios/large_scale_frequency.json` |
+| `--output` | `-o` | 输出目录 | `output/frequency_scenario` |
+| `--orbit-output` | | 轨道数据输出路径 | `<output>/orbits.json.gz` |
+| `--coarse-step` | | 粗扫描步长(秒) | `5.0` |
+| `--fine-step` | | 精化步长(秒) | `1.0` |
+| `--help` | `-h` | 显示帮助 | |
 
 ---
 
@@ -173,9 +286,25 @@ GIT_SSH_COMMAND="ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30" git pu
 - 网络连接不稳定
 - 远程主机关闭连接
 
----
+### 2026-03-08: Python脚本支持Java轨道数据导出
+**问题**: Python脚本 `compute_visibility.py` 只计算可见性窗口，不导出轨道数据，导致调度器需要单独预计算
+**解决**: 修改 `PythonBridge.java`、`orekit_java_bridge.py` 和 `compute_visibility.py`
+- Java端新增 `computeVisibilityBatchWithOrbitExport` 方法，使用 `OptimizedVisibilityCalculator` 计算并导出轨道数据
+- Python端新增 `compute_visibility_batch_with_orbit_export` 方法调用Java接口
+- 脚本默认启用轨道数据导出，支持 `--orbit-output` 和 `--no-orbit-export` 参数
+**关键配置**: 轨道数据导出使用 **1.0秒步长**（与精扫描步长一致），与 `precompute_step_seconds: 1.0` 配置匹配
 
-## 历史关键修复
+### 2026-03-08: Java后端默认计算卫星-地面站可见性
+**问题**: 地面站可见窗口原本在Python端用简化模型生成（`compute_gs_visibility.py`），不是精确的Orekit计算
+**解决**: 修改 `OptimizedVisibilityCalculator.java` 和 `LargeScaleFrequencyTest.java`
+- 新增 `computeAllVisibilityWindows()` 重载方法，接受地面站列表
+- 新增 `computeGroundStationWindows()` 方法，使用HPOP轨道缓存计算
+- 新增 `computeGsWindowsUsingCache()` 方法，纯几何计算地面站仰角
+- 输出文件统一包含目标窗口和地面站窗口
+**结果**:
+- 地面站窗口现在使用与目标窗口相同的高精度HPOP轨道数据
+- 无需额外的Python后处理步骤
+- 输出文件直接可用于数传规划
 
 ### 2026-03-06: 智能轨道初始化器
 **问题**: 历元(J2000)距场景时间(2024)24年，HPOP传播耗时226+分钟

@@ -21,9 +21,12 @@ from ..frequency_utils import ObservationTask, create_observation_tasks
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
+from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
+from scheduler.common.config import ConstraintConfig
+from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 
 
-class GreedyScheduler(BaseScheduler):
+class GreedyScheduler(BaseScheduler, ClusteringMixin):
     """
     Real Greedy Scheduler with full constraint checking
 
@@ -60,8 +63,12 @@ class GreedyScheduler(BaseScheduler):
                 - consider_time_conflicts: Whether to check time conflicts (default True)
                 - min_imaging_duration: Minimum imaging duration in seconds
                 - max_imaging_duration: Maximum imaging duration in seconds
+                - enable_clustering: Enable target clustering (default False)
+                - cluster_radius_km: Cluster radius in km (default 10.0)
+                - min_cluster_size: Minimum targets per cluster (default 2)
         """
         super().__init__("Greedy", config)
+        ClusteringMixin.__init__(self, config)
         config = config or {}
         self.heuristic = config.get('heuristic', 'priority')
         self.consider_power = config.get('consider_power', True)
@@ -85,12 +92,15 @@ class GreedyScheduler(BaseScheduler):
 
     def get_parameters(self) -> Dict[str, Any]:
         """Return algorithm configurable parameters"""
-        return {
+        params = {
             'heuristic': self.heuristic,
             'consider_power': self.consider_power,
             'consider_storage': self.consider_storage,
             'consider_time_conflicts': self.consider_time_conflicts,
         }
+        # Add clustering parameters
+        params.update(self.get_clustering_config())
+        return params
 
     def schedule(self) -> ScheduleResult:
         """
@@ -123,6 +133,16 @@ class GreedyScheduler(BaseScheduler):
                 'scheduled_tasks': []  # Track scheduled tasks for conflict detection
             }
 
+        # Initialize unified constraint checker
+        constraint_config = ConstraintConfig(
+            consider_power=self.consider_power,
+            consider_storage=self.consider_storage,
+            enable_saa_check=True,
+            mode='simplified' if self._use_simplified_slew else 'standard'
+        )
+        self._constraint_checker = ConstraintChecker(self.mission, constraint_config)
+        self._constraint_checker.initialize()
+
         # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
         self._initialize_slew_checker()
 
@@ -132,10 +152,15 @@ class GreedyScheduler(BaseScheduler):
         # Initialize attitude state tracking
         self._initialize_attitude_state()
 
+        # Pass position cache to unified constraint checker if available
+        if self._position_cache is not None and self._constraint_checker is not None:
+            self._constraint_checker.set_position_cache(self._position_cache)
+
         # Precompute satellite positions to accelerate scheduling (only in non-simplified mode)
-        if not self._use_simplified_slew and self.config.get('precompute_positions', False):
+        # 默认启用预计算以加速姿态角计算，除非显式禁用
+        if not self._use_simplified_slew and self.config.get('precompute_positions', True):
             print("    Precomputing satellite positions...")
-            self._precompute_satellite_positions(time_step_minutes=self.config.get('precompute_step_minutes', 30))
+            self._precompute_satellite_positions(time_step_seconds=self.config.get('precompute_step_seconds', 1.0))
 
         # Keep _slew_calculators for backward compatibility
         self._slew_calculators = {}
@@ -147,8 +172,15 @@ class GreedyScheduler(BaseScheduler):
                 settling_time=agility.get('settling_time', 5.0)
             )
 
-        # Sort tasks based on heuristic (using frequency-aware tasks)
-        pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
+        # Reset clustering state if needed
+        if self.enable_clustering:
+            self.reset_clustering_state()
+
+        # Get tasks based on whether clustering is enabled
+        if self.enable_clustering:
+            pending_tasks = self._sort_tasks(self._get_clustered_tasks())
+        else:
+            pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
         scheduled_tasks: List[ScheduledTask] = []
         unscheduled: Dict[str, Any] = {}
 
@@ -285,7 +317,7 @@ class GreedyScheduler(BaseScheduler):
 
     def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
         """
-        Find the best satellite-window assignment for a task
+        Find the best satellite-window assignment for a task using unified constraint checker.
 
         Args:
             task: Target task to schedule
@@ -297,10 +329,6 @@ class GreedyScheduler(BaseScheduler):
         best_score = None
 
         for sat in self.mission.satellites:
-            # Check if satellite can perform this task
-            if not self._can_satellite_perform_task(sat, task):
-                continue
-
             # Get visibility windows
             windows = self._get_windows(sat, task)
             if not windows:
@@ -326,47 +354,79 @@ class GreedyScheduler(BaseScheduler):
                 if window_duration < imaging_duration * self.MIN_WINDOW_RATIO:
                     continue
 
-                # Check resource constraints
-                if not self._check_resource_constraints(sat, task, imaging_mode):
-                    continue
-
-                # Check slew constraints (using simplified or precise calculation)
+                # Get resource usage for this satellite
                 usage = self._sat_resource_usage.get(sat.id, {})
                 last_task_end = usage.get('last_task_end', self.mission.start_time)
+                prev_target = self._get_previous_task_target(sat.id)
+                scheduled_tasks = usage.get('scheduled_tasks', [])
 
-                if self._use_simplified_slew:
-                    # Use simplified slew check for performance
-                    slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
+                # Use unified constraint checker
+                if self._constraint_checker is not None:
+                    context = ConstraintContext(
+                        satellite=sat,
+                        target=task,
+                        window_start=window_start,
+                        window_end=window_end,
+                        prev_target=prev_target,
+                        prev_end_time=last_task_end,
+                        imaging_duration=imaging_duration,
+                        current_power=usage.get('power', sat.capabilities.power_capacity),
+                        current_storage=usage.get('storage', 0.0),
+                        scheduled_tasks=scheduled_tasks,
+                        imaging_mode=imaging_mode
+                    )
+
+                    result = self._constraint_checker.check_task(context)
+
+                    if not result.feasible:
+                        continue
+
+                    actual_start = result.actual_start or window_start
+                    actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+                    # Create a compatible slew result for backward compatibility
+                    slew_result = SlewFeasibilityResult(
+                        feasible=True,
+                        slew_angle=result.slew_angle,
+                        slew_time=result.slew_time,
+                        actual_start=actual_start,
+                        reason=None
+                    )
                 else:
-                    # Use precise slew constraint check
-                    prev_target = self._get_previous_task_target(sat.id)
-                    self._ensure_slew_checker_initialized()
-                    if self._slew_checker is None:
-                        continue
-                    slew_result = self._slew_checker.check_slew_feasibility(
-                        sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                    )
-
-                if not slew_result.feasible:
-                    continue
-
-                # Check SAA constraints
-                self._ensure_saa_checker_initialized()
-                if self._saa_checker is not None:
-                    saa_result = self._saa_checker.check_window_feasibility(
-                        sat.id, window_start, window_end
-                    )
-                    if not saa_result.feasible:
+                    # Fallback to legacy constraint checking
+                    if not self._can_satellite_perform_task(sat, task):
                         continue
 
-                # Use actual start time from slew calculation
-                actual_start = slew_result.actual_start
-                actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-                # Check time conflicts
-                if self.consider_time_conflicts:
-                    if self._has_time_conflict(sat.id, actual_start, actual_end):
+                    if not self._check_resource_constraints(sat, task, imaging_mode):
                         continue
+
+                    if self._use_simplified_slew:
+                        slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
+                    else:
+                        self._ensure_slew_checker_initialized()
+                        if self._slew_checker is None:
+                            continue
+                        slew_result = self._slew_checker.check_slew_feasibility(
+                            sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                        )
+
+                    if not slew_result.feasible:
+                        continue
+
+                    self._ensure_saa_checker_initialized()
+                    if self._saa_checker is not None:
+                        saa_result = self._saa_checker.check_window_feasibility(
+                            sat.id, window_start, window_end
+                        )
+                        if not saa_result.feasible:
+                            continue
+
+                    actual_start = slew_result.actual_start
+                    actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+                    if self.consider_time_conflicts:
+                        if self._has_time_conflict(sat.id, actual_start, actual_end):
+                            continue
 
                 # Calculate score for this assignment
                 score = self._calculate_assignment_score(
@@ -654,13 +714,14 @@ class GreedyScheduler(BaseScheduler):
 
         # 获取最后一个已调度任务
         last_task_info = scheduled_tasks[-1]
-        prev_task_id = last_task_info.get('task_id')
+        # 优先使用 target_id，如果不存在则回退到 task_id
+        prev_target_id = last_task_info.get('target_id') or last_task_info.get('task_id')
 
-        if not prev_task_id or not self.mission:
+        if not prev_target_id or not self.mission:
             return None
 
         # 从mission中找到对应的目标
-        return self.mission.get_target_by_id(prev_task_id)
+        return self.mission.get_target_by_id(prev_target_id)
 
     def _create_scheduled_task(
         self, task: Any, sat_id: str, window: Any, imaging_mode: Any,
@@ -701,9 +762,16 @@ class GreedyScheduler(BaseScheduler):
         storage_used = 0.0
         if sat and self.consider_storage:
             data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
-            storage_used = self._imaging_calculator.get_storage_consumption(
-                task, imaging_mode, data_rate
-            )
+            # 处理聚类任务的存储消耗（累加所有目标）
+            if isinstance(task, ClusterTask):
+                for target in task.targets:
+                    storage_used += self._imaging_calculator.get_storage_consumption(
+                        target, imaging_mode, data_rate
+                    )
+            else:
+                storage_used = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, data_rate
+                )
 
         # 使用 slew_result 中的机动信息（如果提供），否则重新计算
         if slew_result:
@@ -753,14 +821,20 @@ class GreedyScheduler(BaseScheduler):
             power_after=power_before - power_consumed
         )
 
-        # 计算并应用姿态角（当有预计算位置缓存时，即使简化模式也计算）
-        should_calculate_attitude = (
-            (not self._use_simplified_slew) or  # 非简化模式
-            (self._position_cache is not None)   # 有预计算位置缓存
-        )
-        if should_calculate_attitude and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+        # 计算并应用姿态角（在姿态角计算启用时始终计算）
+        if self._enable_attitude_calculation and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
             attitude = self._calculate_attitude_angles(sat, task, actual_start)
             self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
+
+        # 如果是聚类任务，记录聚类调度信息
+        if isinstance(task, ClusterTask) and self.enable_clustering:
+            self._record_cluster_schedule(
+                task=task,
+                satellite_id=sat_id,
+                imaging_start=actual_start,
+                imaging_end=actual_end,
+                look_angle=slew_angle
+            )
 
         return scheduled_task
 
@@ -794,10 +868,13 @@ class GreedyScheduler(BaseScheduler):
         # Track scheduled task for conflict detection
         if 'scheduled_tasks' not in usage:
             usage['scheduled_tasks'] = []
+        # Use target_id if available (for ObservationTask), otherwise use task.id
+        target_id = getattr(task, 'target_id', task.id)
         usage['scheduled_tasks'].append({
             'start': scheduled_task.imaging_start,
             'end': scheduled_task.imaging_end,
-            'task_id': task.id
+            'task_id': task.id,
+            'target_id': target_id
         })
 
         # Update attitude state after task (set to IMAGING mode)

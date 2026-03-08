@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from scheduler.common import ResourceManager, TaskTimeManager, ConstraintChecker, ConstraintContext
 from scheduler.common import MetaheuristicConfig, ConstraintConfig
+from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 from payload.imaging_time_calculator import ImagingTimeCalculator
 from core.models import Mission, ImagingMode
 
@@ -61,7 +62,7 @@ class EvaluationState:
         )
 
 
-class MetaheuristicScheduler(BaseScheduler, ABC):
+class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
     """Base class for metaheuristic schedulers.
 
     This class consolidates shared functionality across GA, SA, ACO, PSO, and Tabu
@@ -88,8 +89,12 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
         Args:
             name: Algorithm name (e.g., 'GA', 'SA')
             config: Configuration dictionary
+                - enable_clustering: Enable target clustering (default False)
+                - cluster_radius_km: Cluster radius in km (default 10.0)
+                - min_cluster_size: Minimum targets per cluster (default 2)
         """
         super().__init__(name, config)
+        ClusteringMixin.__init__(self, config)
         config = config or {}
 
         # Convert legacy config to new format
@@ -119,7 +124,7 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
             consider_storage=config.get('consider_storage', True),
             mode='simplified' if config.get('use_simplified_slew', False) else 'standard',
             enable_saa_check=config.get('enable_saa_check', True),
-            enable_attitude_calculation=config.get('enable_attitude_calculation', False),
+            enable_attitude_calculation=config.get('enable_attitude_calculation', True),
         )
 
         # Get max_iterations (support both 'max_iterations' and 'generations')
@@ -153,8 +158,15 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
         self._start_timer()
         self._validate_initialization()
 
+        # Reset clustering state if needed
+        if self.enable_clustering:
+            self.reset_clustering_state()
+
         # Prepare data
-        self.tasks = self._create_frequency_aware_tasks()
+        if self.enable_clustering:
+            self.tasks = self._get_clustered_tasks()
+        else:
+            self.tasks = self._create_frequency_aware_tasks()
         self.satellites = list(self.mission.satellites)
         self.task_count = len(self.tasks)
         self.sat_count = len(self.satellites)
@@ -242,6 +254,14 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
             max_duration=self._config.max_imaging_duration,
             default_duration=self._config.default_imaging_duration,
         )
+
+        # 预计算卫星位置以加速姿态角计算（默认启用，除非显式禁用）
+        use_simplified = self._config.constraints.mode == 'simplified'
+        precompute_enabled = self.config.get('precompute_positions', True) if self.config else True
+        if not use_simplified and precompute_enabled:
+            print("    预计算卫星位置...")
+            step_seconds = self.config.get('precompute_step_seconds', 1.0) if self.config else 1.0
+            self._precompute_satellite_positions(time_step_seconds=step_seconds)
 
     @abstractmethod
     def initialize_population(self) -> List[Solution]:
@@ -394,8 +414,26 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
         return actual_start, actual_end
 
     def _is_saa_feasible(self, sat_id: str, window: Any) -> bool:
-        """Check if window is feasible w.r.t. SAA constraints."""
-        return True  # Simplified - actual implementation uses constraint checker
+        """Check if window is feasible w.r.t. SAA constraints.
+
+        Uses the unified constraint checker to perform SAA validation.
+        """
+        if self._constraint_checker is None:
+            return True  # Cannot check without constraint checker
+
+        if not hasattr(window, 'start_time') or not hasattr(window, 'end_time'):
+            return True  # Invalid window format
+
+        # Use the constraint checker's SAA checker if available
+        if hasattr(self._constraint_checker, '_saa_checker'):
+            result = self._constraint_checker._saa_checker.check_saa(
+                sat_id=sat_id,
+                start_time=window.start_time,
+                end_time=window.end_time,
+            )
+            return result.feasible
+
+        return True  # Fallback if SAA checker not available
 
     def _compute_final_fitness(self, state: EvaluationState) -> float:
         """Compute final fitness score from evaluation state."""
@@ -456,6 +494,30 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
                 unscheduled[getattr(task, 'id', str(task_idx))] = TaskFailureReason.CONSTRAINT_VIOLATION
                 continue
 
+            # 计算机动时间和角度
+            slew_time = 10.0  # 默认机动时间
+            slew_angle = 0.0
+            prev_end = state.sat_last_end_time.get(sat_idx)
+            if prev_end:
+                # 计算与上一个任务的时间间隔作为机动时间
+                time_gap = (actual_start - prev_end).total_seconds()
+                slew_time = max(0, min(time_gap, 60.0))  # 限制在0-60秒
+                # 如果有前一个目标，计算机动角度
+                prev_target = state.sat_last_target.get(sat_idx)
+                if prev_target and hasattr(prev_target, 'latitude') and hasattr(task, 'latitude'):
+                    import math
+                    lat_diff = abs(task.latitude - prev_target.latitude)
+                    lon_diff = abs(task.longitude - prev_target.longitude)
+                    slew_angle = math.sqrt(lat_diff**2 + lon_diff**2)
+
+            # 计算资源使用
+            storage_used = 0.0
+            if self._config.constraints.consider_storage:
+                storage_used = self._imaging_calculator.get_storage_consumption(
+                    task, imaging_mode, getattr(sat.capabilities, 'data_rate', 300.0)
+                )
+            current_storage = state.sat_resources.get(sat_idx, {}).get('storage', 0)
+
             # Create scheduled task
             scheduled_task = ScheduledTask(
                 task_id=getattr(task, 'id', str(task_idx)),
@@ -464,14 +526,40 @@ class MetaheuristicScheduler(BaseScheduler, ABC):
                 imaging_start=actual_start,
                 imaging_end=actual_end,
                 imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
+                slew_angle=slew_angle,
+                slew_time=slew_time,
+                storage_before=current_storage,
+                storage_after=current_storage + storage_used,
             )
 
+            # 计算姿态角（如果启用）
+            if self._enable_attitude_calculation:
+                attitude = self._calculate_attitude_angles(sat, task, actual_start)
+                if attitude:
+                    scheduled_task.roll_angle = attitude.roll
+                    scheduled_task.pitch_angle = attitude.pitch
+                    scheduled_task.yaw_angle = attitude.yaw
+
             scheduled_tasks.append(scheduled_task)
+
+            # 更新资源状态
+            if self._config.constraints.consider_storage:
+                state.sat_resources[sat_idx]['storage'] = current_storage + storage_used
 
             # Update state
             state.sat_task_times[sat_idx].append((actual_start, actual_end))
             state.sat_last_target[sat_idx] = task
             state.sat_last_end_time[sat_idx] = actual_end
+
+            # 如果是聚类任务，记录聚类调度信息
+            if isinstance(task, ClusterTask) and self.enable_clustering:
+                self._record_cluster_schedule(
+                    task=task,
+                    satellite_id=sat.id,
+                    imaging_start=actual_start,
+                    imaging_end=actual_end,
+                    look_angle=0.0  # 元启发式算法中暂未计算机动角度
+                )
 
         return scheduled_tasks, unscheduled
 

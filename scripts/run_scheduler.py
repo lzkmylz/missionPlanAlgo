@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 """
-统一调度脚本 - 合并了以下脚本的功能:
-- run_scheduler_with_cache.py
-- run_scheduler_with_frequency.py
-- run_all_schedulers.py
-- run_frequency_comparison.py
-- run_large_scale_comparison.py
+统一调度脚本 - 支持单一算法、多算法对比、频次需求和数传规划
 
 用法:
     # 单一算法模式 (默认启用频次和数传)
@@ -28,30 +23,32 @@ import argparse
 import json
 import sys
 import time
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-# 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.models import Mission
-from core.orbit.visibility.window_cache import VisibilityWindowCache
-from scheduler.unified_scheduler import UnifiedScheduler, UnifiedScheduleResult
-from scheduler.ground_station.scheduler import GroundStationScheduler
 from core.resources.ground_station_pool import GroundStationPool
+from scheduler.unified_scheduler import UnifiedScheduler, UnifiedScheduleResult
 from evaluation.metrics import MetricsCalculator
 
-# 从 utils 导入公共功能
-from scripts.utils import (
-    load_window_cache_from_json,
-    SCHEDULER_REGISTRY,
-    get_scheduler_class,
-    setup_logging,
-    save_results,
-    parse_algorithm_list,
+# 从 utils 和 config 导入公共功能
+from scripts.utils import load_window_cache_from_json, setup_logging
+from scripts.config import (
+    get_algorithm_config,
+    get_algorithm_name,
+    expand_algorithm_selection,
     validate_algorithms
 )
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
@@ -186,36 +183,14 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     return parser.parse_args(args)
 
 
-def build_scheduler_config(args: argparse.Namespace) -> Dict[str, Any]:
-    """构建调度器配置"""
-    config = {
-        'consider_power': True,
-        'consider_storage': True,
-    }
-
-    if args.simplified:
-        config['use_simplified_slew'] = True
-
-    # GA特定参数
-    if args.algorithm == 'ga':
-        config.update({
-            'population_size': args.population_size,
-            'generations': args.generations,
-            'mutation_rate': args.mutation_rate,
-            'crossover_rate': args.crossover_rate,
-            'random_seed': args.seed,
-        })
-
-    return config
-
-
 def run_single_algorithm(
     algorithm_name: str,
     mission: Mission,
-    cache: VisibilityWindowCache,
-    config: Dict[str, Any],
+    cache,
     enable_downlink: bool = False,
-    enable_frequency: bool = False
+    enable_frequency: bool = False,
+    seed: int = 42,
+    ga_params: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     运行单个调度算法
@@ -224,14 +199,14 @@ def run_single_algorithm(
         algorithm_name: 算法名称
         mission: 任务场景
         cache: 可见性窗口缓存
-        config: 调度器配置
         enable_downlink: 是否启用数传规划
         enable_frequency: 是否启用频次需求
+        seed: 随机种子
+        ga_params: GA特定参数字典
 
     Returns:
         包含运行结果的字典
     """
-    logger = setup_logging()
     logger.info(f"运行算法: {algorithm_name.upper()}")
 
     # 准备地面站资源池
@@ -239,17 +214,18 @@ def run_single_algorithm(
     if enable_downlink and mission.ground_stations:
         ground_station_pool = GroundStationPool(mission.ground_stations)
 
-    # 构建统一调度器配置
-    scheduler_config = {
-        'imaging_algorithm': algorithm_name,
-        'imaging_config': config,
-        'enable_downlink': enable_downlink,
-        'downlink_config': {
-            'overflow_threshold': 0.95,
-            'link_setup_time_seconds': 60.0,
-        },
-        'consider_frequency': enable_frequency,
-    }
+    # 获取算法配置
+    overrides = {}
+    if algorithm_name == 'ga' and ga_params:
+        overrides.update(ga_params)
+
+    scheduler_config = get_algorithm_config(
+        algorithm=algorithm_name,
+        enable_downlink=enable_downlink,
+        enable_frequency=enable_frequency,
+        seed=seed,
+        **overrides
+    )
 
     # 创建并运行统一调度器
     scheduler = UnifiedScheduler(
@@ -267,8 +243,31 @@ def run_single_algorithm(
     metrics_calc = MetricsCalculator(mission)
     metrics = metrics_calc.calculate_all(result.imaging_result)
 
+    # 序列化任务列表（包含姿态角等详细信息）
+    scheduled_tasks = []
+    for task in result.imaging_result.scheduled_tasks:
+        task_dict = {
+            'task_id': task.task_id,
+            'satellite_id': task.satellite_id,
+            'target_id': task.target_id,
+            'imaging_start': task.imaging_start.isoformat() if task.imaging_start else None,
+            'imaging_end': task.imaging_end.isoformat() if task.imaging_end else None,
+            'imaging_mode': task.imaging_mode,
+            'slew_angle': getattr(task, 'slew_angle', None),
+            'slew_time': getattr(task, 'slew_time', None),
+            'pitch_angle': getattr(task, 'pitch_angle', None),
+            'roll_angle': getattr(task, 'roll_angle', None),
+            'yaw_angle': getattr(task, 'yaw_angle', None),
+            'reset_time': getattr(task, 'reset_time', None),
+            'priority': getattr(task, 'priority', None),
+            'storage_before': getattr(task, 'storage_before', None),
+            'storage_after': getattr(task, 'storage_after', None),
+        }
+        scheduled_tasks.append(task_dict)
+
     return {
         'algorithm': algorithm_name,
+        'algorithm_name': get_algorithm_name(algorithm_name),
         'scheduled_count': len(result.imaging_result.scheduled_tasks),
         'unscheduled_count': len(result.imaging_result.unscheduled_tasks),
         'demand_satisfaction_rate': metrics.demand_satisfaction_rate,
@@ -278,17 +277,19 @@ def run_single_algorithm(
         'computation_time': computation_time,
         'downlink_count': len(result.downlink_result.downlink_tasks) if result.downlink_result else 0,
         'frequency_satisfaction': result.target_observations if enable_frequency else None,
+        'scheduled_tasks': scheduled_tasks,
     }
 
 
 def run_comparison(
     mission: Mission,
-    cache: VisibilityWindowCache,
+    cache,
     algorithms: List[str],
-    config: Dict[str, Any],
     enable_downlink: bool = False,
     enable_frequency: bool = False,
-    repetitions: int = 1
+    repetitions: int = 1,
+    seed: int = 42,
+    ga_params: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     运行多算法对比
@@ -297,10 +298,11 @@ def run_comparison(
         mission: 任务场景
         cache: 可见性窗口缓存
         algorithms: 算法列表
-        config: 调度器配置
         enable_downlink: 是否启用数传规划
         enable_frequency: 是否启用频次需求
         repetitions: 每种算法的重复次数
+        seed: 随机种子
+        ga_params: GA特定参数字典
 
     Returns:
         各算法的结果列表
@@ -309,7 +311,7 @@ def run_comparison(
 
     for algorithm in algorithms:
         print(f"\n{'='*70}")
-        print(f"算法: {algorithm.upper()}")
+        print(f"算法: {get_algorithm_name(algorithm)}")
         print(f"{'='*70}")
 
         for rep in range(1, repetitions + 1):
@@ -321,9 +323,10 @@ def run_comparison(
                     algorithm_name=algorithm,
                     mission=mission,
                     cache=cache,
-                    config=config,
                     enable_downlink=enable_downlink,
-                    enable_frequency=enable_frequency
+                    enable_frequency=enable_frequency,
+                    seed=seed,
+                    ga_params=ga_params
                 )
                 result['repetition'] = rep
                 all_results.append(result)
@@ -340,43 +343,83 @@ def run_comparison(
     return all_results
 
 
-def print_results(result: Any, mode: str = 'single') -> None:
-    """打印结果"""
+def print_single_result(result: Dict[str, Any]) -> None:
+    """打印单一算法结果"""
     print("\n" + "="*70)
     print("调度结果")
     print("="*70)
 
-    if mode == 'single':
-        print(f"\n算法: {result['algorithm'].upper()}")
-        print(f"成功调度: {result['scheduled_count']} 个任务")
-        print(f"未调度: {result['unscheduled_count']} 个任务")
-        print(f"需求满足率: {result['demand_satisfaction_rate']:.2%}")
-        print(f"卫星利用率: {result['satellite_utilization']:.2%}")
-        print(f"完成时间跨度: {result['makespan_hours']:.2f} 小时")
-        print(f"计算时间: {result['computation_time']:.2f} 秒")
+    print(f"\n算法: {result['algorithm_name']}")
+    print(f"成功调度: {result['scheduled_count']} 个任务")
+    print(f"未调度: {result['unscheduled_count']} 个任务")
+    print(f"需求满足率: {result['demand_satisfaction_rate']:.2%}")
+    print(f"卫星利用率: {result['satellite_utilization']:.2%}")
+    print(f"完成时间跨度: {result['makespan_hours']:.2f} 小时")
+    print(f"计算时间: {result['computation_time']:.2f} 秒")
 
-        if result.get('downlink_count'):
-            print(f"数传任务: {result['downlink_count']} 个")
+    if result.get('downlink_count'):
+        print(f"数传任务: {result['downlink_count']} 个")
 
-    else:  # compare mode
-        print(f"\n{'算法':<15} {'任务数':<10} {'满足率':<10} {'利用率':<10} {'计算时间':<10}")
-        print("-"*70)
-
-        for r in result:
-            print(f"{r['algorithm']:<15} {r['scheduled_count']:<10} "
-                  f"{r['demand_satisfaction_rate']:<10.1%} "
-                  f"{r['satellite_utilization']:<10.1%} "
-                  f"{r['computation_time']:<10.2f}s")
+    if result.get('frequency_satisfaction'):
+        satisfied = sum(1 for info in result['frequency_satisfaction'].values() if info.get('satisfied'))
+        total = len(result['frequency_satisfaction'])
+        print(f"频次满足: {satisfied}/{total} ({satisfied/total:.1%})")
 
     print("="*70)
 
 
+def print_comparison_results(results: List[Dict[str, Any]]) -> None:
+    """打印多算法对比结果"""
+    print("\n" + "="*70)
+    print("多算法对比结果")
+    print("="*70)
+
+    print(f"\n{'算法':<20} {'任务数':<10} {'满足率':<10} {'利用率':<10} {'计算时间':<10}")
+    print("-"*70)
+
+    for r in results:
+        algo_name = r['algorithm_name']
+        if len(algo_name) > 18:
+            algo_name = algo_name[:15] + "..."
+        print(f"{algo_name:<20} {r['scheduled_count']:<10} "
+              f"{r['demand_satisfaction_rate']:<10.1%} "
+              f"{r['satellite_utilization']:<10.1%} "
+              f"{r['computation_time']:<10.2f}s")
+
+    print("="*70)
+
+
+def save_results_to_file(
+    results: List[Dict[str, Any]],
+    output_path: str,
+    scenario_path: str,
+    cache_path: str,
+    mode: str
+) -> None:
+    """保存结果到JSON文件"""
+    output_data = {
+        'metadata': {
+            'scenario': scenario_path,
+            'cache': cache_path,
+            'mode': mode,
+            'timestamp': datetime.now().isoformat(),
+        },
+        'results': results
+    }
+
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+    logger.info(f"结果已保存: {output_path}")
+
+
 def main(args: Optional[List[str]] = None) -> int:
     """主函数"""
-    # 解析参数
     parsed_args = parse_args(args)
 
-    # 设置日志
     setup_logging()
 
     print("="*70)
@@ -404,55 +447,63 @@ def main(args: Optional[List[str]] = None) -> int:
         print(f"  频次需求: {'启用' if parsed_args.frequency else '禁用'}")
         print(f"  数传规划: {'启用' if parsed_args.downlink else '禁用'}")
 
+        # GA参数
+        ga_params = {
+            'population_size': parsed_args.population_size,
+            'generations': parsed_args.generations,
+            'mutation_rate': parsed_args.mutation_rate,
+            'crossover_rate': parsed_args.crossover_rate,
+        }
+
         if parsed_args.mode == 'single':
             # 单一算法模式
-            config = build_scheduler_config(parsed_args)
             result = run_single_algorithm(
                 algorithm_name=parsed_args.algorithm,
                 mission=mission,
                 cache=cache,
-                config=config,
                 enable_downlink=parsed_args.downlink,
-                enable_frequency=parsed_args.frequency
+                enable_frequency=parsed_args.frequency,
+                seed=parsed_args.seed,
+                ga_params=ga_params if parsed_args.algorithm == 'ga' else None
             )
-            print_results(result, mode='single')
+            print_single_result(result)
 
             # 保存结果
             if parsed_args.output:
-                save_results(result, parsed_args.output)
-                print(f"\n结果已保存: {parsed_args.output}")
+                save_results_to_file(
+                    results=[result],
+                    output_path=parsed_args.output,
+                    scenario_path=parsed_args.scenario,
+                    cache_path=parsed_args.cache,
+                    mode='single'
+                )
 
         else:  # compare mode
             # 多算法对比模式
-            algorithms = parse_algorithm_list(parsed_args.algorithm)
+            algorithms = expand_algorithm_selection([a.strip() for a in parsed_args.algorithm.split(',')])
             validate_algorithms(algorithms)
 
-            config = build_scheduler_config(parsed_args)
             results = run_comparison(
                 mission=mission,
                 cache=cache,
                 algorithms=algorithms,
-                config=config,
                 enable_downlink=parsed_args.downlink,
                 enable_frequency=parsed_args.frequency,
-                repetitions=parsed_args.repetitions
+                repetitions=parsed_args.repetitions,
+                seed=parsed_args.seed,
+                ga_params=ga_params
             )
-            print_results(results, mode='compare')
+            print_comparison_results(results)
 
             # 保存结果
             if parsed_args.output:
-                output_data = {
-                    'metadata': {
-                        'scenario': parsed_args.scenario,
-                        'cache': parsed_args.cache,
-                        'algorithms': algorithms,
-                        'repetitions': parsed_args.repetitions,
-                        'timestamp': datetime.now().isoformat()
-                    },
-                    'results': results
-                }
-                save_results(output_data, parsed_args.output)
-                print(f"\n结果已保存: {parsed_args.output}")
+                save_results_to_file(
+                    results=results,
+                    output_path=parsed_args.output,
+                    scenario_path=parsed_args.scenario,
+                    cache_path=parsed_args.cache,
+                    mode='compare'
+                )
 
         print("\n完成!")
         return 0

@@ -1335,3 +1335,211 @@ class OrekitJavaBridge:
         except Exception as e:
             logger.error(f"Optimized batch computation failed: {e}")
             raise OrbitPropagationError(f"优化批量计算失败: {e}") from e
+
+    @ensure_jvm_attached
+    @translate_java_exception
+    def compute_visibility_batch_with_orbit_export(
+        self,
+        satellites: List[Dict],
+        targets: List[Dict],
+        ground_stations: List[Dict],
+        start_time: datetime,
+        end_time: datetime,
+        config: Dict,
+        orbit_output_path: Optional[str] = None
+    ) -> Dict:
+        """
+        批量计算可见窗口并导出轨道数据
+
+        使用 OptimizedVisibilityCalculator 进行计算，并在计算完成后导出轨道数据。
+        这是 compute_visibility_batch 的增强版本，支持轨道数据持久化。
+
+        Args:
+            satellites: 卫星参数列表
+            targets: 目标参数列表
+            ground_stations: 地面站参数列表
+            start_time: 开始时间
+            end_time: 结束时间
+            config: 计算配置
+                - coarseStep: 粗扫描步长（秒）
+                - fineStep: 精化步长（秒）
+                - minElevation: 最小仰角（度）
+                - useParallel: 是否并行传播
+            orbit_output_path: 轨道数据输出路径（可选，为None则不导出）
+
+        Returns:
+            Dict: 包含targetWindows、groundStationWindows、stats和orbitExportStatus的结果
+
+        Raises:
+            JavaError: Java计算失败
+        """
+        self._ensure_jvm_started()
+
+        try:
+            # 获取Java类
+            PythonBridge = self._get_java_class(
+                "orekit.visibility.PythonBridge"
+            )
+            SatelliteParameters = self._get_java_class(
+                "orekit.visibility.SatelliteParameters"
+            )
+            GroundPoint = self._get_java_class(
+                "orekit.visibility.GroundPoint"
+            )
+            ComputationConfig = self._get_java_class(
+                "orekit.visibility.ComputationConfig"
+            )
+            ArrayList = self._get_java_class("java.util.ArrayList")
+
+            # 转换卫星参数
+            sat_list = ArrayList()
+            for sat in satellites:
+                sat_param = SatelliteParameters()
+                sat_param.setId(sat['id'])
+                sat_param.setName(sat.get('name', sat['id']))
+                sat_param.setOrbitType(sat.get('orbitType', 'SSO'))
+                sat_param.setSemiMajorAxis(sat.get('semiMajorAxis', 7016000.0))
+                sat_param.setEccentricity(sat.get('eccentricity', 0.001))
+                sat_param.setInclination(sat.get('inclination', 97.9))
+                sat_param.setRaan(sat.get('raan', 0.0))
+                sat_param.setArgOfPerigee(sat.get('argOfPerigee', 90.0))
+                sat_param.setMeanAnomaly(sat.get('meanAnomaly', 0.0))
+                sat_param.setAltitude(sat.get('altitude', 645000.0))
+
+                # 使用卫星指定的epoch，或场景开始时间
+                sat_epoch = sat.get('epoch')
+                if sat_epoch:
+                    if isinstance(sat_epoch, datetime):
+                        from datetime import timezone
+                        if sat_epoch.tzinfo is None:
+                            sat_epoch = sat_epoch.replace(tzinfo=timezone.utc)
+                        else:
+                            sat_epoch = sat_epoch.astimezone(timezone.utc)
+                        epoch_str = sat_epoch.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    else:
+                        epoch_str = sat_epoch
+                    sat_param.setEpoch(epoch_str)
+                else:
+                    epoch_str = start_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    sat_param.setEpoch(epoch_str)
+                sat_list.add(sat_param)
+
+            # 转换目标参数
+            target_list = ArrayList()
+            for target in targets:
+                point = GroundPoint()
+                point.setId(target['id'])
+                point.setName(target.get('name', target['id']))
+                point.setLongitude(target['longitude'])
+                point.setLatitude(target['latitude'])
+                point.setAltitude(target.get('altitude', 0.0))
+                point.setMinElevation(0.0)
+                target_list.add(point)
+
+            # 转换地面站参数
+            gs_list = ArrayList()
+            for gs in ground_stations:
+                point = GroundPoint()
+                point.setId(gs['id'])
+                point.setName(gs.get('name', gs['id']))
+                point.setLongitude(gs['longitude'])
+                point.setLatitude(gs['latitude'])
+                point.setAltitude(gs.get('altitude', 0.0))
+                point.setMinElevation(gs.get('minElevation', 5.0))
+                gs_list.add(point)
+
+            # 转换配置
+            java_config = ComputationConfig()
+            java_config.setCoarseStep(config.get('coarseStep', 300.0))
+            java_config.setFineStep(config.get('fineStep', 60.0))
+            java_config.setMinElevation(config.get('minElevation', 0.0))
+            java_config.setUseParallel(config.get('useParallel', True))
+            java_config.setMaxBatchSize(config.get('maxBatchSize', 100))
+
+            # 调用Java批量计算方法（带轨道导出）
+            result = PythonBridge.computeVisibilityBatchWithOrbitExport(
+                sat_list,
+                target_list,
+                gs_list,
+                start_time.isoformat(),
+                end_time.isoformat(),
+                java_config,
+                orbit_output_path
+            )
+
+            # 检查结果是否有错误
+            if result.containsKey('error') and result.get('error'):
+                error_msg = result.get('errorMessage') if result.containsKey('errorMessage') else 'Unknown error'
+                raise RuntimeError(
+                    f"Java computation failed: {error_msg}"
+                )
+
+            # 转换结果为Python原生类型
+            return self._convert_batch_result_with_orbit_export(result)
+
+        except Exception as e:
+            logger.error(f"Batch computation with orbit export failed: {e}")
+            raise
+
+    def _convert_batch_result_with_orbit_export(self, java_result: Any) -> Dict:
+        """将Java返回的批量结果（带轨道导出）转换为Python原生类型"""
+        result = {
+            'targetWindows': [],
+            'groundStationWindows': [],
+            'stats': {},
+            'orbitExportStatus': {}
+        }
+
+        # Helper to safely get from Java Map
+        def safe_get(map_obj, key, default=None):
+            if map_obj and map_obj.containsKey(key):
+                return map_obj.get(key)
+            return default
+
+        # 转换目标窗口
+        target_windows = safe_get(java_result, 'targetWindows', [])
+        if target_windows:
+            for window in target_windows:
+                result['targetWindows'].append({
+                    'satelliteId': str(safe_get(window, 'satelliteId')),
+                    'targetId': str(safe_get(window, 'targetId')),
+                    'startTime': str(safe_get(window, 'startTime')),
+                    'endTime': str(safe_get(window, 'endTime')),
+                    'maxElevation': float(safe_get(window, 'maxElevation', 0.0)),
+                    'durationSeconds': float(safe_get(window, 'durationSeconds', 0.0)),
+                })
+
+        # 转换地面站窗口
+        gs_windows = safe_get(java_result, 'groundStationWindows', [])
+        if gs_windows:
+            for window in gs_windows:
+                result['groundStationWindows'].append({
+                    'satelliteId': str(safe_get(window, 'satelliteId')),
+                    'targetId': str(safe_get(window, 'targetId')),
+                    'startTime': str(safe_get(window, 'startTime')),
+                    'endTime': str(safe_get(window, 'endTime')),
+                    'maxElevation': float(safe_get(window, 'maxElevation', 0.0)),
+                    'durationSeconds': float(safe_get(window, 'durationSeconds', 0.0)),
+                })
+
+        # 转换统计信息
+        stats = safe_get(java_result, 'stats', {})
+        if stats:
+            result['stats'] = {
+                'computationTimeMs': int(safe_get(stats, 'computationTimeMs', 0)),
+                'nSatellites': int(safe_get(stats, 'nSatellites', 0)),
+                'nTargets': int(safe_get(stats, 'nTargets', 0)),
+                'nGroundStations': int(safe_get(stats, 'nGroundStations', 0)),
+                'nWindowsFound': int(safe_get(stats, 'nWindowsFound', 0)),
+            }
+
+        # 转换轨道导出状态
+        export_status = safe_get(java_result, 'orbitExportStatus', {})
+        if export_status:
+            result['orbitExportStatus'] = {
+                'success': bool(safe_get(export_status, 'success', False)),
+                'path': str(safe_get(export_status, 'path', '')),
+                'error': str(safe_get(export_status, 'error', '')) if safe_get(export_status, 'error') else None,
+            }
+
+        return result
