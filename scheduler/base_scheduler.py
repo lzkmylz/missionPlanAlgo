@@ -215,9 +215,23 @@ class BaseScheduler(ABC):
         self._use_simplified_slew = self.config.get('use_simplified_slew', False)
         self._slew_time_estimate = self.config.get('slew_time_estimate', 30.0)  # 默认30秒
 
+    def set_slew_checker(self, slew_checker) -> None:
+        """设置外部传入的机动约束检查器
+
+        用于 UnifiedScheduler 传递 PreciseSlewConstraintChecker 给下层调度器。
+
+        Args:
+            slew_checker: SlewConstraintChecker 或 PreciseSlewConstraintChecker 实例
+        """
+        self._slew_checker = slew_checker
+
     def _initialize_slew_checker(self) -> None:
         """初始化机动约束检查器"""
         if self.mission is None:
+            return
+
+        # 如果已经设置了外部检查器，跳过初始化
+        if self._slew_checker is not None:
             return
 
         # 在简化模式下跳过初始化以避免昂贵的计算

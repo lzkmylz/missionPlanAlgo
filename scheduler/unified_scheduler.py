@@ -272,6 +272,11 @@ class UnifiedScheduler:
         scheduler.initialize(self.mission)
         scheduler.set_window_cache(self.window_cache)
 
+        # 传递精确机动约束检查器（如果已初始化）
+        if hasattr(self, 'slew_checker') and self.slew_checker is not None:
+            scheduler.set_slew_checker(self.slew_checker)
+            logger.info("  使用精确姿态机动模型")
+
         # 执行调度
         return scheduler.schedule()
 

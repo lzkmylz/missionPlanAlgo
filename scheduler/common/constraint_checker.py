@@ -128,10 +128,17 @@ class SlewChecker:
             return result
 
         if prev_target is None:
-            # First task for this satellite: no slew required
-            result.slew_time = 0.0
-            result.slew_angle = 0.0
-            result.actual_start = window_start
+            # First task for this satellite: calculate from nadir to target
+            # For simplified model, use a reasonable default slew angle
+            slew_angle = self._calculate_slew_angle(None, current_target)
+            result.slew_angle = slew_angle
+
+            if use_simplified:
+                result.slew_time = 5.0 + 2.0 * min(slew_angle, 45.0)
+            else:
+                slew_time = calculator.calculate_slew_time(slew_angle)
+                result.slew_time = slew_time
+            result.actual_start = window_start + timedelta(seconds=result.slew_time)
             return result
 
         if use_simplified:
@@ -149,7 +156,6 @@ class SlewChecker:
         slew_angle = self._calculate_slew_angle(prev_target, current_target)
         result.slew_angle = slew_angle
 
-        # Check if exceeds max slew angle
         if slew_angle > calculator.max_slew_angle:
             result.add_violation(
                 ConstraintType.SLEW,
@@ -181,28 +187,40 @@ class SlewChecker:
 
     def _calculate_slew_angle(
         self,
-        prev_target: Target,
+        prev_target: Optional[Target],
         current_target: Target,
     ) -> float:
-        """Calculate slew angle between two targets."""
+        """Calculate slew angle between two targets or from nadir to target."""
         # Simplified calculation using lat/lon difference
         # In practice, this should use proper ECEF coordinate transformation
+
+        # Get current target coordinates
+        curr_lat = getattr(current_target, 'latitude', 0)
+        curr_lon = getattr(current_target, 'longitude', 0)
+
+        # Ensure we have numeric values
+        if not isinstance(curr_lat, (int, float)):
+            curr_lat = 0
+        if not isinstance(curr_lon, (int, float)):
+            curr_lon = 0
+
+        if prev_target is None:
+            # First task: calculate slew from nadir pointing to target
+            # Approximate using target's angular distance from sub-satellite point
+            # This is a simplified estimation - actual slew depends on orbital position
+            # For now, use a typical off-nadir angle based on target latitude
+            # Satellites typically observe targets at 20-45 degree off-nadir angles
+            return math.sqrt(curr_lat**2 + curr_lon**2) * 0.5  # Scale factor for typical slew
 
         # Handle Mock objects gracefully
         prev_lat = getattr(prev_target, 'latitude', 0)
         prev_lon = getattr(prev_target, 'longitude', 0)
-        curr_lat = getattr(current_target, 'latitude', 0)
-        curr_lon = getattr(current_target, 'longitude', 0)
 
         # Ensure we have numeric values
         if not isinstance(prev_lat, (int, float)):
             prev_lat = 0
         if not isinstance(prev_lon, (int, float)):
             prev_lon = 0
-        if not isinstance(curr_lat, (int, float)):
-            curr_lat = 0
-        if not isinstance(curr_lon, (int, float)):
-            curr_lon = 0
 
         lat_diff = abs(prev_lat - curr_lat)
         lon_diff = abs(prev_lon - curr_lon)

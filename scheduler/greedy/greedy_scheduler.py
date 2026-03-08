@@ -20,7 +20,7 @@ from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskF
 from ..frequency_utils import ObservationTask, create_observation_tasks
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from core.dynamics.slew_calculator import SlewCalculator
-from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
+from ..constraints import SlewConstraintChecker, SlewFeasibilityResult, PreciseSlewConstraintChecker
 from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
 from scheduler.common.config import ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
@@ -384,11 +384,22 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                     actual_start = result.actual_start or window_start
                     actual_end = actual_start + timedelta(seconds=imaging_duration)
 
+                    # 如果使用 PreciseSlewConstraintChecker，从它获取精确的 slew_angle
+                    if isinstance(self._slew_checker, PreciseSlewConstraintChecker):
+                        precise_slew_result = self._slew_checker.check_slew_feasibility(
+                            sat.id, prev_target, task, last_task_end, window_start, imaging_duration
+                        )
+                        slew_angle = precise_slew_result.slew_angle
+                        slew_time = precise_slew_result.slew_time
+                    else:
+                        slew_angle = result.slew_angle
+                        slew_time = result.slew_time
+
                     # Create a compatible slew result for backward compatibility
                     slew_result = SlewFeasibilityResult(
                         feasible=True,
-                        slew_angle=result.slew_angle,
-                        slew_time=result.slew_time,
+                        slew_angle=slew_angle,
+                        slew_time=slew_time,
                         actual_start=actual_start,
                         reason=None
                     )
