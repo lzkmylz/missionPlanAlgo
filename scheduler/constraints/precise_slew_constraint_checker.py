@@ -246,12 +246,22 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
                 current_time=prev_end_time
             )
         except Exception as e:
-            logger.warning(f"Precise maneuver calculation failed: {e}")
+            logger.warning(f"Precise maneuver calculation failed for {satellite.id}: {e}")
             # 回退到简化模型
-            return super().check_slew_feasibility(
+            result = super().check_slew_feasibility(
                 satellite.id, prev_target, current_target,
                 prev_end_time, window_start, imaging_duration
             )
+            # 即使使用简化模型，也要更新状态到目标姿态
+            # 否则后续任务会获取错误的初始姿态
+            if result.feasible:
+                self._update_satellite_state(
+                    satellite_id=satellite.id,
+                    time=result.actual_start,
+                    attitude=target_attitude,
+                    angular_momentum=None
+                )
+            return result
 
         # 4. 检查约束满足
         if not maneuver.feasible:

@@ -137,13 +137,20 @@ class SlewConstraintChecker:
                 reason=f"SlewCalculator not initialized for {satellite_id}"
             )
 
-        # 如果没有上一个目标，不需要机动
+        # 如果没有上一个目标，计算从对地定向到第一个目标的机动
         if prev_target is None:
+            # 计算目标姿态角度（简化估算）
+            target_lat = getattr(current_target, 'latitude', 0)
+            target_lon = getattr(current_target, 'longitude', 0)
+            # 使用目标经纬度估算典型机动角度（卫星通常以20-45度离轴角观测）
+            slew_angle = math.sqrt(target_lat**2 + target_lon**2) * 0.5
+            slew_angle = min(slew_angle, slew_calc.max_slew_angle)
+            slew_time = slew_calc.calculate_slew_time(slew_angle)
             return SlewFeasibilityResult(
                 feasible=True,
-                slew_angle=0.0,
-                slew_time=slew_calc.settling_time,  # 只需要稳定时间
-                actual_start=max(window_start, prev_end_time + timedelta(seconds=slew_calc.settling_time)),
+                slew_angle=slew_angle,
+                slew_time=slew_time,
+                actual_start=max(window_start, prev_end_time + timedelta(seconds=slew_time)),
                 reason=None
             )
 
