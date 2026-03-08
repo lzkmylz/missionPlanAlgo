@@ -134,22 +134,41 @@ def load_window_cache_from_json(cache_path: str, mission) -> 'VisibilityWindowCa
     # 加载卫星-目标窗口
     target_windows_count = 0
 
-    # 尝试新格式
+    # 尝试新格式 (top-level target_windows)
     target_windows = data.get('target_windows', [])
 
-    if target_windows:
-        # 新格式处理
-        for w_data in target_windows:
-            sat_id = w_data['satellite_id']
-            target_id = w_data['target_id']
+    # 尝试嵌套格式 (windows.target_windows)
+    if not target_windows and isinstance(data.get('windows'), dict):
+        target_windows = data['windows'].get('target_windows', [])
 
-            window = VisibilityWindow(
-                satellite_id=sat_id,
-                target_id=target_id,
-                start_time=datetime.fromisoformat(w_data['start_time']),
-                end_time=datetime.fromisoformat(w_data['end_time']),
-                max_elevation=w_data.get('max_elevation', 0.0)
-            )
+    if target_windows:
+        # 新格式处理 (支持 snake_case 和 camelCase)
+        for w_data in target_windows:
+            sat_id = w_data.get('satellite_id') or w_data.get('satelliteId')
+            target_id = w_data.get('target_id') or w_data.get('targetId')
+            start_time = w_data.get('start_time') or w_data.get('startTime')
+            end_time = w_data.get('end_time') or w_data.get('endTime')
+            max_elevation = w_data.get('max_elevation') or w_data.get('maxElevation') or 0.0
+
+            if not all([sat_id, target_id, start_time, end_time]):
+                continue
+
+            # 处理ISO格式时间 (带Z后缀)
+            if isinstance(start_time, str) and start_time.endswith('Z'):
+                start_time = start_time.replace('Z', '+00:00')
+            if isinstance(end_time, str) and end_time.endswith('Z'):
+                end_time = end_time.replace('Z', '+00:00')
+
+            try:
+                window = VisibilityWindow(
+                    satellite_id=sat_id,
+                    target_id=target_id,
+                    start_time=datetime.fromisoformat(start_time),
+                    end_time=datetime.fromisoformat(end_time),
+                    max_elevation=max_elevation
+                )
+            except Exception:
+                continue
 
             key = (sat_id, target_id)
             if key not in cache._windows:
@@ -228,16 +247,21 @@ def load_window_cache_from_json(cache_path: str, mission) -> 'VisibilityWindowCa
     # 尝试从独立的 ground_station_windows 键加载
     gs_windows_list = data.get('ground_station_windows', [])
 
+    # 尝试嵌套格式 (windows.ground_station_windows)
+    if not gs_windows_list and isinstance(data.get('windows'), dict):
+        gs_windows_list = data['windows'].get('ground_station_windows', [])
+
     # 如果没有独立键，尝试从 windows 数组中分离
-    if not gs_windows_list and 'windows' in data:
+    if not gs_windows_list and isinstance(data.get('windows'), list):
         gs_windows_list = [w for w in data['windows'] if 'GS:' in (w.get('tgt', '') or w.get('target_id', ''))]
 
     for w_data in gs_windows_list:
-        sat_id = w_data.get('sat') or w_data.get('satellite_id')
-        target_id = w_data.get('tgt') or w_data.get('target_id')
-        start_time = w_data.get('start') or w_data.get('start_time')
-        end_time = w_data.get('end') or w_data.get('end_time')
-        max_el = w_data.get('el', 0.0) or w_data.get('max_elevation', 0.0)
+        # 支持 snake_case 和 camelCase
+        sat_id = w_data.get('sat') or w_data.get('satellite_id') or w_data.get('satelliteId')
+        target_id = w_data.get('tgt') or w_data.get('target_id') or w_data.get('targetId')
+        start_time = w_data.get('start') or w_data.get('start_time') or w_data.get('startTime')
+        end_time = w_data.get('end') or w_data.get('end_time') or w_data.get('endTime')
+        max_el = w_data.get('el', 0.0) or w_data.get('max_elevation') or w_data.get('maxElevation') or 0.0
 
         if not all([sat_id, target_id, start_time, end_time]):
             continue

@@ -58,7 +58,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 基本用法 - 使用贪心算法 (默认启用频次和数传)
+  # 基本用法 - 使用贪心算法 (默认启用频次和数传，自动保存结果)
   python scripts/run_scheduler.py -c cache.json -s scenario.json
 
   # 使用遗传算法
@@ -73,6 +73,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
 
   # 简化模式 (跳过昂贵计算)
   python scripts/run_scheduler.py -c cache.json -s scenario.json --simplified
+
+  # 指定输出路径
+  python scripts/run_scheduler.py -c cache.json -s scenario.json -o results/my_schedule.json
+
+  # 禁用自动保存
+  python scripts/run_scheduler.py -c cache.json -s scenario.json --no-save
         """
     )
 
@@ -169,7 +175,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     # 输出
     parser.add_argument(
         '-o', '--output',
-        help='输出结果文件路径 (JSON格式)'
+        help='输出结果文件路径 (JSON格式，默认: results/{algorithm}_schedule_{timestamp}.json)'
+    )
+    parser.add_argument(
+        '--no-save',
+        action='store_true',
+        help='禁用自动保存结果到文件'
     )
 
     # 其他
@@ -187,8 +198,8 @@ def run_single_algorithm(
     algorithm_name: str,
     mission: Mission,
     cache,
-    enable_downlink: bool = False,
-    enable_frequency: bool = False,
+    enable_downlink: bool = True,
+    enable_frequency: bool = True,
     seed: int = 42,
     ga_params: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
@@ -285,8 +296,8 @@ def run_comparison(
     mission: Mission,
     cache,
     algorithms: List[str],
-    enable_downlink: bool = False,
-    enable_frequency: bool = False,
+    enable_downlink: bool = True,
+    enable_frequency: bool = True,
     repetitions: int = 1,
     seed: int = 42,
     ga_params: Optional[Dict[str, Any]] = None
@@ -468,11 +479,19 @@ def main(args: Optional[List[str]] = None) -> int:
             )
             print_single_result(result)
 
-            # 保存结果
-            if parsed_args.output:
+            # 保存结果 (默认自动保存，除非指定 --no-save)
+            if not parsed_args.no_save:
+                if parsed_args.output:
+                    output_path = parsed_args.output
+                else:
+                    # 生成默认路径: results/{algorithm}_schedule_{timestamp}.json
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    output_path = f"results/{parsed_args.algorithm}_schedule_{timestamp}.json"
+
                 save_results_to_file(
                     results=[result],
-                    output_path=parsed_args.output,
+                    output_path=output_path,
                     scenario_path=parsed_args.scenario,
                     cache_path=parsed_args.cache,
                     mode='single'
@@ -495,11 +514,20 @@ def main(args: Optional[List[str]] = None) -> int:
             )
             print_comparison_results(results)
 
-            # 保存结果
-            if parsed_args.output:
+            # 保存结果 (默认自动保存，除非指定 --no-save)
+            if not parsed_args.no_save:
+                if parsed_args.output:
+                    output_path = parsed_args.output
+                else:
+                    # 生成默认路径: results/compare_{algorithms}_{timestamp}.json
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    algo_str = '_'.join(algorithms)[:50]  # 限制长度
+                    output_path = f"results/compare_{algo_str}_{timestamp}.json"
+
                 save_results_to_file(
                     results=results,
-                    output_path=parsed_args.output,
+                    output_path=output_path,
                     scenario_path=parsed_args.scenario,
                     cache_path=parsed_args.cache,
                     mode='compare'

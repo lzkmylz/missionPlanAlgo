@@ -143,8 +143,21 @@ class UnifiedScheduler:
         self._ground_station_scheduler: Optional[GroundStationScheduler] = None
         self._target_obs_count: Dict[str, int] = {}
 
+        # 初始化精确姿态机动约束检查器
+        self._initialize_constraint_checkers()
+
         # 加载预计算轨道数据（如果配置启用）
         self._load_precomputed_orbits()
+
+    def _initialize_constraint_checkers(self) -> None:
+        """初始化精确姿态机动约束检查器"""
+        from .constraints import PreciseSlewConstraintChecker
+
+        self.slew_checker = PreciseSlewConstraintChecker(
+            mission=self.mission,
+            use_precise_model=True
+        )
+        logger.info("使用精确姿态机动模型")
 
     def _load_precomputed_orbits(self) -> None:
         """加载预计算的轨道数据"""

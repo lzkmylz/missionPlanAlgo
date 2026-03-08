@@ -202,6 +202,147 @@ DEFAULT_IMAGING_CONFIG = {
 
 **姿态计算解耦**: 姿态计算与简化模式完全解耦，只要 `enable_attitude_calculation=True` 就始终计算。
 
+### 默认频次需求配置
+
+**所有规划算法默认启用目标观测频次需求处理** (`scripts/config.py`):
+
+```python
+default_algorithm_config = {
+    'enable_frequency': True,   # 默认启用频次需求
+    'consider_frequency': True,  # 默认考虑频次约束
+}
+```
+
+**调度器默认行为**:
+- 场景中的 `observation_requirements` 自动解析为目标频次需求
+- 每个目标的 `required_observations` 决定最少观测次数
+- 调度结果包含 `frequency_satisfaction` 字段显示满足情况
+
+**关键代码** (`scripts/run_scheduler.py:132-148`):
+```python
+parser.add_argument(
+    '--frequency',
+    action='store_true',
+    default=True,  # 默认启用
+    help='启用观测频次需求处理 (默认: 启用)'
+)
+parser.add_argument(
+    '--no-frequency',
+    dest='frequency',
+    action='store_false',
+    help='禁用观测频次需求处理'
+)
+```
+
+### 默认数传规划配置
+
+**所有规划算法默认启用地⾯站数传规划** (`scripts/config.py`):
+
+```python
+default_algorithm_config = {
+    'enable_downlink': True,    # 默认启用数传规划
+}
+```
+
+**调度器默认行为**:
+- 同时规划成像任务和数传任务
+- 数传任务安排在成像任务之后，考虑卫星存储和地面站可见窗口
+- 调度结果包含 `downlink_result` 字段显示数传任务
+
+**关键代码** (`scripts/run_scheduler.py:138-154`):
+```python
+parser.add_argument(
+    '--downlink',
+    action='store_true',
+    default=True,  # 默认启用
+    help='启用地面站数传规划 (默认: 启用)'
+)
+parser.add_argument(
+    '--no-downlink',
+    dest='downlink',
+    action='store_false',
+    help='禁用地面站数传规划'
+)
+```
+
+### 默认姿态机动计算模型
+
+**所有姿态机动计算统一使用精确模型** (`scheduler/unified_scheduler.py`):
+
+```python
+# 统一使用精确姿态机动模型
+self.slew_checker = PreciseSlewConstraintChecker(
+    mission=self.mission,
+    use_precise_model=True
+)
+```
+
+**模型特点**:
+- 基于刚体动力学的精确计算 (`core/dynamics/precise/rigid_body_dynamics.py`)
+- 时间最优轨迹规划 (`core/dynamics/precise/trajectory_planner.py`)
+- 能量消耗精确建模 (`core/dynamics/precise/energy_model.py`)
+- 飞轮动量管理 (`core/dynamics/precise/momentum_manager.py`)
+
+**已移除的配置** (不再支持):
+- 简化估算模型 (SlewCalculator)
+- 混合模式 (hybrid)
+- `--slew-model` 命令行参数
+
+**关键代码** (`scheduler/unified_scheduler.py:152-161`):
+```python
+def _initialize_constraint_checkers(self) -> None:
+    """初始化精确姿态机动约束检查器"""
+    from .constraints import PreciseSlewConstraintChecker
+
+    self.slew_checker = PreciseSlewConstraintChecker(
+        mission=self.mission,
+        use_precise_model=True
+    )
+    logger.info("使用精确姿态机动模型")
+```
+
+---
+
+### 默认结果保存配置
+
+**所有规划算法默认自动保存详细任务列表** (`scripts/run_scheduler.py`):
+
+```python
+# 默认自动保存，除非指定 --no-save
+parser.add_argument(
+    '--no-save',
+    action='store_true',
+    help='禁用自动保存结果到文件'
+)
+```
+
+**默认保存路径**:
+- 单一算法: `results/{algorithm}_schedule_{timestamp}.json`
+- 对比模式: `results/compare_{algorithms}_{timestamp}.json`
+
+**输出文件内容**:
+- `metadata`: 场景、缓存路径、时间戳等元信息
+- `results`: 算法结果列表，包含详细的 `scheduled_tasks` 数组
+- 每个任务包含: 任务ID、卫星ID、目标ID、时间窗口、姿态角、存储变化等
+
+**关键代码** (`scripts/run_scheduler.py:482-498`):
+```python
+# 保存结果 (默认自动保存，除非指定 --no-save)
+if not parsed_args.no_save:
+    if parsed_args.output:
+        output_path = parsed_args.output
+    else:
+        # 生成默认路径
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = f"results/{algorithm}_schedule_{timestamp}.json"
+
+    save_results_to_file(
+        results=[result],
+        output_path=output_path,
+        ...
+    )
+```
+
 ---
 
 ## 使用命令

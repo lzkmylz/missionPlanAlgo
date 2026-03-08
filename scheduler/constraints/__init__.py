@@ -18,10 +18,12 @@ from .unified_maneuver_checker import (
     ScheduledTaskInfo,
     SatelliteTaskState
 )
+from .precise_slew_constraint_checker import PreciseSlewConstraintChecker
 
 __all__ = [
-    'SlewConstraintChecker',
+    'SlewConstraintChecker',  # 基类，保留供继承
     'SlewFeasibilityResult',
+    'PreciseSlewConstraintChecker',  # 默认使用的精确约束检查器
     'SAAConstraintChecker',
     'SAAFeasibilityResult',
     'AttitudeConstraintChecker',

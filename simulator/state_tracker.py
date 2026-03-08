@@ -6,12 +6,17 @@
 - 状态枚举（SatelliteState）
 - 电量模型（PowerModel）
 - 存储积分器（StorageIntegrator）
+- 姿态状态跟踪（H3新增）
 """
 
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
+import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SatelliteState(Enum):
@@ -46,6 +51,36 @@ class SatelliteStateData:
     current_activity: Optional[str] = None
     position: Optional[Tuple[float, float, float]] = None
     velocity: Optional[Tuple[float, float, float]] = None
+
+
+@dataclass
+class AttitudeStateData:
+    """姿态状态数据类 (H3新增)
+
+    用于精确姿态机动计算的状态跟踪。
+
+    Attributes:
+        quaternion: 姿态四元数 [w, x, y, z]
+        angular_velocity: 角速度 [ωx, ωy, ωz] (rad/s)
+        angular_momentum: 飞轮角动量 [hx, hy, hz] (Nms)
+        wheel_speeds: 各飞轮转速 (rad/s)
+        timestamp: 时间戳
+    """
+    quaternion: np.ndarray = field(default_factory=lambda: np.array([1.0, 0.0, 0.0, 0.0]))
+    angular_velocity: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    angular_momentum: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    wheel_speeds: Optional[np.ndarray] = None
+    timestamp: Optional[datetime] = None
+
+    def is_valid(self) -> bool:
+        """检查姿态状态是否有效"""
+        # 检查四元数归一化
+        q_norm = np.linalg.norm(self.quaternion)
+        return abs(q_norm - 1.0) < 1e-6
+
+    def normalize_quaternion(self) -> None:
+        """归一化四元数"""
+        self.quaternion = self.quaternion / np.linalg.norm(self.quaternion)
 
 
 class ImagingState(Enum):
@@ -436,12 +471,33 @@ class SatelliteStateTracker:
         # 状态变化记录
         self._state_log: List[Dict[str, Any]] = []
 
+        # 姿态状态跟踪 (H3新增)
+        self._attitude_state: Optional[AttitudeStateData] = None
+        self._momentum_state: Optional[np.ndarray] = None
+        self._angular_velocity: Optional[np.ndarray] = None
+        self._control_history: List[Dict[str, Any]] = []
+
         # 初始化状态
         self._record_state(
             timestamp=datetime(2024, 1, 1, 0, 0),
             state=SatelliteState.IDLE,
             context={'init': True}
         )
+
+        # 初始化姿态状态
+        self._initialize_attitude_state()
+
+    def _initialize_attitude_state(self) -> None:
+        """初始化姿态状态 (H3新增)"""
+        self._attitude_state = AttitudeStateData(
+            quaternion=np.array([1.0, 0.0, 0.0, 0.0]),  # 对地定向
+            angular_velocity=np.zeros(3),
+            angular_momentum=np.zeros(3),
+            wheel_speeds=None,
+            timestamp=datetime(2024, 1, 1, 0, 0)
+        )
+        self._momentum_state = np.zeros(3)
+        self._angular_velocity = np.zeros(3)
 
     def _record_state(self, timestamp: datetime, state: SatelliteState, context: Dict = None) -> None:
         """记录状态变化"""
@@ -674,3 +730,146 @@ class SatelliteStateTracker:
                 violations.append(f"Temperature {temp_status['current_temperature_k']:.2f}K below min operating temperature")
 
         return len(violations) == 0, violations
+
+    # ============================================================================
+    # 姿态状态跟踪方法 (H3新增)
+    # ============================================================================
+
+    def get_attitude_state(self, timestamp: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+        """获取姿态状态
+
+        Args:
+            timestamp: 时间戳 (None表示最新状态)
+
+        Returns:
+            姿态状态字典或None
+        """
+        if self._attitude_state is None:
+            return None
+
+        return {
+            'quaternion': self._attitude_state.quaternion.copy(),
+            'angular_velocity': self._attitude_state.angular_velocity.copy(),
+            'angular_momentum': self._attitude_state.angular_momentum.copy(),
+            'wheel_speeds': self._attitude_state.wheel_speeds.copy() if self._attitude_state.wheel_speeds is not None else None,
+            'timestamp': self._attitude_state.timestamp
+        }
+
+    def get_angular_momentum(self, timestamp: Optional[datetime] = None) -> Optional[np.ndarray]:
+        """获取角动量状态
+
+        Args:
+            timestamp: 时间戳
+
+        Returns:
+            角动量矢量 [hx, hy, hz] 或 None
+        """
+        return self._momentum_state.copy() if self._momentum_state is not None else None
+
+    def get_angular_velocity(self, timestamp: Optional[datetime] = None) -> Optional[np.ndarray]:
+        """获取角速度状态
+
+        Args:
+            timestamp: 时间戳
+
+        Returns:
+            角速度矢量 [ωx, ωy, ωz] 或 None
+        """
+        return self._angular_velocity.copy() if self._angular_velocity is not None else None
+
+    def update_after_maneuver(
+        self,
+        satellite_id: str,
+        maneuver_result: Dict[str, Any]
+    ) -> None:
+        """机动后更新卫星状态
+
+        Args:
+            satellite_id: 卫星ID
+            maneuver_result: 机动结果字典
+                - final_quaternion: 最终姿态四元数
+                - final_momentum: 最终角动量
+                - timestamp: 时间戳
+                - energy_consumption: 能量消耗 (可选)
+        """
+        if self._attitude_state is None:
+            self._initialize_attitude_state()
+
+        # 更新姿态
+        if 'final_quaternion' in maneuver_result:
+            self._attitude_state.quaternion = maneuver_result['final_quaternion']
+            self._attitude_state.normalize_quaternion()
+
+        # 更新角动量
+        if 'final_momentum' in maneuver_result:
+            self._momentum_state = maneuver_result['final_momentum']
+            self._attitude_state.angular_momentum = maneuver_result['final_momentum']
+
+        # 更新时间戳
+        if 'timestamp' in maneuver_result:
+            self._attitude_state.timestamp = maneuver_result['timestamp']
+
+        # 记录控制历史
+        self._control_history.append({
+            'timestamp': maneuver_result.get('timestamp'),
+            'type': 'maneuver',
+            'energy_consumption': maneuver_result.get('energy_consumption'),
+            'final_quaternion': maneuver_result.get('final_quaternion'),
+            'final_momentum': maneuver_result.get('final_momentum')
+        })
+
+        logger.debug(
+            f"Updated attitude state for {satellite_id} after maneuver"
+        )
+
+    def set_attitude_state(
+        self,
+        quaternion: Optional[np.ndarray] = None,
+        angular_velocity: Optional[np.ndarray] = None,
+        angular_momentum: Optional[np.ndarray] = None,
+        wheel_speeds: Optional[np.ndarray] = None,
+        timestamp: Optional[datetime] = None
+    ) -> None:
+        """设置姿态状态
+
+        Args:
+            quaternion: 四元数 [w, x, y, z]
+            angular_velocity: 角速度 [ωx, ωy, ωz]
+            angular_momentum: 角动量 [hx, hy, hz]
+            wheel_speeds: 飞轮转速数组
+            timestamp: 时间戳
+        """
+        if self._attitude_state is None:
+            self._initialize_attitude_state()
+
+        if quaternion is not None:
+            self._attitude_state.quaternion = quaternion.copy()
+            self._attitude_state.normalize_quaternion()
+
+        if angular_velocity is not None:
+            self._attitude_state.angular_velocity = angular_velocity.copy()
+            self._angular_velocity = angular_velocity.copy()
+
+        if angular_momentum is not None:
+            self._attitude_state.angular_momentum = angular_momentum.copy()
+            self._momentum_state = angular_momentum.copy()
+
+        if wheel_speeds is not None:
+            self._attitude_state.wheel_speeds = wheel_speeds.copy()
+
+        if timestamp is not None:
+            self._attitude_state.timestamp = timestamp
+
+    def get_control_history(self) -> List[Dict[str, Any]]:
+        """获取控制历史记录
+
+        Returns:
+            控制历史列表
+        """
+        return self._control_history.copy()
+
+    def reset_attitude_state(self) -> None:
+        """重置姿态状态到初始值"""
+        self._initialize_attitude_state()
+        self._control_history.clear()
+        logger.debug("Attitude state reset to initial values")
