@@ -133,6 +133,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                 'scheduled_tasks': []  # Track scheduled tasks for conflict detection
             }
 
+        # Initialize slew constraint checker first (required by unified constraint checker)
+        self._initialize_slew_checker()
+
         # Initialize unified constraint checker
         constraint_config = ConstraintConfig(
             consider_power=self.consider_power,
@@ -141,10 +144,12 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             mode='simplified' if self._use_simplified_slew else 'standard'
         )
         self._constraint_checker = ConstraintChecker(self.mission, constraint_config)
-        self._constraint_checker.initialize()
 
-        # Initialize slew constraint checker (replaces individual SlewCalculator initialization)
-        self._initialize_slew_checker()
+        # Use the precise slew checker if available (passed from UnifiedScheduler)
+        if self._slew_checker is not None:
+            self._constraint_checker.set_slew_checker(self._slew_checker)
+
+        self._constraint_checker.initialize()
 
         # Initialize SAA constraint checker
         self._initialize_saa_checker()
@@ -384,16 +389,10 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                     actual_start = result.actual_start or window_start
                     actual_end = actual_start + timedelta(seconds=imaging_duration)
 
-                    # 如果使用 PreciseSlewConstraintChecker，从它获取精确的 slew_angle
-                    if isinstance(self._slew_checker, PreciseSlewConstraintChecker):
-                        precise_slew_result = self._slew_checker.check_slew_feasibility(
-                            sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                        )
-                        slew_angle = precise_slew_result.slew_angle
-                        slew_time = precise_slew_result.slew_time
-                    else:
-                        slew_angle = result.slew_angle
-                        slew_time = result.slew_time
+                    # 从 constraint_checker 的结果中获取 slew 信息
+                    # 避免重复调用 check_slew_feasibility（已在 check_task 中计算）
+                    slew_angle = result.slew_angle
+                    slew_time = result.slew_time
 
                     # Create a compatible slew result for backward compatibility
                     slew_result = SlewFeasibilityResult(
