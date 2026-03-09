@@ -247,7 +247,6 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         Returns:
             可行性结果
         """
-        import time
         calc = self._precise_calcs[satellite.id]
 
         # 1. 获取前一任务结束时的姿态状态
@@ -276,14 +275,11 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
 
         try:
             # 3a. 执行姿态复位机动分析（从前一姿态到对地定向）
-            t_start = time.time()
             reset_maneuver = calc.calculate_slew_maneuver(
                 prev_attitude=current_state,
                 target_attitude=nadir_attitude,
                 current_time=prev_end_time
             )
-            t_reset = time.time() - t_start
-            logger.debug(f"[PERF] Reset maneuver calculation for {satellite.id}: {t_reset:.3f}s")
 
             if reset_maneuver.feasible:
                 total_reset_time = reset_maneuver.total_time
@@ -294,15 +290,11 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
 
                 # 3b. 执行实际任务机动分析（从对地定向到目标姿态）
                 reset_complete_time = prev_end_time + timedelta(seconds=total_reset_time)
-                t_start = time.time()
                 task_maneuver = calc.calculate_slew_maneuver(
                     prev_attitude=nadir_attitude,
                     target_attitude=target_attitude,
                     current_time=reset_complete_time
                 )
-                t_task = time.time() - t_start
-                logger.debug(f"[PERF] Task maneuver calculation for {satellite.id}: {t_task:.3f}s")
-                logger.debug(f"[PERF] Total slew calculation for {satellite.id}: {t_reset + t_task:.3f}s (reset: {t_reset:.3f}s, task: {t_task:.3f}s)")
 
                 if task_maneuver.feasible:
                     total_task_time = task_maneuver.total_time
@@ -806,15 +798,11 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
 
         # 4. 执行精确机动分析
         try:
-            import time
-            t_start = time.time()
             maneuver = calc.calculate_slew_maneuver(
                 prev_attitude=initial_attitude,
                 target_attitude=target_attitude,
                 current_time=window_start
             )
-            t_elapsed = time.time() - t_start
-            logger.debug(f"[PERF] First task maneuver calculation for {satellite.id}: {t_elapsed:.3f}s")
         except Exception as e:
             logger.warning(f"First task precise maneuver calculation failed: {e}")
             # 使用简化计算
