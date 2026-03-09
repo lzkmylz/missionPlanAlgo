@@ -883,6 +883,19 @@ class ConstraintChecker:
         self._imaging_calculator = ImagingTimeCalculator()
         self._power_profile = PowerProfile()
 
+    def set_slew_checker(self, slew_checker) -> None:
+        """Set external slew checker (e.g., PreciseSlewConstraintChecker).
+
+        This allows the constraint checker to use an external slew checker
+        that maintains state across multiple scheduling iterations.
+
+        Args:
+            slew_checker: External slew checker instance
+        """
+        self._slew_checker = slew_checker
+        # Clear initialized set to force re-initialization with new slew checker
+        self._initialized_sats.clear()
+
     def initialize(self) -> None:
         """Initialize constraint checkers for all satellites."""
         for sat in self.mission.satellites:

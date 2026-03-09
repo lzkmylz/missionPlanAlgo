@@ -182,18 +182,35 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             satellite, prev_end_time
         )
 
+        # 检查时间间隔：如果超过5分钟，假设卫星已回到对地定向
+        # 这样可以避免不必要的姿态复位计算，提高性能
+        time_diff = (window_start - prev_end_time).total_seconds()
+        assume_nadir = time_diff > 300  # 5分钟 = 300秒
+
         # 选择模型
         if self.use_precise and satellite_id in self._precise_calcs:
-            return self._check_precise_feasibility(
-                satellite=satellite,
-                prev_target=prev_target,
-                current_target=current_target,
-                prev_end_time=prev_end_time,
-                window_start=window_start,
-                sat_position=sat_position,
-                imaging_duration=imaging_duration,
-                **kwargs
-            )
+            if assume_nadir:
+                # 长时间间隔：假设已回到对地定向，跳过复位计算
+                return self._check_nadir_to_target_feasibility(
+                    satellite=satellite,
+                    current_target=current_target,
+                    window_start=window_start,
+                    sat_position=sat_position,
+                    imaging_duration=imaging_duration,
+                    **kwargs
+                )
+            else:
+                # 短时间间隔：考虑姿态复位
+                return self._check_precise_feasibility(
+                    satellite=satellite,
+                    prev_target=prev_target,
+                    current_target=current_target,
+                    prev_end_time=prev_end_time,
+                    window_start=window_start,
+                    sat_position=sat_position,
+                    imaging_duration=imaging_duration,
+                    **kwargs
+                )
         else:
             # 使用父类的简化检查
             return super().check_slew_feasibility(
@@ -212,7 +229,11 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         imaging_duration: float,
         **kwargs
     ) -> SlewFeasibilityResult:
-        """使用精确模型的可行性检查
+        """使用精确模型的可行性检查（考虑姿态复位）
+
+        完整的机动流程：
+        1. 前一任务结束时的姿态 -> 对地定向（姿态复位）
+        2. 对地定向 -> 当前目标姿态（任务机动）
 
         Args:
             satellite: 卫星对象
@@ -226,34 +247,104 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         Returns:
             可行性结果
         """
+        import time
         calc = self._precise_calcs[satellite.id]
 
-        # 1. 获取当前姿态状态
+        # 1. 获取前一任务结束时的姿态状态
         current_state = self._get_satellite_attitude_state(
             satellite.id, prev_end_time
         )
 
-        # 2. 计算目标姿态
+        # 2. 计算当前目标姿态
         target_attitude = self._compute_target_attitude(
             satellite, current_target, sat_position
         )
 
-        # 3. 执行精确机动分析
+        # 3. 计算姿态复位：从前一姿态回到对地定向
+        nadir_attitude = AttitudeState(
+            quaternion=Quaternion(1.0, 0.0, 0.0, 0.0),  # 对地定向 = 单位四元数
+            angular_velocity=AngularVelocity(0.0, 0.0, 0.0),
+            timestamp=prev_end_time,
+            momentum=None
+        )
+
+        reset_maneuver = None
+        task_maneuver = None
+        total_reset_time = 0.0
+        total_task_time = 0.0
+        total_slew_angle = 0.0
+
         try:
-            maneuver = calc.calculate_slew_maneuver(
+            # 3a. 执行姿态复位机动分析（从前一姿态到对地定向）
+            t_start = time.time()
+            reset_maneuver = calc.calculate_slew_maneuver(
                 prev_attitude=current_state,
-                target_attitude=target_attitude,
+                target_attitude=nadir_attitude,
                 current_time=prev_end_time
             )
+            t_reset = time.time() - t_start
+            logger.debug(f"[PERF] Reset maneuver calculation for {satellite.id}: {t_reset:.3f}s")
+
+            if reset_maneuver.feasible:
+                total_reset_time = reset_maneuver.total_time
+                # 姿态复位的角度
+                reset_angle = self._quaternion_rotation_angle(
+                    current_state.quaternion, nadir_attitude.quaternion
+                )
+
+                # 3b. 执行实际任务机动分析（从对地定向到目标姿态）
+                reset_complete_time = prev_end_time + timedelta(seconds=total_reset_time)
+                t_start = time.time()
+                task_maneuver = calc.calculate_slew_maneuver(
+                    prev_attitude=nadir_attitude,
+                    target_attitude=target_attitude,
+                    current_time=reset_complete_time
+                )
+                t_task = time.time() - t_start
+                logger.debug(f"[PERF] Task maneuver calculation for {satellite.id}: {t_task:.3f}s")
+                logger.debug(f"[PERF] Total slew calculation for {satellite.id}: {t_reset + t_task:.3f}s (reset: {t_reset:.3f}s, task: {t_task:.3f}s)")
+
+                if task_maneuver.feasible:
+                    total_task_time = task_maneuver.total_time
+                    total_slew_angle = task_maneuver.trajectory.rotation_angle
+                else:
+                    # 任务机动不可行
+                    return SlewFeasibilityResult(
+                        feasible=False,
+                        slew_angle=task_maneuver.trajectory.rotation_angle if task_maneuver.trajectory else 0.0,
+                        slew_time=total_reset_time + total_task_time,
+                        actual_start=window_start,
+                        reason="Task slew maneuver infeasible after reset"
+                    )
+            else:
+                # 姿态复位不可行（这种情况很少见，但需要考虑）
+                # 尝试直接机动到目标（不复位）
+                logger.debug(f"Reset maneuver infeasible for {satellite.id}, trying direct slew")
+                task_maneuver = calc.calculate_slew_maneuver(
+                    prev_attitude=current_state,
+                    target_attitude=target_attitude,
+                    current_time=prev_end_time
+                )
+                if task_maneuver.feasible:
+                    total_task_time = task_maneuver.total_time
+                    total_slew_angle = task_maneuver.trajectory.rotation_angle
+                else:
+                    return SlewFeasibilityResult(
+                        feasible=False,
+                        slew_angle=task_maneuver.trajectory.rotation_angle if task_maneuver.trajectory else 0.0,
+                        slew_time=task_maneuver.total_time if task_maneuver else 0.0,
+                        actual_start=window_start,
+                        reason="Direct slew maneuver infeasible"
+                    )
+
         except Exception as e:
             logger.warning(f"Precise maneuver calculation failed for {satellite.id}: {e}")
-            # 回退到简化模型
+            # 回退到简化模型（不复位，直接机动）
             result = super().check_slew_feasibility(
                 satellite.id, prev_target, current_target,
                 prev_end_time, window_start, imaging_duration
             )
-            # 即使使用简化模型，也要更新状态到目标姿态
-            # 否则后续任务会获取错误的初始姿态
+            # 更新状态到目标姿态
             if result.feasible:
                 self._update_satellite_state(
                     satellite_id=satellite.id,
@@ -263,38 +354,154 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
                 )
             return result
 
-        # 4. 检查约束满足
-        if not maneuver.feasible:
-            reason = "Momentum saturation risk"
-            if maneuver.momentum_check and maneuver.momentum_check.recommendation:
-                reason = maneuver.momentum_check.recommendation
-
-            return SlewFeasibilityResult(
-                feasible=False,
-                slew_angle=maneuver.trajectory.rotation_angle,
-                slew_time=maneuver.total_time,
-                actual_start=window_start,
-                reason=reason
-            )
-
-        # 5. 计算机动后实际开始时间
-        earliest_start = prev_end_time + timedelta(seconds=maneuver.total_time)
+        # 4. 计算机动后实际开始时间（包括复位时间 + 任务机动时间）
+        total_slew_time = total_reset_time + total_task_time
+        earliest_start = prev_end_time + timedelta(seconds=total_slew_time)
         actual_start = max(window_start, earliest_start)
 
-        # 6. 检查成像窗口时间
+        # 5. 检查成像窗口时间
         if imaging_duration > 0:
             actual_end = actual_start + timedelta(seconds=imaging_duration)
             window_end = getattr(current_target, 'time_window_end', None)
             if window_end and actual_end > window_end:
                 return SlewFeasibilityResult(
                     feasible=False,
-                    slew_angle=maneuver.trajectory.rotation_angle,
-                    slew_time=maneuver.total_time,
+                    slew_angle=total_slew_angle,
+                    slew_time=total_slew_time,
                     actual_start=actual_start,
-                    reason="Not enough time after precise slew maneuver"
+                    reason="Not enough time after slew maneuvers (including reset)"
                 )
 
-        # 7. 更新卫星状态跟踪
+        # 6. 更新卫星状态跟踪到目标姿态（任务完成后）
+        final_momentum = task_maneuver.final_momentum if task_maneuver else None
+        self._update_satellite_state(
+            satellite_id=satellite.id,
+            time=actual_start,
+            attitude=target_attitude,
+            angular_momentum=final_momentum
+        )
+
+        # 7. 构造结果
+        result = SlewFeasibilityResult(
+            feasible=True,
+            slew_angle=total_slew_angle,  # 这是从对地定向到目标的角度
+            slew_time=total_slew_time,    # 总时间包括复位 + 任务机动
+            actual_start=actual_start,
+            reason=None
+        )
+
+        # 附加精确模型信息
+        if task_maneuver:
+            result.energy_consumption = task_maneuver.energy_consumption
+            result.momentum_margin = task_maneuver.momentum_margin
+            result.precise_result = task_maneuver
+
+        return result
+
+    def _check_nadir_to_target_feasibility(
+        self,
+        satellite: Satellite,
+        current_target: Target,
+        window_start: datetime,
+        sat_position: Tuple[float, float, float],
+        imaging_duration: float,
+        **kwargs
+    ) -> SlewFeasibilityResult:
+        """检查从对地定向到目标的可行性（用于长时间间隔后的任务）
+
+        假设卫星已经回到对地定向，只计算从对地定向到目标的机动。
+        这比完整的姿态复位计算更快。
+
+        Args:
+            satellite: 卫星对象
+            current_target: 当前目标
+            window_start: 窗口开始时间
+            sat_position: 卫星位置
+            imaging_duration: 成像持续时间
+
+        Returns:
+            可行性结果
+        """
+        calc = self._precise_calcs[satellite.id]
+
+        # 1. 初始姿态：对地定向
+        nadir_attitude = AttitudeState(
+            quaternion=Quaternion(1.0, 0.0, 0.0, 0.0),
+            angular_velocity=AngularVelocity(0.0, 0.0, 0.0),
+            timestamp=window_start,
+            momentum=None
+        )
+
+        # 2. 计算目标姿态
+        target_attitude = self._compute_target_attitude(
+            satellite, current_target, sat_position
+        )
+
+        # 3. 计算机动角度
+        slew_angle = self._quaternion_rotation_angle(
+            nadir_attitude.quaternion, target_attitude.quaternion
+        )
+
+        try:
+            # 4. 执行机动分析（从对地定向到目标）
+            maneuver = calc.calculate_slew_maneuver(
+                prev_attitude=nadir_attitude,
+                target_attitude=target_attitude,
+                current_time=window_start
+            )
+        except Exception as e:
+            logger.warning(f"Nadir-to-target maneuver calculation failed: {e}")
+            # 使用简化计算
+            slew_time = self._estimate_slew_time(satellite, slew_angle)
+            actual_start = window_start + timedelta(seconds=slew_time)
+
+            # 更新状态
+            self._update_satellite_state(
+                satellite_id=satellite.id,
+                time=actual_start,
+                attitude=target_attitude,
+                angular_momentum=None
+            )
+
+            return SlewFeasibilityResult(
+                feasible=True,
+                slew_angle=slew_angle,
+                slew_time=slew_time,
+                actual_start=actual_start,
+                reason=None
+            )
+
+        # 5. 检查约束满足
+        if not maneuver.feasible:
+            reason = "Nadir-to-target maneuver infeasible"
+            if maneuver.momentum_check and maneuver.momentum_check.recommendation:
+                reason = maneuver.momentum_check.recommendation
+
+            return SlewFeasibilityResult(
+                feasible=False,
+                slew_angle=slew_angle,
+                slew_time=maneuver.total_time,
+                actual_start=window_start,
+                reason=reason
+            )
+
+        # 6. 计算机动后实际开始时间
+        actual_start = window_start + timedelta(seconds=maneuver.total_time)
+
+        # 7. 检查成像窗口时间
+        if imaging_duration > 0:
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+            window_end = getattr(current_target, 'time_window_end', None)
+            if window_end and actual_end > window_end:
+                return SlewFeasibilityResult(
+                    feasible=False,
+                    slew_angle=slew_angle,
+                    slew_time=maneuver.total_time,
+                    actual_start=actual_start,
+                    reason="Not enough time after nadir-to-target slew"
+                )
+
+        # 8. 更新卫星状态跟踪
         self._update_satellite_state(
             satellite_id=satellite.id,
             time=actual_start,
@@ -302,16 +509,16 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             angular_momentum=maneuver.final_momentum
         )
 
-        # 8. 构造结果 (保持接口兼容)
+        # 9. 构造结果
         result = SlewFeasibilityResult(
             feasible=True,
-            slew_angle=maneuver.trajectory.rotation_angle,
+            slew_angle=slew_angle,
             slew_time=maneuver.total_time,
             actual_start=actual_start,
             reason=None
         )
 
-        # 附加精确模型信息 (可选字段)
+        # 附加精确模型信息
         result.energy_consumption = maneuver.energy_consumption
         result.momentum_margin = maneuver.momentum_margin
         result.precise_result = maneuver
@@ -340,18 +547,40 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             momentum = self._state_tracker.get_angular_momentum(satellite_id)
 
             if attitude is not None:
+                # 将numpy数组转换为Quaternion对象
+                q_data = attitude.get('quaternion', [1, 0, 0, 0])
+                if isinstance(q_data, np.ndarray):
+                    q = Quaternion(w=q_data[0], x=q_data[1], y=q_data[2], z=q_data[3])
+                elif hasattr(q_data, 'w'):  # 已经是Quaternion对象
+                    q = q_data
+                else:  # 列表或元组
+                    q = Quaternion(w=q_data[0], x=q_data[1], y=q_data[2], z=q_data[3])
+
+                # 角速度也可能是numpy数组
+                av_data = attitude.get('angular_velocity', [0, 0, 0])
+                if isinstance(av_data, np.ndarray):
+                    av = AngularVelocity(x=av_data[0], y=av_data[1], z=av_data[2])
+                elif hasattr(av_data, 'x'):  # 已经是AngularVelocity对象
+                    av = av_data
+                else:  # 列表或元组
+                    av = AngularVelocity(x=av_data[0], y=av_data[1], z=av_data[2])
+
                 return AttitudeState(
-                    quaternion=attitude.get('quaternion', Quaternion(1, 0, 0, 0)),
-                    angular_velocity=attitude.get(
-                        'angular_velocity', AngularVelocity(0, 0, 0)
-                    ),
+                    quaternion=q,
+                    angular_velocity=av,
                     timestamp=timestamp,
                     momentum=momentum
                 )
 
         # 尝试从内部缓存获取
         if satellite_id in self._last_attitudes:
-            return self._last_attitudes[satellite_id]
+            cached_state = self._last_attitudes[satellite_id]
+            # 检查时间间隔：如果超过5分钟，假设卫星已回到对地定向
+            if cached_state.timestamp is not None:
+                time_diff = abs((timestamp - cached_state.timestamp).total_seconds())
+                if time_diff < 300:  # 5分钟 = 300秒
+                    return cached_state
+            # 时间间隔太长，缓存过期，使用默认状态
 
         # 使用默认状态 (对地定向)
         return AttitudeState(
@@ -497,10 +726,17 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         """
         # 更新外部状态跟踪器（如果可用）
         if self._state_tracker is not None:
+            # 将Quaternion对象转换为numpy数组
+            q = attitude.quaternion
+            if hasattr(q, 'w'):  # Quaternion对象
+                q_array = np.array([q.w, q.x, q.y, q.z])
+            else:  # 已经是数组
+                q_array = np.array(q) if not isinstance(q, np.ndarray) else q
+
             self._state_tracker.update_after_maneuver(
                 satellite_id=satellite_id,
                 maneuver_result={
-                    'final_quaternion': attitude.quaternion,
+                    'final_quaternion': q_array,
                     'final_momentum': angular_momentum,
                     'timestamp': time
                 }
@@ -570,11 +806,15 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
 
         # 4. 执行精确机动分析
         try:
+            import time
+            t_start = time.time()
             maneuver = calc.calculate_slew_maneuver(
                 prev_attitude=initial_attitude,
                 target_attitude=target_attitude,
                 current_time=window_start
             )
+            t_elapsed = time.time() - t_start
+            logger.debug(f"[PERF] First task maneuver calculation for {satellite.id}: {t_elapsed:.3f}s")
         except Exception as e:
             logger.warning(f"First task precise maneuver calculation failed: {e}")
             # 使用简化计算
@@ -713,3 +953,79 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             actual_start=window_start,
             reason=reason
         )
+
+    def check_slew(
+        self,
+        sat_id: str,
+        prev_target: Optional[Target],
+        current_target: Target,
+        prev_end_time: datetime,
+        window_start: datetime,
+        imaging_duration: float,
+        use_simplified: bool = False,
+    ) -> 'ConstraintResult':
+        """检查姿态机动约束（与SlewChecker.check_slew接口兼容）
+
+        这个方法将内部的check_slew_feasibility结果转换为ConstraintResult格式，
+        以便与ConstraintChecker._check_slew方法兼容。
+
+        Args:
+            sat_id: 卫星ID
+            prev_target: 上一个目标 (None表示第一个任务)
+            current_target: 当前目标
+            prev_end_time: 上一个任务结束时间
+            window_start: 当前窗口开始时间
+            imaging_duration: 成像持续时间 (秒)
+            use_simplified: 使用简化模型 (保留参数，但精确模型始终使用精确计算)
+
+        Returns:
+            ConstraintResult: 约束检查结果
+        """
+        from scheduler.common.constraint_checker import ConstraintResult, ConstraintType
+
+        # 调用内部的精确可行性检查
+        slew_result = self.check_slew_feasibility(
+            satellite_id=sat_id,
+            prev_target=prev_target,
+            current_target=current_target,
+            prev_end_time=prev_end_time,
+            window_start=window_start,
+            imaging_duration=imaging_duration
+        )
+
+        # 转换为ConstraintResult格式
+        result = ConstraintResult()
+
+        if not slew_result.feasible:
+            result.feasible = False
+            result.add_violation(ConstraintType.SLEW, slew_result.reason or "Slew not feasible")
+
+        # 复制机动计算结果
+        result.slew_angle = slew_result.slew_angle
+        result.slew_time = slew_result.slew_time
+        result.actual_start = slew_result.actual_start
+
+        return result
+
+    def initialize_satellite(self, satellite: 'Satellite') -> None:
+        """初始化卫星的姿态机动计算器
+
+        与SlewChecker.initialize_satellite接口兼容。
+
+        Args:
+            satellite: 卫星对象
+        """
+        # 如果已经有该卫星的精确计算器，不需要重新初始化
+        if satellite.id in self._precise_calcs:
+            return
+
+        # 创建新的精确计算器
+        config = self._extract_dynamics_config(satellite)
+        self._precise_calcs[satellite.id] = PreciseSlewCalculator(
+            config=config,
+            use_precise=True
+        )
+
+        # 清空缓存
+        if satellite.id in self._last_attitudes:
+            del self._last_attitudes[satellite.id]
