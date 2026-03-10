@@ -543,6 +543,58 @@ results = checker.check_fast_phase_batch(
 
 ---
 
+### 批量约束检查开发规范
+
+**所有调度器必须使用批量约束检查**:
+- GreedyScheduler、GA、ACO、SA、PSO、Tabu等所有调度算法
+- 自定义调度器开发时必须继承批量检查模式
+- 禁止直接逐个调用约束检查（性能瓶颈）
+
+**未来新增约束的实现要求**:
+1. **必须提供批量检查接口**: `check_<constraint>_batch(candidates, ...)`
+2. **必须使用Numba JIT**: `@njit(parallel=True, cache=True)`
+3. **必须提供候选数据类**: `<Constraint>BatchCandidate` dataclass
+4. **必须提供结果数据类**: `<Constraint>BatchResult` dataclass
+5. **必须集成到UnifiedBatchConstraintChecker**: 在`check_fast_phase_batch()`或`check_all_constraints_batch()`中调用
+
+**批量检查器标准结构**:
+```python
+# 1. 数据类
+@dataclass
+class BatchNewConstraintCandidate:
+    sat_id: str
+    window_start: datetime
+    window_end: datetime
+    # ... 其他参数
+
+@dataclass
+class BatchNewConstraintResult:
+    feasible: bool
+    reason: Optional[str] = None
+
+# 2. Numba计算核心
+@njit(parallel=True, cache=True)
+def batch_check_new_constraint_numba(
+    # 输入数组
+    # ...
+    # 输出数组
+    out_feasible: np.ndarray,
+):
+    for i in prange(n):
+        # 约束检查逻辑
+        pass
+
+# 3. 批量检查器类
+class BatchNewConstraintChecker:
+    def check_batch(self, candidates: List[BatchNewConstraintCandidate]) -> List[BatchNewConstraintResult]:
+        # 准备数据
+        # 调用Numba函数
+        # 返回结果
+        pass
+```
+
+---
+
 ### 默认结果保存配置
 
 **所有规划算法默认自动保存详细任务列表** (`scripts/run_scheduler.py`):
