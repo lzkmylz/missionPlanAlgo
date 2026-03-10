@@ -27,12 +27,14 @@ class SlewFeasibilityResult:
         slew_time: 机动时间（秒）
         actual_start: 实际可开始时间
         reason: 不可行原因（如果不可行）
+        reset_time: 姿态复位时间（秒），仅短时间间隔任务有
     """
     feasible: bool
     slew_angle: float
     slew_time: float
     actual_start: datetime
     reason: Optional[str] = None
+    reset_time: Optional[float] = None  # 姿态复位时间（秒）
 
 
 class SlewConstraintChecker:
@@ -402,3 +404,38 @@ class SlewConstraintChecker:
     ) -> float:
         """向量点积"""
         return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
+
+    def check_slew(
+        self,
+        sat_id: str,
+        prev_target: Optional[Target],
+        current_target: Target,
+        prev_end_time: datetime,
+        window_start: datetime,
+        imaging_duration: float = 0.0,
+        use_simplified: bool = False
+    ) -> SlewFeasibilityResult:
+        """检查机动可行性（与SlewChecker兼容的接口）
+
+        这是check_slew_feasibility的别名方法，用于与UnifiedConstraintChecker兼容。
+
+        Args:
+            sat_id: 卫星ID
+            prev_target: 上一个目标（None表示这是第一个任务）
+            current_target: 当前目标
+            prev_end_time: 上一个任务结束时间
+            window_start: 当前窗口开始时间
+            imaging_duration: 成像持续时间（秒）
+            use_simplified: 使用简化计算（此参数被忽略，保持接口兼容）
+
+        Returns:
+            SlewFeasibilityResult: 可行性结果
+        """
+        return self.check_slew_feasibility(
+            satellite_id=sat_id,
+            prev_target=prev_target,
+            current_target=current_target,
+            prev_end_time=prev_end_time,
+            window_start=window_start,
+            imaging_duration=imaging_duration
+        )

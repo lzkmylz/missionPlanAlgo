@@ -15,6 +15,9 @@ Features:
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import math
+import logging
+import time
+from collections import defaultdict
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from ..frequency_utils import ObservationTask, create_observation_tasks
@@ -24,6 +27,12 @@ from ..constraints import SlewConstraintChecker, SlewFeasibilityResult, PreciseS
 from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
 from scheduler.common.config import ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
+from scheduler.constraints.batch_slew_calculator import BatchSlewCandidate, BatchSlewCalculator
+from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstraintChecker
+from scheduler.constraints.unified_batch_constraint_checker import (
+    UnifiedBatchConstraintChecker, UnifiedBatchCandidate
+)
+from core.models.target import Target
 
 
 class GreedyScheduler(BaseScheduler, ClusteringMixin):
@@ -90,6 +99,12 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         # Slew calculators per satellite (initialized in initialize())
         self._slew_calculators: Dict[str, SlewCalculator] = {}
 
+        # 统一批量约束检查器（延迟初始化，只创建一次）
+        self._unified_checker = None
+
+        # 性能分析数据
+        self._perf_stats = defaultdict(lambda: {'count': 0, 'total_time': 0.0, 'max_time': 0.0, 'min_time': float('inf')})
+
     def get_parameters(self) -> Dict[str, Any]:
         """Return algorithm configurable parameters"""
         params = {
@@ -101,6 +116,97 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         # Add clustering parameters
         params.update(self.get_clustering_config())
         return params
+
+    def _perf_start(self) -> float:
+        """开始计时"""
+        return time.perf_counter()
+
+    def _perf_end(self, name: str, start_time: float) -> None:
+        """结束计时并记录"""
+        elapsed = time.perf_counter() - start_time
+        stats = self._perf_stats[name]
+        stats['count'] += 1
+        stats['total_time'] += elapsed
+        stats['max_time'] = max(stats['max_time'], elapsed)
+        stats['min_time'] = min(stats['min_time'], elapsed)
+
+    def _print_perf_report(self) -> None:
+        """打印性能分析报告"""
+        print("\n" + "="*80)
+        print("Greedy调度器性能分析报告")
+        print("="*80)
+        print(f"{'环节':<40} {'调用次数':>10} {'总耗时(s)':>12} {'平均(ms)':>10} {'最大(ms)':>10}")
+        print("-"*80)
+
+        # 按总耗时排序
+        sorted_stats = sorted(self._perf_stats.items(), key=lambda x: x[1]['total_time'], reverse=True)
+
+        total_time = sum(s['total_time'] for _, s in sorted_stats)
+
+        for name, stats in sorted_stats:
+            avg_ms = (stats['total_time'] / stats['count']) * 1000 if stats['count'] > 0 else 0
+            max_ms = stats['max_time'] * 1000
+            print(f"{name:<40} {stats['count']:>10} {stats['total_time']:>12.3f} {avg_ms:>10.3f} {max_ms:>10.3f}")
+
+        print("-"*80)
+        print(f"{'总计':<40} {'':>10} {total_time:>12.3f} {'':>10} {'':>10}")
+        print("="*80)
+
+        # 计算各环节占比
+        print("\n各环节耗时占比:")
+        for name, stats in sorted_stats[:10]:  # 只显示前10
+            percentage = (stats['total_time'] / total_time) * 100 if total_time > 0 else 0
+            bar = "█" * int(percentage / 2)
+            print(f"  {name:<38} {percentage:>6.2f}% {bar}")
+        print("="*80 + "\n")
+
+    def _initialize_slew_checker(self) -> None:
+        """初始化批量姿态机动约束检查器
+
+        覆盖基类方法，使用 BatchSlewConstraintChecker 替代普通检查器
+        以启用向量化批量计算优化。
+        """
+        if self.mission is None:
+            return
+
+        # 如果已经设置了外部检查器，跳过初始化
+        if self._slew_checker is not None:
+            return
+
+        # 在简化模式下跳过初始化以避免昂贵的计算
+        if self._use_simplified_slew:
+            return
+
+        # 使用批量姿态机动约束检查器
+        self._slew_checker = BatchSlewConstraintChecker(
+            self.mission,
+            use_precise_model=True
+        )
+
+        # 设置状态跟踪器（如果可用）
+        if hasattr(self, '_state_tracker') and self._state_tracker is not None:
+            self._slew_checker.set_state_tracker(self._state_tracker)
+
+        logger.info("GreedyScheduler: Initialized BatchSlewConstraintChecker for vectorized computation")
+
+    def _get_previous_task_target(self, sat_id: str) -> Optional[Target]:
+        """获取卫星上一个任务的目标
+
+        Args:
+            sat_id: 卫星ID
+
+        Returns:
+            上一个目标或None
+        """
+        usage = self._sat_resource_usage.get(sat_id, {})
+        scheduled_tasks = usage.get('scheduled_tasks', [])
+
+        if scheduled_tasks:
+            last_task = scheduled_tasks[-1]
+            if hasattr(last_task, 'target'):
+                return last_task.target
+
+        return None
 
     def schedule(self) -> ScheduleResult:
         """
@@ -137,11 +243,12 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         self._initialize_slew_checker()
 
         # Initialize unified constraint checker
+        # 强制使用完整精确模式，禁用所有简化计算
         constraint_config = ConstraintConfig(
             consider_power=self.consider_power,
             consider_storage=self.consider_storage,
             enable_saa_check=True,
-            mode='simplified' if self._use_simplified_slew else 'standard'
+            mode='full'  # 使用完整精确模式，禁用简化计算
         )
         self._constraint_checker = ConstraintChecker(self.mission, constraint_config)
 
@@ -179,31 +286,50 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
 
         # Reset clustering state if needed
         if self.enable_clustering:
+            t = self._perf_start()
             self.reset_clustering_state()
+            self._perf_end('reset_clustering_state', t)
 
         # Get tasks based on whether clustering is enabled
+        t = self._perf_start()
         if self.enable_clustering:
             pending_tasks = self._sort_tasks(self._get_clustered_tasks())
         else:
             pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
+        self._perf_end('create_and_sort_tasks', t)
+
         scheduled_tasks: List[ScheduledTask] = []
         unscheduled: Dict[str, Any] = {}
 
+        # 禁用快速筛选模式，使用完整精确计算
+        if self._slew_checker is not None and hasattr(self._slew_checker, 'set_skip_reset_calculation'):
+            self._slew_checker.set_skip_reset_calculation(False)
+            logger = logging.getLogger(__name__)
+            logger.info("禁用姿态机动快速筛选模式，使用完整精确计算")
+
         # Main scheduling loop
+        loop_t = self._perf_start()
         for task in pending_tasks:
+            task_t = self._perf_start()
             best_assignment = self._find_best_assignment(task)
+            self._perf_end('find_best_assignment_per_task', task_t)
 
             if best_assignment:
                 sat_id, window, imaging_mode, slew_result = best_assignment
 
                 # Create scheduled task with slew information
+                t = self._perf_start()
                 scheduled_task = self._create_scheduled_task(
                     task, sat_id, window, imaging_mode, slew_result
                 )
+                self._perf_end('create_scheduled_task', t)
+
                 scheduled_tasks.append(scheduled_task)
 
                 # Update resource usage
+                t = self._perf_start()
                 self._update_resource_usage(sat_id, task, window, scheduled_task)
+                self._perf_end('update_resource_usage', t)
 
                 self._add_convergence_point(len(scheduled_tasks))
             else:
@@ -216,10 +342,16 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                     detail=f"No feasible assignment found for task {task_id}"
                 )
                 unscheduled[task_id] = self._failure_log[-1]
+        self._perf_end('main_scheduling_loop', loop_t)
 
         # Calculate makespan
+        t = self._perf_start()
         makespan = self._calculate_makespan(scheduled_tasks)
+        self._perf_end('calculate_makespan', t)
         computation_time = self._stop_timer()
+
+        # Print performance report
+        self._print_perf_report()
 
         # Build failure summary
         failure_summary = self._build_failure_summary()
@@ -324,14 +456,25 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         """
         Find the best satellite-window assignment for a task using unified constraint checker.
 
+        采用批量预筛选优化：
+        1. 阶段1：候选收集 - 收集所有（卫星，窗口）候选，进行快速预筛选
+        2. 阶段2：批量姿态预计算 - 一次性计算所有候选的姿态角
+        3. 阶段3：姿态过滤 - 基于侧摆角限制快速过滤
+        4. 阶段4：精确检查 - 仅对通过预筛选的候选进行详细约束检查
+
         Args:
             task: Target task to schedule
 
         Returns:
             Tuple of (satellite_id, window, imaging_mode, slew_result) or None if no valid assignment
         """
-        best_assignment = None
-        best_score = None
+        t_total = self._perf_start()
+
+        # ========== 阶段1：候选收集（快速预筛选）==========
+        t = self._perf_start()
+        logger = logging.getLogger(__name__)
+        logger.debug(f"[Task {getattr(task, 'task_id', getattr(task, 'id', '?'))}] Finding best assignment...")
+        candidates = []  # List of (sat, window, imaging_mode, imaging_duration, window_start, window_end)
 
         for sat in self.mission.satellites:
             # Get visibility windows
@@ -339,10 +482,13 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             if not windows:
                 continue
 
+            # 快速能力检查（每个卫星只检查一次）
+            if self._constraint_checker is None and not self._can_satellite_perform_task(sat, task):
+                continue
+
             for window in windows:
                 # Extract window times
                 window_start, window_end = self._extract_window_times(window)
-
                 if window_start is None or window_end is None:
                     continue
 
@@ -359,84 +505,246 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                 if window_duration < imaging_duration * self.MIN_WINDOW_RATIO:
                     continue
 
-                # Get resource usage for this satellite
+                # 快速资源检查
+                if self._constraint_checker is None:
+                    if not self._check_resource_constraints(sat, task, imaging_mode):
+                        continue
+
+                candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+
+        self._perf_end('phase1_candidate_collection', t)
+        logger.debug(f"  Phase 1: Found {len(candidates)} candidates")
+
+        if not candidates:
+            return None
+
+        # ========== 阶段2：批量姿态预计算 ==========
+        t = self._perf_start()
+        attitude_cache = {}
+        if not self._use_simplified_slew and self._position_cache is not None:
+            # 构建姿态计算候选列表
+            attitude_candidates = []
+            for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
+                # 使用窗口中点作为成像时间进行预筛选
+                imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
+                attitude_candidates.append((sat, task, imaging_time))
+
+            # 批量预计算姿态
+            if attitude_candidates:
+                attitude_cache = self._batch_precalculate_attitudes(attitude_candidates)
+
+        # ========== 阶段3：姿态预筛选 ==========
+        filtered_candidates = []
+        for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
+            # 使用窗口中点检查姿态角
+            imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
+            attitude = attitude_cache.get((sat.id, imaging_time))
+
+            if attitude is not None:
+                # 快速侧摆角检查
+                max_off_nadir = sat.capabilities.max_off_nadir
+                total_angle = (attitude.roll ** 2 + attitude.pitch ** 2) ** 0.5
+                if total_angle > max_off_nadir * 1.2:  # 允许20%容差，因为实际成像时间可能不同
+                    continue
+
+            filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+
+        if not filtered_candidates:
+            filtered_candidates = candidates  # 如果全部过滤掉了，回退到原始候选
+
+        self._perf_end('phase2_and_phase3_precompute_and_filter', t)
+        logger.debug(f"  Phase 3: {len(filtered_candidates)} candidates after attitude filtering")
+
+        # ========== 阶段4：精确约束检查（批量优化版本）==========
+        t = self._perf_start()
+        best_assignment = None
+        best_score = None
+        constraint_check_count = 0
+
+        # 检查是否可以使用批量姿态约束检查
+        use_batch_slew = (
+            isinstance(self._slew_checker, BatchSlewConstraintChecker) and
+            len(filtered_candidates) > 1  # 只有多个候选时才使用批量
+        )
+        logger.debug(f"  Phase 4: Using batch slew check: {use_batch_slew}, candidates: {len(filtered_candidates)}")
+
+        if use_batch_slew:
+            # ===== 批量姿态约束检查 =====
+            batch_candidates = []
+            for sat, window, imaging_mode, imaging_duration, window_start, window_end in filtered_candidates:
+                usage = self._sat_resource_usage.get(sat.id, {})
+                last_task_end = usage.get('last_task_end', self.mission.start_time)
+
+                # 获取卫星位置
+                sat_position, sat_velocity = self._get_satellite_position(sat, last_task_end)
+
+                candidate = BatchSlewCandidate(
+                    sat_id=sat.id,
+                    satellite=sat,
+                    target=task,
+                    window_start=window_start,
+                    window_end=window_end,
+                    prev_end_time=last_task_end,
+                    prev_target=self._get_previous_task_target(sat.id),
+                    imaging_duration=imaging_duration,
+                    sat_position=sat_position,
+                    sat_velocity=sat_velocity
+                )
+                batch_candidates.append(candidate)
+
+            # 执行批量姿态约束检查
+            t_batch = self._perf_start()
+            batch_results = self._slew_checker.check_slew_feasibility_batch(batch_candidates)
+            self._perf_end('batch_slew_check', t_batch)
+
+            # 筛选通过姿态约束的候选
+            slew_feasible_candidates = []
+            for candidate, slew_result in zip(filtered_candidates, batch_results):
+                if slew_result.feasible:
+                    slew_feasible_candidates.append((candidate, slew_result))
+
+            constraint_check_count = len(batch_candidates)
+        else:
+            # ===== 回退到逐个检查 =====
+            slew_feasible_candidates = []
+            for candidate_data in filtered_candidates:
+                sat, window, imaging_mode, imaging_duration, window_start, window_end = candidate_data
                 usage = self._sat_resource_usage.get(sat.id, {})
                 last_task_end = usage.get('last_task_end', self.mission.start_time)
                 prev_target = self._get_previous_task_target(sat.id)
-                scheduled_tasks = usage.get('scheduled_tasks', [])
 
-                # Use unified constraint checker
-                if self._constraint_checker is not None:
+                self._ensure_slew_checker_initialized()
+                if self._slew_checker is None:
+                    continue
+
+                slew_result = self._slew_checker.check_slew_feasibility(
+                    sat.id, prev_target, task, last_task_end, window_start, imaging_duration,
+                    window_end=window_end
+                )
+                constraint_check_count += 1
+
+                if slew_result.feasible:
+                    slew_feasible_candidates.append((candidate_data, slew_result))
+
+        logger.debug(f"    Entering unified batch constraint check with {len(slew_feasible_candidates)} candidates")
+
+        # ===== 批量检查其他约束（SAA、时间冲突、资源）=====
+        if slew_feasible_candidates:
+            # 准备批量检查数据
+            unified_candidates = []
+            candidate_data_map = []  # 保存原始候选数据与 slew_result 的映射
+
+            for candidate_data, slew_result in slew_feasible_candidates:
+                sat, window, imaging_mode, imaging_duration, window_start, window_end = candidate_data
+                usage = self._sat_resource_usage.get(sat.id, {})
+                scheduled_tasks = usage.get('scheduled_tasks', [])
+                actual_start = slew_result.actual_start
+                actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+                # 计算资源需求
+                power_needed = 0.0
+                storage_produced = 0.0
+                if self._constraint_checker is not None and imaging_mode is not None:
+                    try:
+                        power_profile = imaging_mode.get_power_profile(imaging_duration)
+                        power_needed = power_profile.total_energy if hasattr(power_profile, 'total_energy') else 0.0
+                        storage_produced = getattr(imaging_mode, 'data_rate', 0.0) * imaging_duration
+                    except:
+                        pass
+
+                # 获取卫星位置
+                sat_position, sat_velocity = self._get_satellite_position(sat, actual_start)
+
+                unified_candidate = UnifiedBatchCandidate(
+                    sat_id=sat.id,
+                    satellite=sat,
+                    target=task,
+                    window_start=actual_start,
+                    window_end=actual_end,
+                    prev_end_time=usage.get('last_task_end', self.mission.start_time),
+                    imaging_duration=imaging_duration,
+                    prev_target=self._get_previous_task_target(sat.id),
+                    sat_position=sat_position,
+                    sat_velocity=sat_velocity,
+                    power_needed=power_needed,
+                    storage_produced=storage_produced
+                )
+
+                unified_candidates.append(unified_candidate)
+                candidate_data_map.append((candidate_data, slew_result))
+
+            # 获取已调度任务列表
+            existing_tasks = []
+            for sat in self.mission.satellites:
+                usage = self._sat_resource_usage.get(sat.id, {})
+                for task_info in usage.get('scheduled_tasks', []):
+                    existing_tasks.append({
+                        'sat_id': sat.id,
+                        'satellite_id': sat.id,
+                        'start': task_info.get('start'),
+                        'end': task_info.get('end')
+                    })
+
+            # 获取卫星资源状态
+            satellite_states = {}
+            for sat in self.mission.satellites:
+                usage = self._sat_resource_usage.get(sat.id, {})
+                satellite_states[sat.id] = {
+                    'power': usage.get('power', sat.capabilities.power_capacity),
+                    'storage': usage.get('storage', 0.0),
+                    'power_capacity': sat.capabilities.power_capacity,
+                    'storage_capacity': sat.capabilities.storage_capacity
+                }
+
+            # 延迟初始化统一批量约束检查器（只创建一次）
+            t_unified = self._perf_start()
+            if self._unified_checker is None:
+                self._unified_checker = UnifiedBatchConstraintChecker(
+                    mission=self.mission,
+                    use_precise_model=not self._use_simplified_slew,
+                    consider_power=self.consider_power,
+                    consider_storage=self.consider_storage
+                )
+
+            # 执行批量快速阶段检查（姿态已检查，只检查SAA、时间）
+            unified_results = self._unified_checker.check_fast_phase_batch(
+                candidates=unified_candidates,
+                existing_tasks=existing_tasks,
+                early_termination=True
+            )
+            self._perf_end('unified_batch_constraint_check', t_unified)
+
+            # 筛选通过所有约束的候选
+            for i, (unified_result, (candidate_data, slew_result)) in enumerate(zip(unified_results, candidate_data_map)):
+                if not unified_result.feasible:
+                    continue
+
+                sat, window, imaging_mode, imaging_duration, window_start, window_end = candidate_data
+                actual_start = slew_result.actual_start
+
+                # 资源约束检查（如果快速阶段未检查）
+                if unified_result.resource_result is None and self._constraint_checker is not None:
+                    usage = self._sat_resource_usage.get(sat.id, {})
                     context = ConstraintContext(
                         satellite=sat,
                         target=task,
                         window_start=window_start,
                         window_end=window_end,
-                        prev_target=prev_target,
-                        prev_end_time=last_task_end,
+                        prev_target=self._get_previous_task_target(sat.id),
+                        prev_end_time=usage.get('last_task_end', self.mission.start_time),
                         imaging_duration=imaging_duration,
                         current_power=usage.get('power', sat.capabilities.power_capacity),
                         current_storage=usage.get('storage', 0.0),
-                        scheduled_tasks=scheduled_tasks,
+                        scheduled_tasks=usage.get('scheduled_tasks', []),
                         imaging_mode=imaging_mode
                     )
 
-                    result = self._constraint_checker.check_task(context)
+                    t_check = self._perf_start()
+                    resource_result = self._constraint_checker.check_task(context)
+                    self._perf_end('constraint_checker.check_resources', t_check)
 
-                    if not result.feasible:
+                    if not resource_result.feasible:
                         continue
-
-                    actual_start = result.actual_start or window_start
-                    actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-                    # 从 constraint_checker 的结果中获取 slew 信息
-                    # 避免重复调用 check_slew_feasibility（已在 check_task 中计算）
-                    slew_angle = result.slew_angle
-                    slew_time = result.slew_time
-
-                    # Create a compatible slew result for backward compatibility
-                    slew_result = SlewFeasibilityResult(
-                        feasible=True,
-                        slew_angle=slew_angle,
-                        slew_time=slew_time,
-                        actual_start=actual_start,
-                        reason=None
-                    )
-                else:
-                    # Fallback to legacy constraint checking
-                    if not self._can_satellite_perform_task(sat, task):
-                        continue
-
-                    if not self._check_resource_constraints(sat, task, imaging_mode):
-                        continue
-
-                    if self._use_simplified_slew:
-                        slew_result = self._get_slew_result_simple(sat.id, last_task_end, window_start)
-                    else:
-                        self._ensure_slew_checker_initialized()
-                        if self._slew_checker is None:
-                            continue
-                        slew_result = self._slew_checker.check_slew_feasibility(
-                            sat.id, prev_target, task, last_task_end, window_start, imaging_duration
-                        )
-
-                    if not slew_result.feasible:
-                        continue
-
-                    self._ensure_saa_checker_initialized()
-                    if self._saa_checker is not None:
-                        saa_result = self._saa_checker.check_window_feasibility(
-                            sat.id, window_start, window_end
-                        )
-                        if not saa_result.feasible:
-                            continue
-
-                    actual_start = slew_result.actual_start
-                    actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-                    if self.consider_time_conflicts:
-                        if self._has_time_conflict(sat.id, actual_start, actual_end):
-                            continue
 
                 # Calculate score for this assignment
                 score = self._calculate_assignment_score(
@@ -448,6 +756,10 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                     best_score = score
                     best_assignment = (sat.id, window, imaging_mode, slew_result)
 
+        self._perf_end('phase4_precise_constraint_check', t)
+        self._perf_stats['constraint_check_count_per_task']['count'] += 1
+        self._perf_stats['constraint_check_count_per_task']['total_time'] += constraint_check_count
+        self._perf_end('_find_best_assignment_total', t_total)
         return best_assignment
 
     def _can_satellite_perform_task(self, sat: Any, task: Any) -> bool:
@@ -783,12 +1095,40 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                     task, imaging_mode, data_rate
                 )
 
+        # 获取前一任务目标（用于后续计算）
+        prev_target = self._get_previous_task_target(sat_id)
+
         # 使用 slew_result 中的机动信息（如果提供），否则重新计算
+        reset_time = None
         if slew_result:
             slew_angle = slew_result.slew_angle
             slew_time_seconds = slew_result.slew_time
             actual_start = slew_result.actual_start
             actual_end = actual_start + timedelta(seconds=imaging_duration)
+            reset_time = getattr(slew_result, 'reset_time', None)
+
+            # 如果 reset_time 为 None，说明是快速筛选阶段，需要补充计算复位时间
+            if reset_time is None and sat and self._slew_checker is not None:
+                reset_time, conflict_resolved = self._calculate_reset_time_and_resolve_conflict(
+                    sat_id=sat_id,
+                    prev_target=prev_target,
+                    window_start=window_start,
+                    window_end=window_end,
+                    current_slew_time=slew_time_seconds,
+                    imaging_duration=imaging_duration
+                )
+                if not conflict_resolved:
+                    # 冲突无法消解，标记为不可行（这里可能需要特殊处理）
+                    logger.warning(f"Task {task.id} on {sat_id}: 姿态复位时间冲突无法消解")
+                else:
+                    # 更新实际开始时间（包含复位时间）
+                    total_slew = slew_time_seconds + reset_time
+                    usage = self._sat_resource_usage.get(sat_id, {})
+                    last_task_end = usage.get('last_task_end')
+                    if last_task_end:
+                        earliest_start = last_task_end + timedelta(seconds=total_slew)
+                        actual_start = max(window_start, earliest_start)
+                        actual_end = actual_start + timedelta(seconds=imaging_duration)
         else:
             # 计算动态机动时间和角度（回退逻辑）
             slew_angle = 0.0
@@ -815,6 +1155,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                 actual_start = window_start
             actual_end = actual_start + timedelta(seconds=imaging_duration)
 
+        # 获取任务优先级
+        task_priority = getattr(task, 'priority', None)
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
@@ -828,7 +1171,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             storage_before=storage_before,
             storage_after=storage_before + storage_used,
             power_before=power_before,
-            power_after=power_before - power_consumed
+            power_after=power_before - power_consumed,
+            priority=task_priority,
+            reset_time=reset_time
         )
 
         # 计算并应用姿态角（在姿态角计算启用时始终计算）
@@ -1001,6 +1346,122 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             target_id = task.target_id
             target_obs_count[target_id] = target_obs_count.get(target_id, 0) + 1
         return target_obs_count
+
+    def _calculate_reset_time_and_resolve_conflict(
+        self,
+        sat_id: str,
+        prev_target: Optional[Any],
+        window_start: datetime,
+        window_end: datetime,
+        current_slew_time: float,
+        imaging_duration: float
+    ) -> Tuple[float, bool]:
+        """计算姿态复位时间并检查冲突
+
+        在快速筛选阶段跳过了复位计算，这里补充计算并检查是否有时间冲突。
+
+        Args:
+            sat_id: 卫星ID
+            prev_target: 前一任务目标（None表示第一个任务）
+            window_start: 窗口开始时间
+            window_end: 窗口结束时间
+            current_slew_time: 当前任务机动时间（秒）
+            imaging_duration: 成像持续时间（秒）
+
+        Returns:
+            Tuple[reset_time, conflict_resolved]: 复位时间和是否成功消解冲突
+        """
+        # 如果没有前一任务或没有姿态检查器，不需要复位
+        if prev_target is None or self._slew_checker is None:
+            return 0.0, True
+
+        # 获取卫星资源使用情况
+        usage = self._sat_resource_usage.get(sat_id, {})
+        last_task_end = usage.get('last_task_end')
+
+        if last_task_end is None:
+            return 0.0, True
+
+        # 检查时间间隔，如果超过5分钟，假设已回到对地定向
+        time_diff = (window_start - last_task_end).total_seconds()
+        if time_diff > 300:  # 5分钟
+            return 0.0, True
+
+        try:
+            # 使用精确姿态检查器计算复位时间
+            # 获取前一任务结束时的姿态状态
+            if hasattr(self._slew_checker, '_get_satellite_attitude_state'):
+                from core.dynamics.precise import AttitudeState, Quaternion, AngularVelocity
+
+                current_state = self._slew_checker._get_satellite_attitude_state(sat_id, last_task_end)
+
+                # 对地定向姿态
+                nadir_attitude = AttitudeState(
+                    quaternion=Quaternion(1.0, 0.0, 0.0, 0.0),
+                    angular_velocity=AngularVelocity(0.0, 0.0, 0.0),
+                    timestamp=last_task_end,
+                    momentum=None
+                )
+
+                # 获取精确计算器
+                if hasattr(self._slew_checker, '_precise_calcs') and sat_id in self._slew_checker._precise_calcs:
+                    calc = self._slew_checker._precise_calcs[sat_id]
+
+                    # 计算姿态复位机动
+                    reset_maneuver = calc.calculate_slew_maneuver(
+                        prev_attitude=current_state,
+                        target_attitude=nadir_attitude,
+                        current_time=last_task_end
+                    )
+
+                    if reset_maneuver.feasible:
+                        reset_time = reset_maneuver.total_time
+
+                        # 检查总时间是否有冲突
+                        total_time_needed = reset_time + current_slew_time + imaging_duration
+                        time_available = (window_end - last_task_end).total_seconds()
+
+                        if total_time_needed <= time_available:
+                            return reset_time, True
+                        else:
+                            # 冲突：时间不够
+                            # 尝试消解：如果可以部分使用窗口时间
+                            if current_slew_time + imaging_duration <= (window_end - window_start).total_seconds():
+                                # 至少任务机动可以在窗口内完成，但可能开始时间会延迟
+                                return reset_time, True
+                            else:
+                                return reset_time, False
+                    else:
+                        # 复位不可行，尝试不复位直接机动
+                        return 0.0, True
+
+            # 回退到简化估算
+            # 估算复位角度（从前一目标回到对地定向的角度）
+            if hasattr(prev_target, 'latitude') and hasattr(prev_target, 'longitude'):
+                # 简化估算：假设复位角度约等于前一任务的侧摆角度
+                reset_angle = math.sqrt(
+                    prev_target.latitude**2 + prev_target.longitude**2
+                ) * 0.5
+                reset_angle = min(reset_angle, 45.0)  # 限制最大角度
+
+                # 简化计算复位时间
+                agility = getattr(self.mission.get_satellite_by_id(sat_id).capabilities, 'agility', {}) or {}
+                max_slew_rate = agility.get('max_slew_rate', 3.0)
+                settling_time = agility.get('settling_time', 5.0)
+                reset_time = (reset_angle / max_slew_rate) + settling_time if max_slew_rate > 0 else settling_time
+
+                # 检查冲突
+                total_time_needed = reset_time + current_slew_time + imaging_duration
+                time_available = (window_end - last_task_end).total_seconds()
+
+                return reset_time, total_time_needed <= time_available
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"计算复位时间失败 {sat_id}: {e}")
+
+        # 默认不复位
+        return 0.0, True
 
     def _get_task_id(self, task: Any) -> str:
         """

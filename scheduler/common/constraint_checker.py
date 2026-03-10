@@ -44,6 +44,7 @@ class ConstraintResult:
         slew_angle: Calculated slew angle (if applicable)
         slew_time: Calculated slew time (if applicable)
         actual_start: Actual feasible start time (if different from requested)
+        reset_time: Attitude reset time in seconds (if applicable)
     """
     feasible: bool = True
     violations: List[ConstraintType] = field(default_factory=list)
@@ -52,6 +53,7 @@ class ConstraintResult:
     slew_time: float = 0.0
     actual_start: Optional[datetime] = None
     reason: Optional[str] = None
+    reset_time: Optional[float] = None  # 姿态复位时间（秒）
 
     def add_violation(self, constraint_type: ConstraintType, reason: str = "") -> None:
         """Add a constraint violation."""

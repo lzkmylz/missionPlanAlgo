@@ -6,6 +6,13 @@
 
 from .slew_constraint_checker import SlewConstraintChecker, SlewFeasibilityResult
 from .saa_constraint_checker import SAAConstraintChecker, SAAFeasibilityResult
+from .batch_saa_calculator import (
+    BatchSAACalculator,
+    BatchSAACandidate,
+    BatchSAAResult,
+    BatchSAAData
+)
+from .batch_saa_constraint_checker import BatchSAAConstraintChecker
 from .attitude_constraint_checker import AttitudeConstraintChecker, AttitudeFeasibilityResult
 from .unified_spatiotemporal_checker import (
     UnifiedSpatiotemporalChecker,
@@ -19,13 +26,62 @@ from .unified_maneuver_checker import (
     SatelliteTaskState
 )
 from .precise_slew_constraint_checker import PreciseSlewConstraintChecker
+from .batch_slew_calculator import (
+    BatchSlewCalculator,
+    BatchSlewCandidate,
+    BatchSlewResult,
+    BatchSlewData
+)
+from .batch_slew_constraint_checker import BatchSlewConstraintChecker
+from .batch_time_conflict_calculator import (
+    BatchTimeConflictCalculator,
+    BatchTimeConflictCandidate,
+    BatchTimeConflictResult,
+    BatchTimeConflictData
+)
+from .batch_time_conflict_checker import BatchTimeConflictChecker
+from .batch_resource_calculator import (
+    BatchResourceCalculator,
+    BatchResourceCandidate,
+    BatchResourceResult,
+    BatchResourceData
+)
+from .batch_resource_checker import BatchResourceChecker
+from .unified_batch_constraint_checker import (
+    UnifiedBatchConstraintChecker,
+    UnifiedBatchCandidate,
+    UnifiedBatchResult
+)
 
 __all__ = [
     'SlewConstraintChecker',  # 基类，保留供继承
     'SlewFeasibilityResult',
     'PreciseSlewConstraintChecker',  # 默认使用的精确约束检查器
-    'SAAConstraintChecker',
+    'BatchSlewConstraintChecker',  # 批量优化版本
+    'BatchSlewCalculator',
+    'BatchSlewCandidate',
+    'BatchSlewResult',
+    'BatchSlewData',
+    'SAAConstraintChecker',  # 基类，保留供继承
     'SAAFeasibilityResult',
+    'BatchSAAConstraintChecker',  # 批量优化版本（默认使用）
+    'BatchSAACalculator',
+    'BatchSAACandidate',
+    'BatchSAAResult',
+    'BatchSAAData',
+    'BatchTimeConflictChecker',  # 批量时间冲突检查器
+    'BatchTimeConflictCalculator',
+    'BatchTimeConflictCandidate',
+    'BatchTimeConflictResult',
+    'BatchTimeConflictData',
+    'BatchResourceChecker',  # 批量资源约束检查器
+    'BatchResourceCalculator',
+    'BatchResourceCandidate',
+    'BatchResourceResult',
+    'BatchResourceData',
+    'UnifiedBatchConstraintChecker',  # 统一批量约束检查器
+    'UnifiedBatchCandidate',
+    'UnifiedBatchResult',
     'AttitudeConstraintChecker',
     'AttitudeFeasibilityResult',
     'UnifiedSpatiotemporalChecker',

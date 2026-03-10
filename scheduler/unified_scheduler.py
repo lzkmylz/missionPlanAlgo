@@ -150,14 +150,22 @@ class UnifiedScheduler:
         self._load_precomputed_orbits()
 
     def _initialize_constraint_checkers(self) -> None:
-        """初始化精确姿态机动约束检查器"""
-        from .constraints import PreciseSlewConstraintChecker
+        """初始化精确姿态机动约束检查器
 
-        self.slew_checker = PreciseSlewConstraintChecker(
+        使用 BatchSlewConstraintChecker 以启用向量化批量计算优化。
+        """
+        from .constraints import BatchSlewConstraintChecker
+
+        self.slew_checker = BatchSlewConstraintChecker(
             mission=self.mission,
             use_precise_model=True
         )
-        logger.info("使用精确姿态机动模型")
+
+        # 设置状态跟踪器（如果可用）
+        if hasattr(self, '_state_tracker') and self._state_tracker is not None:
+            self.slew_checker.set_state_tracker(self._state_tracker)
+
+        logger.info("使用批量姿态机动模型（向量化优化）")
 
     def _load_precomputed_orbits(self) -> None:
         """加载预计算的轨道数据"""

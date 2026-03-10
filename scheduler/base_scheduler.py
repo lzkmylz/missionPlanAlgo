@@ -24,7 +24,13 @@ from core.dynamics.attitude_calculator import (
     PropagatorType,
     AttitudeAngles,
 )
-from .constraints import SlewConstraintChecker, SAAConstraintChecker, AttitudeConstraintChecker
+from .constraints import (
+    SlewConstraintChecker,
+    SAAConstraintChecker,
+    AttitudeConstraintChecker,
+    BatchSlewConstraintChecker,
+    BatchSAAConstraintChecker
+)
 from core.dynamics.attitude_mode import AttitudeMode
 
 
@@ -105,6 +111,9 @@ class ScheduledTask:
     pitch_angle: Optional[float] = None   # 俯仰角（度）
     yaw_angle: Optional[float] = None     # 偏航角（度）
     attitude_coordinate_system: str = "LVLH"  # 坐标系：LVLH
+    # 任务优先级和复位时间
+    priority: Optional[int] = None        # 任务优先级
+    reset_time: Optional[float] = None    # 姿态复位时间（秒）
 
     def to_dict(self) -> Dict[str, Any]:
         # Calculate imaging_duration if not explicitly set
@@ -135,6 +144,8 @@ class ScheduledTask:
             'pitch_angle': self.pitch_angle,
             'yaw_angle': self.yaw_angle,
             'attitude_coordinate_system': self.attitude_coordinate_system,
+            'priority': self.priority,
+            'reset_time': self.reset_time,
         }
 
 
@@ -206,6 +217,8 @@ class BaseScheduler(ABC):
 
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
+        import os
+
         self.mission = mission
         self._failure_log = []
         self._iterations = 0
@@ -214,6 +227,11 @@ class BaseScheduler(ABC):
         # 性能优化配置：使用简化机动检查加速贪心类算法
         self._use_simplified_slew = self.config.get('use_simplified_slew', False)
         self._slew_time_estimate = self.config.get('slew_time_estimate', 30.0)  # 默认30秒
+
+        # 禁用实时轨道传播，强制使用预计算数据
+        # 这是确保完整精确计算的一部分
+        os.environ['DISABLE_REALTIME_PROPAGATION'] = '1'
+        logger.info("已禁用实时轨道传播，将使用预计算轨道数据")
 
     def set_slew_checker(self, slew_checker) -> None:
         """设置外部传入的机动约束检查器
@@ -226,7 +244,11 @@ class BaseScheduler(ABC):
         self._slew_checker = slew_checker
 
     def _initialize_slew_checker(self) -> None:
-        """初始化机动约束检查器"""
+        """初始化机动约束检查器
+
+        默认使用 BatchSlewConstraintChecker 以启用向量化批量计算优化。
+        这是所有调度器的默认姿态约束检查方案。
+        """
         if self.mission is None:
             return
 
@@ -238,13 +260,17 @@ class BaseScheduler(ABC):
         if self._use_simplified_slew:
             return
 
-        self._slew_checker = SlewConstraintChecker(
+        # 默认使用批量姿态约束检查器（向量化优化）
+        self._slew_checker = BatchSlewConstraintChecker(
             self.mission,
-            self._attitude_calculator
+            use_precise_model=True
         )
 
-        for sat in self.mission.satellites:
-            self._slew_checker.initialize_satellite(sat)
+        # 设置状态跟踪器（如果可用）
+        if hasattr(self, '_state_tracker') and self._state_tracker is not None:
+            self._slew_checker.set_state_tracker(self._state_tracker)
+
+        logger.info(f"{self.name}: Initialized BatchSlewConstraintChecker for vectorized computation")
 
     def _precompute_satellite_positions(self, time_step_seconds: float = 1.0) -> None:
         """
@@ -347,7 +373,7 @@ class BaseScheduler(ABC):
             print(f"    预计算完成: {total_positions} 个位置 ({elapsed:.2f}s)")
 
     def _initialize_saa_checker(self) -> None:
-        """初始化 SAA 约束检查器"""
+        """初始化 SAA 约束检查器 - 默认使用向量化批量优化"""
         if self.mission is None:
             return
 
@@ -355,7 +381,8 @@ class BaseScheduler(ABC):
         if self._use_simplified_slew:
             return
 
-        self._saa_checker = SAAConstraintChecker(
+        # 默认使用批量SAA约束检查器（向量化优化）
+        self._saa_checker = BatchSAAConstraintChecker(
             self.mission,
             self._attitude_calculator
         )
@@ -413,6 +440,54 @@ class BaseScheduler(ABC):
         except Exception as e:
             logger.debug(f"加载Java预计算轨道数据失败: {e}")
             return False
+
+    def _get_satellite_position(
+        self,
+        satellite,
+        timestamp: datetime
+    ) -> Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[float, float, float]]]:
+        """获取卫星位置和速度
+
+        首先检查预计算位置缓存，然后检查批量传播器缓存。
+
+        Args:
+            satellite: 卫星对象
+            timestamp: 时间戳
+
+        Returns:
+            (position, velocity) 或 (None, None)
+        """
+        # 1. 优先使用预计算位置缓存
+        if self._position_cache is not None:
+            result = self._position_cache.get_position(satellite.id, timestamp)
+            if result is not None:
+                return result
+
+        # 2. 检查批量传播器缓存
+        try:
+            from core.dynamics.orbit_batch_propagator import get_batch_propagator
+            propagator = get_batch_propagator()
+            if propagator is not None:
+                result = propagator.get_state_at_time(satellite.id, timestamp)
+                if result is not None:
+                    return result
+        except Exception:
+            pass
+
+        # 3. 如果缓存都不可用，使用卫星轨道传播
+        try:
+            if hasattr(satellite, 'orbit') and satellite.orbit is not None:
+                from core.orbit.propagator import Propagator
+                propagator = Propagator()
+                state = propagator.propagate(satellite.orbit, timestamp)
+                if state is not None:
+                    position = (state.x, state.y, state.z)
+                    velocity = (state.vx, state.vy, state.vz)
+                    return position, velocity
+        except Exception:
+            pass
+
+        return None, None
 
     @abstractmethod
     def schedule(self) -> ScheduleResult:
@@ -644,9 +719,12 @@ class BaseScheduler(ABC):
                     propagator = get_batch_propagator()
                     if propagator is not None:
                         result = propagator.get_state_at_time(satellite.id, imaging_time)
+                        # 如果批量传播器返回None，不要尝试实时传播，直接返回None
+                        # 禁用实时轨道传播以确保使用完整精确计算
                 except Exception:
                     pass
 
+            # 如果预计算数据不可用，返回None（禁用实时传播）
             if result is None:
                 return None
 
@@ -686,6 +764,72 @@ class BaseScheduler(ABC):
                 f"Failed to calculate attitude from cache: {type(e).__name__}: {e}"
             )
             return None
+
+    def _batch_precalculate_attitudes(
+        self,
+        candidates: List[Tuple[Any, Any, datetime]]
+    ) -> Dict[Tuple[str, datetime], AttitudeAngles]:
+        """批量预计算候选姿态角
+
+        一次性计算多个候选（卫星，目标，时间）的姿态角，用于快速预筛选。
+        使用NumPy向量化加速计算。
+
+        Args:
+            candidates: 候选列表，每个元素为 (satellite, target, imaging_time)
+
+        Returns:
+            字典，键为 (satellite_id, imaging_time)，值为 AttitudeAngles
+        """
+        if not self._enable_attitude_calculation or not candidates:
+            return {}
+
+        import numpy as np
+        from typing import Dict, Tuple
+
+        results: Dict[Tuple[str, datetime], AttitudeAngles] = {}
+
+        # 按卫星分组，批量获取位置
+        sat_groups: Dict[str, List[Tuple[Any, Any, datetime, int]]] = {}
+        for idx, (sat, target, imaging_time) in enumerate(candidates):
+            sat_id = sat.id if hasattr(sat, 'id') else str(sat)
+            if sat_id not in sat_groups:
+                sat_groups[sat_id] = []
+            sat_groups[sat_id].append((sat, target, imaging_time, idx))
+
+        # 对每个卫星批量计算
+        for sat_id, sat_candidates in sat_groups.items():
+            sat = sat_candidates[0][0]  # 获取卫星对象
+
+            # 批量获取位置
+            times = [c[2] for c in sat_candidates]
+            positions = []
+            velocities = []
+
+            for imaging_time in times:
+                if self._position_cache is not None:
+                    result = self._position_cache.get_position(sat_id, imaging_time)
+                    if result is not None:
+                        positions.append(result[0])
+                        velocities.append(result[1])
+                    else:
+                        positions.append(None)
+                        velocities.append(None)
+                else:
+                    positions.append(None)
+                    velocities.append(None)
+
+            # 使用AttitudeCalculator批量计算姿态角
+            if self._attitude_calculator is not None:
+                for i, (sat, target, imaging_time, idx) in enumerate(sat_candidates):
+                    if positions[i] is not None:
+                        try:
+                            attitude = self._calculate_attitude_from_cache(sat, target, imaging_time)
+                            if attitude is not None:
+                                results[(sat_id, imaging_time)] = attitude
+                        except Exception:
+                            pass
+
+        return results
 
     def _apply_attitude_to_scheduled_task(
         self,

@@ -55,7 +55,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         self,
         mission: Mission,
         use_precise_model: bool = True,
-        precise_calculators: Optional[Dict[str, PreciseSlewCalculator]] = None
+        precise_calculators: Optional[Dict[str, PreciseSlewCalculator]] = None,
+        skip_reset_calculation: bool = False
     ):
         """初始化精确约束检查器
 
@@ -63,12 +64,14 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             mission: 任务对象
             use_precise_model: 是否使用精确模型
             precise_calculators: 预计算的精确计算器字典 {sat_id: calculator}
+            skip_reset_calculation: 是否跳过姿态复位计算（用于快速筛选阶段）
         """
         # 调用父类初始化
         super().__init__(mission)
 
         self.use_precise = use_precise_model
         self._precise_calcs: Dict[str, PreciseSlewCalculator] = precise_calculators or {}
+        self._skip_reset_calculation = skip_reset_calculation
 
         # 状态跟踪引用 (由外部设置)
         self._state_tracker = None
@@ -274,6 +277,47 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         total_slew_angle = 0.0
 
         try:
+            # 检查是否需要跳过姿态复位计算（用于快速筛选阶段）
+            if self._skip_reset_calculation:
+                # 只计算任务机动（假设从对地定向开始）
+                task_maneuver = calc.calculate_slew_maneuver(
+                    prev_attitude=nadir_attitude,
+                    target_attitude=target_attitude,
+                    current_time=prev_end_time
+                )
+
+                if task_maneuver.feasible:
+                    total_task_time = task_maneuver.total_time
+                    total_slew_angle = task_maneuver.trajectory.rotation_angle
+                    actual_start = prev_end_time + timedelta(seconds=total_task_time)
+
+                    # 更新卫星姿态状态跟踪（重要：快速筛选模式也需要更新状态）
+                    self._update_satellite_state(
+                        satellite_id=satellite.id,
+                        time=actual_start,
+                        attitude=target_attitude,
+                        angular_momentum=task_maneuver.final_momentum if task_maneuver else None
+                    )
+
+                    # 标记需要后续计算复位时间
+                    return SlewFeasibilityResult(
+                        feasible=True,
+                        slew_angle=total_slew_angle,
+                        slew_time=total_task_time,
+                        actual_start=actual_start,
+                        reason=None,
+                        reset_time=None  # 标记为None，需要在_create_scheduled_task中计算
+                    )
+                else:
+                    return SlewFeasibilityResult(
+                        feasible=False,
+                        slew_angle=task_maneuver.trajectory.rotation_angle if task_maneuver.trajectory else 0.0,
+                        slew_time=task_maneuver.total_time,
+                        actual_start=window_start,
+                        reason="Task slew maneuver infeasible",
+                        reset_time=None
+                    )
+
             # 3a. 执行姿态复位机动分析（从前一姿态到对地定向）
             reset_maneuver = calc.calculate_slew_maneuver(
                 prev_attitude=current_state,
@@ -379,7 +423,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             slew_angle=total_slew_angle,  # 这是从对地定向到目标的角度
             slew_time=total_slew_time,    # 总时间包括复位 + 任务机动
             actual_start=actual_start,
-            reason=None
+            reason=None,
+            reset_time=total_reset_time   # 姿态复位时间（秒），0表示不需要复位或长时间间隔
         )
 
         # 附加精确模型信息
@@ -507,7 +552,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             slew_angle=slew_angle,
             slew_time=maneuver.total_time,
             actual_start=actual_start,
-            reason=None
+            reason=None,
+            reset_time=None  # 标记为None，需要在_create_scheduled_task中确认是否真正需要复位
         )
 
         # 附加精确模型信息
@@ -746,6 +792,18 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             ) if angular_momentum is not None else None
         )
 
+    def set_skip_reset_calculation(self, skip: bool) -> None:
+        """设置是否跳过姿态复位计算
+
+        用于快速筛选阶段，只计算任务机动，不复位。
+        在 _create_scheduled_task 中再补充计算复位时间。
+
+        Args:
+            skip: True 跳过复位计算，False 正常计算
+        """
+        self._skip_reset_calculation = skip
+        logger.debug(f"PreciseSlewConstraintChecker skip_reset_calculation set to {skip}")
+
     def _check_first_task_feasibility(
         self,
         satellite: Satellite,
@@ -861,7 +919,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             slew_angle=slew_angle,
             slew_time=maneuver.total_time,
             actual_start=actual_start,
-            reason=None
+            reason=None,
+            reset_time=0.0  # 第一个任务从对地定向开始，不需要姿态复位
         )
         result.energy_consumption = maneuver.energy_consumption
         result.momentum_margin = maneuver.momentum_margin
@@ -992,6 +1051,7 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         result.slew_angle = slew_result.slew_angle
         result.slew_time = slew_result.slew_time
         result.actual_start = slew_result.actual_start
+        result.reset_time = slew_result.reset_time
 
         return result
 
