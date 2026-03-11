@@ -314,7 +314,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                                 'start': start_time,
                                 'end': end_time
                             })
-                        except:
+                        except (ValueError, TypeError):
                             pass
 
         except Exception as e:
@@ -489,7 +489,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                         power_profile = imaging_mode.get_power_profile(imaging_duration)
                         power_needed = getattr(power_profile, 'total_energy', 0.0)
                         storage_produced = getattr(imaging_mode, 'data_rate', 0.0) * imaging_duration
-                    except:
+                    except (AttributeError, TypeError):
                         pass
 
                 sat_position, sat_velocity = self._get_satellite_position(sat, actual_start)

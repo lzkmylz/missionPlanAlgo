@@ -39,7 +39,6 @@ from .batch_slew_calculator import (
     BatchSlewResult,
     BatchSlewData
 )
-from .batch_slew_constraint_checker import BatchSlewConstraintChecker
 from .batch_time_conflict_calculator import (
     BatchTimeConflictCalculator,
     BatchTimeConflictCandidate,
