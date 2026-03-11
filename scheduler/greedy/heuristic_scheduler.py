@@ -22,9 +22,7 @@ import logging
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from ..frequency_utils import ObservationTask
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
-from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import (
-    SlewConstraintChecker,
     SlewFeasibilityResult,
     BatchSlewConstraintChecker,
     UnifiedBatchConstraintChecker,
@@ -94,8 +92,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         )
         self._power_profile = PowerProfile(self.config.get('power_coefficients'))
 
-        # Slew calculators per satellite
-        self._slew_calculators: Dict[str, SlewCalculator] = {}
+        # Track last scheduled target per satellite
         self._last_task_target: Dict[str, Any] = {}
         self._sat_resource_usage: Dict[str, Dict[str, Any]] = {}
 
@@ -147,15 +144,6 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             }
             for sat in self.mission.satellites
         }
-
-        # 初始化 slew calculators
-        for sat in self.mission.satellites:
-            agility = sat.capabilities.agility or {}
-            self._slew_calculators[sat.id] = SlewCalculator(
-                max_slew_rate=agility.get('max_slew_rate', 3.0),
-                max_slew_angle=sat.capabilities.max_off_nadir,
-                settling_time=agility.get('settling_time', 5.0)
-            )
 
         # 主调度循环
         total_tasks = len(pending_tasks)

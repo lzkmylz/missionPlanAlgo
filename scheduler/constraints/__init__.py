@@ -4,7 +4,12 @@
 提供统一的约束检查接口，包括姿态机动约束和SAA约束。
 """
 
-from .slew_constraint_checker import SlewConstraintChecker, SlewFeasibilityResult
+# 统一使用高性能批量版本，保留旧类名作为别名
+from .batch_slew_constraint_checker import (
+    BatchSlewConstraintChecker,
+    BatchSlewConstraintChecker as SlewConstraintChecker,  # 兼容性别名
+    SlewFeasibilityResult,
+)
 from .saa_constraint_checker import SAAConstraintChecker, SAAFeasibilityResult
 from .batch_saa_calculator import (
     BatchSAACalculator,
@@ -25,7 +30,9 @@ from .unified_maneuver_checker import (
     ScheduledTaskInfo,
     SatelliteTaskState
 )
-from .precise_slew_constraint_checker import PreciseSlewConstraintChecker
+from .batch_slew_constraint_checker import (
+    BatchSlewConstraintChecker as PreciseSlewConstraintChecker,  # 兼容性别名
+)
 from .batch_slew_calculator import (
     BatchSlewCalculator,
     BatchSlewCandidate,
