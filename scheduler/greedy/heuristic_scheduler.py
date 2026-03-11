@@ -644,8 +644,21 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             return ImagingMode.PUSH_BROOM
         return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
 
-    def _check_resource_constraints(self, sat: Any, task: Any, imaging_mode: Any) -> bool:
-        """检查资源约束"""
+    def _check_resource_constraints(self, sat: Any, task: Any, imaging_mode: Any = None) -> bool:
+        """检查资源约束
+
+        Args:
+            sat: 卫星对象
+            task: 任务对象
+            imaging_mode: 成像模式（可选，默认自动选择）
+
+        Returns:
+            bool: 资源是否充足
+        """
+        # 如果没有提供成像模式，自动选择
+        if imaging_mode is None:
+            imaging_mode = self._select_imaging_mode(sat, task)
+
         usage = self._sat_resource_usage.get(sat.id, {})
 
         if self.consider_power:
@@ -759,6 +772,14 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             sat = self.mission.get_satellite_by_id(sat_id)
             if sat:
                 imaging_mode = self._select_imaging_mode(sat, task)
+
+                # 检查电量约束
+                if self.consider_power:
+                    power_ratio = usage.get('power', sat.capabilities.power_capacity) / sat.capabilities.power_capacity
+                    if power_ratio < 0.1:  # 电量低于10%
+                        return TaskFailureReason.POWER_CONSTRAINT
+
+                # 检查存储约束
                 data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
                 storage_needed = self._imaging_calculator.get_storage_consumption(task, imaging_mode, data_rate)
                 if usage['storage'] + storage_needed > sat.capabilities.storage_capacity:

@@ -109,7 +109,7 @@ class EDDScheduler(HeuristicScheduler):
         选择最佳任务分配 - EDD策略
 
         EDD策略: 选择满足截止时间的最早分配
-        如果任务有截止时间，优先选择能在截止时间前完成的分配
+        如果任务有截止时间且不允许延迟，过滤掉超时分配
 
         Args:
             candidates: 候选列表 [(candidate_data, slew_result), ...]
@@ -119,25 +119,31 @@ class EDDScheduler(HeuristicScheduler):
             最佳分配或None
         """
         best = None
-        best_score = None
+        best_start = None
 
         for (candidate, slew_result), unified_result in zip(candidates, results):
             if not unified_result.feasible:
                 continue
 
-            sat, window, imaging_mode, _, _, _ = candidate
+            sat, window, imaging_mode, imaging_duration, window_start, window_end = candidate
             actual_start = slew_result.actual_start
 
-            # 获取任务的截止时间（如果存在）
-            task = getattr(slew_result, 'target', None) or candidate[3] if len(candidate) > 3 else None
+            # 获取任务对象（在候选的第三个位置可能是task，或者从slew_result获取）
+            task = None
+            if len(candidate) > 6:
+                task = candidate[6]  # 如果候选包含task
+            elif hasattr(slew_result, 'target'):
+                task = slew_result.target
 
-            # 计算得分（越小越好）
-            # 主要：开始时间早
-            # 次要：满足截止时间
-            score = actual_start.timestamp()
+            # 检查截止时间约束
+            if task and not self.allow_tardiness:
+                task_deadline = getattr(task, 'time_window_end', None)
+                if task_deadline and actual_start > task_deadline:
+                    continue  # 跳过超时的分配
 
-            if best_score is None or score < best_score:
-                best_score = score
+            # EDD策略: 优先选择最早的分配
+            if best_start is None or actual_start < best_start:
+                best_start = actual_start
                 best = (sat.id, window, imaging_mode, slew_result)
 
         return best

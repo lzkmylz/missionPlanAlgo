@@ -100,7 +100,7 @@ class SPTScheduler(HeuristicScheduler):
         估计任务处理时间
 
         使用成像时间计算器估算任务所需时间。
-        对于聚类任务，估算总处理时间。
+        根据目标类型（点目标 vs 区域目标）估算不同的处理时间。
 
         Args:
             task: 任务对象
@@ -108,6 +108,18 @@ class SPTScheduler(HeuristicScheduler):
         Returns:
             float: 预估处理时间（秒）
         """
+        from core.models import TargetType
+
+        # 获取目标类型
+        target_type = getattr(task, 'target_type', None)
+
+        # 根据目标类型返回不同的估算时间
+        # 点目标处理时间短，区域目标处理时间长
+        if target_type == TargetType.POINT:
+            return 5.0  # 点目标: 5秒
+        elif target_type == TargetType.AREA:
+            return 30.0  # 区域目标: 30秒
+
         # 获取任务的成像模式
         imaging_mode = getattr(task, 'preferred_mode', None)
 
