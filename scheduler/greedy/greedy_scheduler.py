@@ -32,7 +32,16 @@ from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstra
 from scheduler.constraints.unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker, UnifiedBatchCandidate
 )
+from core.dynamics.attitude_precache import get_attitude_precache_manager
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
 from core.models.target import Target
+
+# 模块级别logger定义
+logger = logging.getLogger(__name__)
 
 
 class GreedyScheduler(BaseScheduler, ClusteringMixin):
@@ -284,6 +293,87 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                 settling_time=agility.get('settling_time', 5.0)
             )
 
+        # ========== 空间换时间：姿态预计算缓存 ==========
+        # 预加载轨道数据并预计算所有可见窗口的姿态角
+        # 内存占用约30MB，可将Phase2/3从每任务10-20ms降至0.001ms
+        if not self._use_simplified_slew and self.config.get('enable_attitude_precache', True):
+            logger = logging.getLogger(__name__)
+            logger.info("初始化姿态预计算缓存（空间换时间优化）...")
+            t_precache = self._perf_start()
+
+            try:
+                precache_manager = get_attitude_precache_manager()
+
+                # 加载轨道数据
+                orbit_file = self.config.get('orbit_json_path',
+                                             'java/output/frequency_scenario/orbits.json.gz')
+                loaded = precache_manager.load_orbit_data(orbit_file, self.mission.start_time)
+
+                if loaded:
+                    # 从缓存文件直接加载可见性窗口
+                    import json
+                    cache_file = self.config.get('cache_path') or 'java/output/frequency_scenario/visibility_windows_with_gs.json'
+                    all_windows = []
+
+                    try:
+                        with open(cache_file, 'r') as f:
+                            cache_data = json.load(f)
+
+                        # 解析窗口数据 (Java格式: satelliteId, targetId, startTime, endTime)
+                        windows_dict = cache_data.get('windows', {})
+                        target_windows = windows_dict.get('target_windows', [])
+
+                        # 构建目标ID到对象的映射
+                        target_map = {getattr(t, 'id', None): t for t in self.mission.targets}
+
+                        for window in target_windows:
+                            if isinstance(window, dict):
+                                sat_id = window.get('satelliteId')
+                                target_id = window.get('targetId')
+
+                                # 跳过地面站窗口
+                                if target_id and str(target_id).startswith('GS:'):
+                                    continue
+
+                                # 查找目标对象
+                                target_obj = target_map.get(target_id)
+
+                                if target_obj and sat_id:
+                                    # 解析ISO时间格式
+                                    start_str = window.get('startTime', '').replace('Z', '+00:00')
+                                    end_str = window.get('endTime', '').replace('Z', '+00:00')
+                                    try:
+                                        from datetime import datetime
+                                        start_time = datetime.fromisoformat(start_str)
+                                        end_time = datetime.fromisoformat(end_str)
+
+                                        all_windows.append({
+                                            'satellite_id': sat_id,
+                                            'target_id': target_id,
+                                            'target': target_obj,
+                                            'start': start_time,
+                                            'end': end_time
+                                        })
+                                    except:
+                                        pass
+                    except Exception as e:
+                        logger.warning(f"从缓存文件加载窗口失败: {e}")
+
+                    # 预计算姿态
+                    n_computed = precache_manager.precompute_attitudes_for_windows(all_windows)
+                    logger.info(f"预计算了 {n_computed} 个姿态角，缓存大小: {precache_manager.get_stats()['memory_mb']:.1f}MB")
+
+                    # 存储引用供后续使用
+                    self._attitude_precache_manager = precache_manager
+                else:
+                    logger.warning("姿态预计算缓存初始化失败，将使用实时计算")
+                    self._attitude_precache_manager = None
+
+                self._perf_end('attitude_precache_init', t_precache)
+            except Exception as e:
+                logger.warning(f"姿态预计算缓存初始化异常: {e}，将使用实时计算")
+                self._attitude_precache_manager = None
+
         # Reset clustering state if needed
         if self.enable_clustering:
             t = self._perf_start()
@@ -309,7 +399,15 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
 
         # Main scheduling loop
         loop_t = self._perf_start()
-        for task in pending_tasks:
+        total_tasks = len(pending_tasks)
+        logger.info(f"开始调度主循环，共 {total_tasks} 个任务")
+
+        for task_idx, task in enumerate(pending_tasks):
+            # 每100个任务报告进度
+            if (task_idx + 1) % 100 == 0:
+                elapsed = time.perf_counter() - self._start_time if hasattr(self, '_start_time') and self._start_time else 0
+                logger.info(f"调度进度: {task_idx + 1}/{total_tasks} 任务, 已调度 {len(scheduled_tasks)}, 耗时 {elapsed:.1f}s")
+
             task_t = self._perf_start()
             best_assignment = self._find_best_assignment(task)
             self._perf_end('find_best_assignment_per_task', task_t)
@@ -518,42 +616,89 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         if not candidates:
             return None
 
-        # ========== 阶段2：批量姿态预计算 ==========
+        # ========== 阶段2&3：O(1)姿态预计算与过滤（空间换时间优化）==========
         t = self._perf_start()
-        attitude_cache = {}
-        if not self._use_simplified_slew and self._position_cache is not None:
-            # 构建姿态计算候选列表
-            attitude_candidates = []
+
+        # 优先使用预计算缓存，如果没有则实时计算
+        if hasattr(self, '_attitude_precache_manager') and self._attitude_precache_manager is not None:
+            # 使用预计算缓存 - O(1)查询
+            filtered_candidates = []
             for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
-                # 使用窗口中点作为成像时间进行预筛选
+                # 直接从缓存获取预计算的姿态角
+                attitude = self._attitude_precache_manager.get_attitude(sat.id, window_start)
+
+                if attitude is not None:
+                    roll, pitch = attitude
+                    max_off_nadir = sat.capabilities.max_off_nadir
+                    total_angle = (roll ** 2 + pitch ** 2) ** 0.5
+                    if total_angle > max_off_nadir * 1.2:
+                        continue
+
+                filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+
+            # 记录缓存命中率统计（每100个任务记录一次）
+            if hasattr(self, '_task_count'):
+                self._task_count += 1
+                if self._task_count % 100 == 0:
+                    stats = self._attitude_precache_manager.get_stats()
+                    logger.debug(f"姿态缓存命中率: {stats['hit_rate']*100:.1f}% ({stats['cache_hits']}/{stats['cache_hits']+stats['cache_misses']})")
+            else:
+                self._task_count = 1
+        else:
+            # 回退到实时批量计算（原逻辑）
+            attitude_cache = {}
+            if not self._use_simplified_slew and self._attitude_calculator is not None:
+                attitude_candidates = []
+                for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
+                    imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
+                    attitude_candidates.append((sat, task, imaging_time))
+
+                if attitude_candidates:
+                    attitude_cache = self._batch_precalculate_attitudes(attitude_candidates)
+
+            # 姿态预筛选
+            filtered_candidates = []
+            for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
                 imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
-                attitude_candidates.append((sat, task, imaging_time))
+                attitude = attitude_cache.get((sat.id, imaging_time))
 
-            # 批量预计算姿态
-            if attitude_candidates:
-                attitude_cache = self._batch_precalculate_attitudes(attitude_candidates)
+                if attitude is not None:
+                    max_off_nadir = sat.capabilities.max_off_nadir
+                    total_angle = (attitude.roll ** 2 + attitude.pitch ** 2) ** 0.5
+                    if total_angle > max_off_nadir * 1.2:
+                        continue
 
-        # ========== 阶段3：姿态预筛选 ==========
-        filtered_candidates = []
-        for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
-            # 使用窗口中点检查姿态角
-            imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
-            attitude = attitude_cache.get((sat.id, imaging_time))
+                filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+            # 回退到Python循环（没有Numba或没有姿态缓存）
+            filtered_candidates = []
+            for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
+                imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
+                attitude = attitude_cache.get((sat.id, imaging_time))
 
-            if attitude is not None:
-                # 快速侧摆角检查
-                max_off_nadir = sat.capabilities.max_off_nadir
-                total_angle = (attitude.roll ** 2 + attitude.pitch ** 2) ** 0.5
-                if total_angle > max_off_nadir * 1.2:  # 允许20%容差，因为实际成像时间可能不同
-                    continue
+                if attitude is not None:
+                    max_off_nadir = sat.capabilities.max_off_nadir
+                    total_angle = (attitude.roll ** 2 + attitude.pitch ** 2) ** 0.5
+                    if total_angle > max_off_nadir * 1.2:
+                        continue
 
-            filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+                filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
 
         if not filtered_candidates:
             filtered_candidates = candidates  # 如果全部过滤掉了，回退到原始候选
 
         self._perf_end('phase2_and_phase3_precompute_and_filter', t)
         logger.debug(f"  Phase 3: {len(filtered_candidates)} candidates after attitude filtering")
+
+        # ========== 优化：限制Phase4候选数量 ==========
+        # 限制进入精确约束检查的候选数量，减少批量检查开销
+        MAX_PHASE4_CANDIDATES = 50
+        if len(filtered_candidates) > MAX_PHASE4_CANDIDATES:
+            # 按窗口开始时间排序，选择最早开始的候选（通常更有可能被调度）
+            filtered_candidates = sorted(
+                filtered_candidates,
+                key=lambda x: x[4]  # window_start
+            )[:MAX_PHASE4_CANDIDATES]
+            logger.debug(f"  Phase 3.5: Limited to {MAX_PHASE4_CANDIDATES} candidates for Phase4")
 
         # ========== 阶段4：精确约束检查（批量优化版本）==========
         t = self._perf_start()
@@ -706,15 +851,16 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                     consider_storage=self.consider_storage
                 )
 
-            # 执行批量快速阶段检查（姿态已检查，只检查SAA、时间）
+            # 执行批量快速阶段检查（姿态已检查，检查SAA、时间、资源）
             unified_results = self._unified_checker.check_fast_phase_batch(
                 candidates=unified_candidates,
                 existing_tasks=existing_tasks,
+                satellite_states=satellite_states,
                 early_termination=True
             )
             self._perf_end('unified_batch_constraint_check', t_unified)
 
-            # 筛选通过所有约束的候选
+            # 筛选通过所有约束的候选（姿态、SAA、时间、资源已全部批量检查完成）
             for i, (unified_result, (candidate_data, slew_result)) in enumerate(zip(unified_results, candidate_data_map)):
                 if not unified_result.feasible:
                     continue
@@ -722,29 +868,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                 sat, window, imaging_mode, imaging_duration, window_start, window_end = candidate_data
                 actual_start = slew_result.actual_start
 
-                # 资源约束检查（如果快速阶段未检查）
-                if unified_result.resource_result is None and self._constraint_checker is not None:
-                    usage = self._sat_resource_usage.get(sat.id, {})
-                    context = ConstraintContext(
-                        satellite=sat,
-                        target=task,
-                        window_start=window_start,
-                        window_end=window_end,
-                        prev_target=self._get_previous_task_target(sat.id),
-                        prev_end_time=usage.get('last_task_end', self.mission.start_time),
-                        imaging_duration=imaging_duration,
-                        current_power=usage.get('power', sat.capabilities.power_capacity),
-                        current_storage=usage.get('storage', 0.0),
-                        scheduled_tasks=usage.get('scheduled_tasks', []),
-                        imaging_mode=imaging_mode
-                    )
-
-                    t_check = self._perf_start()
-                    resource_result = self._constraint_checker.check_task(context)
-                    self._perf_end('constraint_checker.check_resources', t_check)
-
-                    if not resource_result.feasible:
-                        continue
+                # 资源约束已在批量检查中完成，无需逐个检查
+                # unified_result.resource_result 包含批量资源检查结果
 
                 # Calculate score for this assignment
                 score = self._calculate_assignment_score(

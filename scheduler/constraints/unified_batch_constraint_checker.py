@@ -248,16 +248,18 @@ class UnifiedBatchConstraintChecker:
         self,
         candidates: List[UnifiedBatchCandidate],
         existing_tasks: List[Dict[str, Any]],
+        satellite_states: Optional[Dict[str, Dict[str, float]]] = None,
         early_termination: bool = True
     ) -> List[UnifiedBatchResult]:
         """快速阶段批量检查
 
-        只检查SAA和时间冲突约束（姿态约束已在外部检查完成）。
+        检查SAA、时间冲突和资源约束（姿态约束已在外部检查完成）。
         用于快速筛选明显不可行的候选。
 
         Args:
             candidates: 统一候选列表
             existing_tasks: 已调度任务列表
+            satellite_states: 卫星资源状态（如果提供则检查资源约束）
             early_termination: 是否早期终止
 
         Returns:
@@ -271,7 +273,7 @@ class UnifiedBatchConstraintChecker:
         results = [UnifiedBatchResult(feasible=True) for _ in candidates]
 
         # 注意：姿态检查已在GreedyScheduler中完成，这里跳过
-        # 只检查SAA和时间冲突约束
+        # 检查SAA、时间冲突约束
         active_indices = list(range(len(candidates)))
 
         # SAA检查
@@ -310,6 +312,27 @@ class UnifiedBatchConstraintChecker:
                 if not time_result.feasible:
                     results[idx].feasible = False
                     results[idx].reason = f"Time: {time_result.reason}"
+
+        # 资源检查（如果提供了卫星状态）- 批量优化
+        if satellite_states is not None:
+            active_indices = [i for i in active_indices if results[i].feasible]
+            logger.debug(f"[UnifiedBatch] {len(active_indices)} candidates for resource check")
+            if active_indices:
+                resource_candidates = self._convert_to_resource_candidates(
+                    [candidates[i] for i in active_indices]
+                )
+                logger.debug(f"[UnifiedBatch] Calling resource batch check with {len(resource_candidates)} candidates...")
+                resource_results = self._resource_checker.check_resources_batch(
+                    resource_candidates, satellite_states
+                )
+                logger.debug(f"[UnifiedBatch] Resource check complete, got {len(resource_results)} results")
+
+                for idx, resource_result in zip(active_indices, resource_results):
+                    results[idx].resource_result = resource_result
+                    results[idx].resource_feasible = resource_result.feasible
+                    if not resource_result.feasible:
+                        results[idx].feasible = False
+                        results[idx].reason = f"Resource: {resource_result.reason}"
 
         feasible_count = sum(1 for r in results if r.feasible)
         logger.debug(f"[UnifiedBatch] Fast phase complete: {feasible_count}/{len(results)} candidates feasible")

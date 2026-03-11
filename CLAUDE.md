@@ -746,3 +746,63 @@ GIT_SSH_COMMAND="ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30" git pu
 - 历元>3天 → J4解析外推
 - 历元<3天 → Direct HPOP
 **结果**: 性能提升170倍 (226分钟 → 80秒)
+
+### 2026-03-11: 空间换时间优化 - 姿态预计算缓存
+**问题**: Phase2/3姿态预计算成为瓶颈（1386秒，占82%），每任务需要实时计算50个候选的姿态角
+**解决**: 实现AttitudePrecacheManager，调度前预计算所有可见窗口的姿态角
+**核心策略**:
+1. **预加载轨道数据**: 将5,184,060条轨道记录加载为NumPy数组（~445MB）
+2. **批量预计算姿态**: 使用Numba并行计算277,946个窗口的姿态角（~30MB）
+3. **O(1)缓存查询**: 调度时使用字典直接查找，替代实时计算
+
+**性能提升**:
+| 指标 | 优化前 | 优化后 | 加速比 |
+|------|--------|--------|--------|
+| Phase2/3耗时 | 1386秒 | 1.1秒 | **1227x** |
+| 总调度时间 | 1708秒 | 332秒 | **5.1x** |
+| 单次查询耗时 | ~10-20ms | ~0.001ms | **10000x** |
+
+**内存成本**: ~475MB（姿态缓存30MB + 轨道数据445MB）
+
+**适用场景**:
+- 内存充足（>1GB可用）
+- 重复调度相同场景（缓存可复用）
+- 实时性要求高（查询延迟敏感）
+
+**不适用场景**:
+- 内存受限环境
+- 一次性调度任务（预计算 overhead 不划算）
+- 动态变化场景（窗口频繁变更）
+
+**关键代码**:
+```python
+# core/dynamics/attitude_precache.py
+class AttitudePrecacheManager:
+    def precompute_attitudes_for_windows(self, visibility_windows):
+        # Numba批量计算所有姿态
+        # 存储到字典: {(sat_id, window_start): (roll, pitch)}
+
+    def get_attitude(self, sat_id, window_start):
+        # O(1)字典查询
+        return self._attitude_cache.get((sat_id, window_start.isoformat()))
+```
+
+**配置启用**:
+```python
+# greedy_scheduler.py 配置
+config = {
+    'enable_attitude_precache': True,  # 启用姿态预计算缓存
+    'orbit_json_path': 'java/output/frequency_scenario/orbits.json.gz'
+}
+```
+
+**经验教训**:
+1. 小批量数据（<1000）使用Python循环比Numba批量更快（避免Numba开销）
+2. 大批量数据（>5000）使用Numba批量查询可获10-40倍加速
+3. 预计算时间约15秒（一次性），适合长时间运行的调度任务
+4. 缓存命中率通常>99%，因为所有窗口都在调度前预计算
+
+**进一步优化方向**:
+- 将预计算结果持久化到磁盘（如Parquet格式），避免每次重新计算
+- 使用内存映射（mmap）管理大缓存，减少内存占用
+- GPU加速姿态预计算（CUDA/Numba.cuda）

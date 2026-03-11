@@ -72,13 +72,14 @@ class AttitudeAngles:
     def __post_init__(self):
         """验证姿态角范围"""
         # 滚转角通常限制在 ±45° 或 ±30°，但特殊情况下可能更大
-        # 只在角度超过170°时警告（可能指向错误方向）
+        # 只在角度超过170°时记录调试信息（可能指向错误方向）
+        # 注意：批量计算时会产生大量日志，使用debug级别避免性能影响
         if abs(self.roll) > 170:
-            logger.warning(f"Roll angle > 170° indicates possible pointing error: {self.roll}°")
+            logger.debug(f"Roll angle > 170° indicates possible pointing error: {self.roll}°")
 
         # 俯仰角通常较小，但在大斜视时可能较大
         if abs(self.pitch) > 170:
-            logger.warning(f"Pitch angle > 170° indicates possible pointing error: {self.pitch}°")
+            logger.debug(f"Pitch angle > 170° indicates possible pointing error: {self.pitch}°")
 
 
 class AttitudeCalculator:
