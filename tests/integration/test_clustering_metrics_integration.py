@@ -1,5 +1,5 @@
 """
-Integration tests for ClusteringMetrics with ClusteringGreedyScheduler
+Integration tests for ClusteringMetrics with GreedyScheduler (clustering enabled)
 
 Tests the integration between the metrics module and the actual scheduler.
 """
@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from unittest.mock import Mock, patch
 
-from scheduler.clustering_greedy_scheduler import ClusteringGreedyScheduler
+from scheduler.greedy.greedy_scheduler import GreedyScheduler
 from scheduler.metrics.clustering_metrics import (
     ClusteringEfficiencyMetrics,
     ClusteringCoverageMetrics,
@@ -80,11 +80,11 @@ class TestClusteringMetricsIntegration:
     def test_metrics_collector_with_scheduler(self, mock_mission):
         """Test metrics collector works with a scheduler mock"""
         # Create scheduler mock with cluster schedules
-        scheduler = Mock(spec=ClusteringGreedyScheduler)
+        scheduler = Mock(spec=GreedyScheduler)
         scheduler.mission = mock_mission
 
         base_time = datetime(2024, 1, 1, 10, 0, 0)
-        from scheduler.clustering_greedy_scheduler import ClusterSchedule
+        from scheduler.common.clustering_mixin import ClusterSchedule
         scheduler.cluster_schedules = [
             ClusterSchedule(
                 cluster_id="cluster_1",
@@ -127,11 +127,11 @@ class TestClusteringMetricsIntegration:
 
     def test_visualizer_with_scheduler(self, mock_mission):
         """Test visualizer works with a scheduler mock"""
-        scheduler = Mock(spec=ClusteringGreedyScheduler)
+        scheduler = Mock(spec=GreedyScheduler)
         scheduler.mission = mock_mission
 
         base_time = datetime(2024, 1, 1, 10, 0, 0)
-        from scheduler.clustering_greedy_scheduler import ClusterSchedule
+        from scheduler.common.clustering_mixin import ClusterSchedule
         scheduler.cluster_schedules = [
             ClusterSchedule(
                 cluster_id="cluster_1",
@@ -162,11 +162,11 @@ class TestClusteringMetricsIntegration:
 
     def test_end_to_end_metrics_workflow(self, mock_mission):
         """Test complete metrics workflow"""
-        scheduler = Mock(spec=ClusteringGreedyScheduler)
+        scheduler = Mock(spec=GreedyScheduler)
         scheduler.mission = mock_mission
 
         base_time = datetime(2024, 1, 1, 10, 0, 0)
-        from scheduler.clustering_greedy_scheduler import ClusterSchedule
+        from scheduler.common.clustering_mixin import ClusterSchedule
         scheduler.cluster_schedules = [
             ClusterSchedule(
                 cluster_id="cluster_1",
@@ -221,7 +221,7 @@ class TestClusteringMetricsIntegration:
 
     def test_metrics_with_empty_scheduler(self):
         """Test metrics with empty scheduler"""
-        scheduler = Mock(spec=ClusteringGreedyScheduler)
+        scheduler = Mock(spec=GreedyScheduler)
         scheduler.mission = Mock()
         scheduler.mission.targets = []
         scheduler.cluster_schedules = []
@@ -253,12 +253,12 @@ class TestClusteringMetricsIntegration:
             for i in range(5)
         ]
 
-        scheduler = Mock(spec=ClusteringGreedyScheduler)
+        scheduler = Mock(spec=GreedyScheduler)
         scheduler.mission = Mock()
         scheduler.mission.targets = targets
 
         base_time = datetime(2024, 1, 1, 10, 0, 0)
-        from scheduler.clustering_greedy_scheduler import ClusterSchedule
+        from scheduler.common.clustering_mixin import ClusterSchedule
         scheduler.cluster_schedules = [
             ClusterSchedule(
                 cluster_id="cluster_1",

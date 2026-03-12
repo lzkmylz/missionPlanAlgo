@@ -123,6 +123,23 @@ class ClusterScheduleInfo:
     priority_satisfied: int = 0
 
 
+@dataclass
+class ClusterSchedule:
+    """聚类调度结果 - 向后兼容的简化版本
+
+    与 ClusterScheduleInfo 类似，但不包含 task_id 字段。
+    用于测试和向后兼容。
+    """
+    cluster_id: str
+    targets: List[Target]
+    satellite_id: str
+    imaging_start: datetime
+    imaging_end: datetime
+    look_angle: float = 0.0
+    priority_satisfied: int = 0
+    task_id: str = ""  # 可选，向后兼容
+
+
 class ClusteringMixin:
     """聚类功能混入类
 

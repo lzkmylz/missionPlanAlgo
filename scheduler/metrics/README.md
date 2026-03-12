@@ -66,14 +66,14 @@ Prepares data for visualization tools:
 ## Usage
 
 ```python
-from scheduler.clustering_greedy_scheduler import ClusteringGreedyScheduler
+from scheduler.greedy.greedy_scheduler import GreedyScheduler
 from scheduler.metrics.clustering_metrics import (
     ClusteringMetricsCollector,
     ClusteringVisualizer,
 )
 
-# Run scheduler
-scheduler = ClusteringGreedyScheduler(config)
+# Run scheduler with clustering enabled
+scheduler = GreedyScheduler(config={'enable_clustering': True, **config})
 result = scheduler.schedule()
 
 # Collect metrics

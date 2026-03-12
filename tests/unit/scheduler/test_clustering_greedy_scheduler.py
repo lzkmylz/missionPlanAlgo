@@ -1,5 +1,5 @@
 """
-Unit tests for ClusteringGreedyScheduler
+Unit tests for GreedyScheduler
 
 TDD Approach:
 1. Write failing tests (RED)
@@ -21,10 +21,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from unittest.mock import Mock, patch
 
-from scheduler.clustering_greedy_scheduler import (
-    ClusteringGreedyScheduler,
-    ClusterSchedule
-)
+from scheduler.greedy.greedy_scheduler import GreedyScheduler
+from scheduler.common.clustering_mixin import ClusterSchedule
 from scheduler.base_scheduler import ScheduleResult, ScheduledTask
 from core.models.target import Target, TargetType
 from core.models.satellite import Satellite, SatelliteType, SatelliteCapabilities, ImagingMode, Orbit
@@ -45,6 +43,7 @@ def base_config() -> Dict[str, Any]:
         'consider_power': False,
         'consider_storage': False,
         'consider_time_conflicts': False,
+        'enable_clustering': True,
     }
 
 
@@ -248,12 +247,12 @@ def mock_window_cache(visibility_windows):
     return cache
 
 
-class TestClusteringGreedyScheduler:
-    """Test suite for ClusteringGreedyScheduler"""
+class TestGreedyScheduler:
+    """Test suite for GreedyScheduler"""
 
     def test_scheduler_initialization(self, base_config):
         """Test that scheduler initializes with correct components"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         assert scheduler.clusterer is not None
         assert scheduler.footprint_calc is not None
@@ -263,7 +262,7 @@ class TestClusteringGreedyScheduler:
 
     def test_cluster_targets_basic(self, base_config, nearby_targets):
         """Test basic target clustering functionality"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.targets = nearby_targets
 
@@ -277,7 +276,7 @@ class TestClusteringGreedyScheduler:
         self, base_config, nearby_targets, distant_targets
     ):
         """Test that distant targets form separate clusters"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.targets = nearby_targets + distant_targets
 
@@ -295,7 +294,7 @@ class TestClusteringGreedyScheduler:
 
     def test_cluster_targets_empty(self, base_config):
         """Test clustering with no targets"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.targets = []
 
@@ -305,7 +304,7 @@ class TestClusteringGreedyScheduler:
 
     def test_cluster_targets_single(self, base_config):
         """Test clustering with single target (below min_cluster_size)"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.targets = [
             Target(
@@ -328,7 +327,7 @@ class TestClusteringGreedyScheduler:
         mock_window_cache, visibility_windows
     ):
         """Test finding best window for a cluster"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.satellites = [optical_satellite]
         scheduler.mission.start_time = datetime(2024, 1, 1, 0, 0, 0)
@@ -363,7 +362,7 @@ class TestClusteringGreedyScheduler:
         self, base_config, optical_satellite
     ):
         """Test that max off-nadir constraint is respected"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.satellites = [optical_satellite]
         scheduler.mission.start_time = datetime(2024, 1, 1, 0, 0, 0)
@@ -411,7 +410,7 @@ class TestClusteringGreedyScheduler:
         distant_targets, optical_satellite, mock_window_cache
     ):
         """Test full scheduling with clustered targets"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets + distant_targets
@@ -440,7 +439,7 @@ class TestClusteringGreedyScheduler:
         optical_satellite, mock_window_cache
     ):
         """Test that high priority targets are guaranteed to be scheduled"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = high_priority_targets
@@ -463,7 +462,7 @@ class TestClusteringGreedyScheduler:
         distant_targets, optical_satellite, mock_window_cache
     ):
         """Test efficiency metrics calculation"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets + distant_targets
@@ -490,7 +489,7 @@ class TestClusteringGreedyScheduler:
         self, base_config, mock_mission, nearby_targets, optical_satellite
     ):
         """Test fallback when clustering fails"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets
@@ -512,7 +511,7 @@ class TestClusteringGreedyScheduler:
         optical_satellite, sar_satellite, mock_window_cache
     ):
         """Test scheduling with mixed satellite types"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite, sar_satellite]
         mock_mission.targets = nearby_targets
@@ -555,7 +554,7 @@ class TestClusteringGreedyScheduler:
         optical_satellite, mock_window_cache
     ):
         """Test that clusters are sorted by priority density"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = high_priority_targets
@@ -579,7 +578,7 @@ class TestClusteringGreedyScheduler:
         self, base_config, mock_mission, nearby_targets, optical_satellite
     ):
         """Test that off-nadir angle constraint is respected"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         # Modify optical satellite to have small max off-nadir
         optical_satellite.capabilities.max_off_nadir = 10.0
@@ -613,7 +612,7 @@ class TestClusteringGreedyScheduler:
         self, base_config, nearby_targets
     ):
         """Test that cluster coverage is properly validated"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         cluster = TargetCluster(
             cluster_id="test_cluster",
@@ -645,7 +644,7 @@ class TestClusteringGreedyScheduler:
         distant_targets, optical_satellite, mock_window_cache
     ):
         """Test task reduction ratio calculation"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets + distant_targets  # 5 targets
@@ -671,7 +670,7 @@ class TestClusteringGreedyScheduler:
         optical_satellite, mock_window_cache
     ):
         """Test that cluster schedules are properly tracked"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets
@@ -706,7 +705,7 @@ class TestClusteringEdgeCases:
 
     def test_all_targets_far_apart(self):
         """Test when all targets are too far to cluster"""
-        scheduler = ClusteringGreedyScheduler({})
+        scheduler = GreedyScheduler({})
         scheduler.mission = Mock()
 
         # Create targets far apart (> swath_width)
@@ -727,7 +726,7 @@ class TestClusteringEdgeCases:
 
     def test_targets_at_exact_boundary(self):
         """Test targets at exact clustering boundary"""
-        scheduler = ClusteringGreedyScheduler({'swath_width_km': 10.0})
+        scheduler = GreedyScheduler({'swath_width_km': 10.0})
         scheduler.mission = Mock()
 
         # Targets exactly at swath_width_km distance (10km)
@@ -752,7 +751,7 @@ class TestClusteringEdgeCases:
 
     def test_empty_cluster_handling(self, mock_mission, optical_satellite):
         """Test handling when clustering produces no valid clusters"""
-        scheduler = ClusteringGreedyScheduler({})
+        scheduler = GreedyScheduler({})
 
         # Single target (won't form cluster)
         mock_mission.satellites = [optical_satellite]
@@ -787,7 +786,7 @@ class TestClusteringEdgeCases:
 
     def test_cluster_with_varying_priorities(self):
         """Test cluster with mixed priority targets"""
-        scheduler = ClusteringGreedyScheduler({})
+        scheduler = GreedyScheduler({})
         scheduler.mission = Mock()
 
         mixed_priority_targets = [
@@ -812,7 +811,7 @@ class TestClusteringEdgeCases:
 
     def test_multiple_clusters_same_priority_density(self):
         """Test sorting when clusters have same priority density"""
-        scheduler = ClusteringGreedyScheduler({})
+        scheduler = GreedyScheduler({})
         scheduler.mission = Mock()
 
         # Two identical clusters
@@ -858,7 +857,7 @@ class TestClusteringIntegration:
             'consider_storage': False,
             'consider_time_conflicts': False,
         }
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite, sar_satellite]
         mock_mission.targets = nearby_targets + distant_targets
@@ -906,7 +905,7 @@ class TestClusteringIntegration:
             'consider_storage': False,
             'consider_time_conflicts': False,
         }
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets  # 3 targets
@@ -949,7 +948,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_get_efficiency_metrics_empty(self, base_config):
         """Test efficiency metrics with no mission"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         metrics = scheduler.get_efficiency_metrics()
 
@@ -961,7 +960,7 @@ class TestClusteringAdditionalCoverage:
         self, base_config, mock_mission, nearby_targets, optical_satellite, mock_window_cache
     ):
         """Test efficiency metrics when no high priority targets exist"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets  # All priority 5
@@ -988,7 +987,7 @@ class TestClusteringAdditionalCoverage:
         config = base_config.copy()
         config['consider_time_conflicts'] = True
 
-        scheduler = ClusteringGreedyScheduler(config)
+        scheduler = GreedyScheduler(config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets
@@ -1011,7 +1010,7 @@ class TestClusteringAdditionalCoverage:
         config = base_config.copy()
         config['consider_power'] = True
 
-        scheduler = ClusteringGreedyScheduler(config)
+        scheduler = GreedyScheduler(config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets
@@ -1034,7 +1033,7 @@ class TestClusteringAdditionalCoverage:
         config = base_config.copy()
         config['consider_storage'] = True
 
-        scheduler = ClusteringGreedyScheduler(config)
+        scheduler = GreedyScheduler(config)
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets
@@ -1052,7 +1051,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_cluster_with_no_targets(self, base_config):
         """Test cluster imaging time with no targets"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         cluster = TargetCluster(
             cluster_id="empty_cluster",
@@ -1068,7 +1067,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_cluster_assignment_score(self, base_config, nearby_targets, optical_satellite):
         """Test cluster assignment score calculation"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.satellites = []
         scheduler.mission.start_time = datetime(2024, 1, 1, 0, 0, 0)
@@ -1107,7 +1106,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_estimate_satellite_position(self, base_config, optical_satellite):
         """Test satellite position estimation"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         dt = datetime(2024, 1, 1, 12, 0, 0)
         position = scheduler._estimate_satellite_position(optical_satellite, dt)
@@ -1126,7 +1125,7 @@ class TestClusteringAdditionalCoverage:
         config = base_config.copy()
         config['consider_power'] = True
 
-        scheduler = ClusteringGreedyScheduler(config)
+        scheduler = GreedyScheduler(config)
         scheduler._sat_resource_usage = {
             'optical_1': {
                 'power': 0.0,  # No power left
@@ -1151,7 +1150,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_are_all_targets_scheduled(self, base_config, nearby_targets):
         """Test checking if all targets are scheduled"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler._scheduled_target_ids = set()
 
         # Initially none scheduled
@@ -1165,7 +1164,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_get_unscheduled_targets(self, base_config, mock_mission, nearby_targets):
         """Test getting unscheduled targets"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = mock_mission
         scheduler.mission.targets = nearby_targets
         scheduler._scheduled_target_ids = set()
@@ -1181,7 +1180,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_count_high_priority_targets(self, base_config):
         """Test counting high priority targets"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
 
         targets = [
             Target(id="high1", name="High 1", target_type=TargetType.POINT,
@@ -1197,7 +1196,7 @@ class TestClusteringAdditionalCoverage:
 
     def test_create_cluster_scheduled_task(self, base_config, nearby_targets, optical_satellite):
         """Test creating a scheduled task for a cluster"""
-        scheduler = ClusteringGreedyScheduler(base_config)
+        scheduler = GreedyScheduler(base_config)
         scheduler.mission = Mock()
         scheduler.mission.satellites = [optical_satellite]
         scheduler.mission.start_time = datetime(2024, 1, 1, 0, 0, 0)

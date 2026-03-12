@@ -2,7 +2,7 @@
 姿态机动计算器与调度器集成测试
 
 验证SlewCalculator与调度系统的集成:
-1. 与ClusteringGreedyScheduler的集成
+1. 与GreedyScheduler (启用聚类) 的集成
 2. 与可见性计算的集成
 3. 实际调度场景中的机动时间计算
 """

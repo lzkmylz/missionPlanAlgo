@@ -17,10 +17,8 @@ from typing import List, Dict, Any, Optional, Tuple, Set
 from datetime import datetime
 import math
 
-from scheduler.clustering_greedy_scheduler import (
-    ClusteringGreedyScheduler,
-    ClusterSchedule
-)
+from scheduler.greedy.greedy_scheduler import GreedyScheduler
+from scheduler.common.clustering_mixin import ClusterSchedule
 from core.models.target import Target, TargetType
 
 
@@ -91,7 +89,7 @@ class ClusteringMetricsCollector:
     收集和计算聚类调度的各项质量指标。
 
     Example:
-        scheduler = ClusteringGreedyScheduler(config)
+        scheduler = GreedyScheduler(config={'enable_clustering': True, **config})
         result = scheduler.schedule()
 
         collector = ClusteringMetricsCollector(scheduler)
@@ -113,12 +111,12 @@ class ClusteringMetricsCollector:
     FUEL_PER_SETUP_KG = 0.05  # Estimated fuel per setup
     FUEL_PER_IMAGING_KG = 0.02  # Estimated fuel per imaging second
 
-    def __init__(self, scheduler: ClusteringGreedyScheduler):
+    def __init__(self, scheduler: GreedyScheduler):
         """
         Initialize the metrics collector
 
         Args:
-            scheduler: ClusteringGreedyScheduler instance with completed schedule
+            scheduler: GreedyScheduler instance with completed schedule
         """
         self.scheduler = scheduler
         self.cluster_schedules = scheduler.cluster_schedules
@@ -616,12 +614,12 @@ class ClusteringVisualizer:
         '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
     ]
 
-    def __init__(self, scheduler: ClusteringGreedyScheduler):
+    def __init__(self, scheduler: GreedyScheduler):
         """
         Initialize the visualizer
 
         Args:
-            scheduler: ClusteringGreedyScheduler instance with completed schedule
+            scheduler: GreedyScheduler instance with completed schedule
         """
         self.scheduler = scheduler
         self.cluster_schedules = scheduler.cluster_schedules

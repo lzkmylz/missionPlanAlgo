@@ -28,10 +28,8 @@ from scheduler.metrics.clustering_metrics import (
     ClusteringMetricsCollector,
     ClusteringVisualizer,
 )
-from scheduler.clustering_greedy_scheduler import (
-    ClusteringGreedyScheduler,
-    ClusterSchedule
-)
+from scheduler.greedy.greedy_scheduler import GreedyScheduler
+from scheduler.common.clustering_mixin import ClusterSchedule
 from core.models.target import Target, TargetType
 from core.models.satellite import Satellite, SatelliteType, SatelliteCapabilities, ImagingMode, Orbit
 
@@ -57,7 +55,7 @@ def base_config() -> Dict[str, Any]:
 @pytest.fixture
 def mock_scheduler():
     """Create a mock scheduler for testing"""
-    scheduler = Mock(spec=ClusteringGreedyScheduler)
+    scheduler = Mock(spec=GreedyScheduler)
     scheduler.cluster_schedules = []
     scheduler.mission = Mock()
     scheduler.mission.targets = []
