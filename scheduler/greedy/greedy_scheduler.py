@@ -182,11 +182,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         if self._slew_checker is not None:
             return
 
-        # 在简化模式下跳过初始化以避免昂贵的计算
-        if self._use_simplified_slew:
-            return
-
-        # 使用批量姿态机动约束检查器
+        # 强制使用批量姿态机动约束检查器
+        # 高精度要求：禁止简化模式
         self._slew_checker = BatchSlewConstraintChecker(
             self.mission,
             use_precise_model=True
@@ -277,9 +274,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         if self._position_cache is not None and self._constraint_checker is not None:
             self._constraint_checker.set_position_cache(self._position_cache)
 
-        # Precompute satellite positions to accelerate scheduling (only in non-simplified mode)
+        # Precompute satellite positions to accelerate scheduling
         # 默认启用预计算以加速姿态角计算，除非显式禁用
-        if not self._use_simplified_slew and self.config.get('precompute_positions', True):
+        if self.config.get('precompute_positions', True):
             print("    Precomputing satellite positions...")
             self._precompute_satellite_positions(time_step_seconds=self.config.get('precompute_step_seconds', 1.0))
 
@@ -296,7 +293,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         # ========== 空间换时间：姿态预计算缓存 ==========
         # 预加载轨道数据并预计算所有可见窗口的姿态角
         # 内存占用约30MB，可将Phase2/3从每任务10-20ms降至0.001ms
-        if not self._use_simplified_slew and self.config.get('enable_attitude_precache', True):
+        if self.config.get('enable_attitude_precache', True):
             logger = logging.getLogger(__name__)
             logger.info("初始化姿态预计算缓存（空间换时间优化）...")
             t_precache = self._perf_start()
@@ -647,7 +644,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         else:
             # 回退到实时批量计算（原逻辑）
             attitude_cache = {}
-            if not self._use_simplified_slew and self._attitude_calculator is not None:
+            if self._attitude_calculator is not None:
                 attitude_candidates = []
                 for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
                     imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
@@ -846,7 +843,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             if self._unified_checker is None:
                 self._unified_checker = UnifiedBatchConstraintChecker(
                     mission=self.mission,
-                    use_precise_model=not self._use_simplified_slew,
+                    use_precise_model=True,
                     consider_power=self.consider_power,
                     consider_storage=self.consider_storage
                 )

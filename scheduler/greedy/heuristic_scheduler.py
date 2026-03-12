@@ -202,7 +202,8 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
     def _initialize_high_performance_checkers(self) -> None:
         """初始化高性能约束检查器"""
         # 1. 批量姿态约束检查器
-        if self._enable_batch_constraint_check and not self._use_simplified_slew:
+        # 高精度要求：强制使用精确模型
+        if self._enable_batch_constraint_check:
             self._slew_checker = BatchSlewConstraintChecker(
                 self.mission,
                 use_precise_model=True
@@ -213,13 +214,13 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         if self._enable_batch_constraint_check:
             self._unified_checker = UnifiedBatchConstraintChecker(
                 mission=self.mission,
-                use_precise_model=not self._use_simplified_slew,
+                use_precise_model=True,
                 consider_power=self.consider_power,
                 consider_storage=self.consider_storage
             )
 
         # 3. 姿态预计算缓存
-        if self._enable_attitude_precache and not self._use_simplified_slew:
+        if self._enable_attitude_precache:
             self._initialize_attitude_precache()
 
         # 4. 初始化基类检查器（兼容性）

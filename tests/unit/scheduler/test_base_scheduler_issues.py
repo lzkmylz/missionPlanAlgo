@@ -3,7 +3,7 @@ BaseScheduler HIGH Priority Issues - TDD Tests
 
 Tests to verify fixes for:
 1. Issue 1: Wasted Computation in _precompute_satellite_positions when slew_checker is None
-2. Issue 2: Missing Input Validation for time_step_minutes parameter
+2. Issue 2: Missing Input Validation for time_step_seconds parameter
 
 Following TDD workflow:
 1. Write failing tests (RED)
@@ -119,7 +119,7 @@ class TestPrecomputeSatellitePositions:
         scheduler = MockScheduler("test")
         scheduler.initialize(sample_mission)
 
-        # Ensure _slew_checker is None (simulating simplified slew mode)
+        # Ensure _slew_checker is None (testing without slew checker)
         scheduler._slew_checker = None
 
         # Create a mock position cache
@@ -135,7 +135,7 @@ class TestPrecomputeSatellitePositions:
             return_value=([6871000.0, 0.0, 0.0], [0.0, 7000.0, 0.0])
         ):
             # Call precompute
-            scheduler._precompute_satellite_positions(time_step_minutes=10)
+            scheduler._precompute_satellite_positions(time_step_seconds=10)
 
         # Verify that positions were stored (not discarded)
         # The key assertion: cache should have been used to store positions
@@ -160,7 +160,7 @@ class TestPrecomputeSatellitePositions:
             '_get_satellite_state',
             return_value=([6871000.0, 0.0, 0.0], [0.0, 7000.0, 0.0])
         ):
-            scheduler._precompute_satellite_positions(time_step_minutes=10)
+            scheduler._precompute_satellite_positions(time_step_seconds=10)
 
         # When slew_checker is present, positions should be stored in its cache
         # This is the existing behavior that should continue to work
@@ -198,7 +198,7 @@ class TestPrecomputeSatellitePositions:
                 '_propagate_batch',
                 return_value=batch_results
             ):
-                scheduler._precompute_satellite_positions(time_step_minutes=10)
+                scheduler._precompute_satellite_positions(time_step_seconds=10)
         else:
             # If batch method doesn't exist, test the fallback path
             with patch.object(
@@ -206,7 +206,7 @@ class TestPrecomputeSatellitePositions:
                 '_get_satellite_state',
                 return_value=([6871000.0, 0.0, 0.0], [0.0, 7000.0, 0.0])
             ):
-                scheduler._precompute_satellite_positions(time_step_minutes=10)
+                scheduler._precompute_satellite_positions(time_step_seconds=10)
 
         # Verify positions were stored (either via batch or fallback path)
         assert True, "Batch propagation should store positions in cache"
@@ -217,33 +217,33 @@ class TestPrecomputeSatellitePositions:
 # =============================================================================
 
 class TestTimeStepValidation:
-    """Test time_step_minutes parameter validation"""
+    """Test time_step_seconds parameter validation"""
 
     def test_precompute_raises_value_error_for_zero_time_step(
         self, sample_mission
     ):
         """
-        Test Issue 2 Fix: time_step_minutes=0 should raise ValueError.
+        Test Issue 2 Fix: time_step_seconds=0 should raise ValueError.
         Zero time step would cause division by zero or infinite loop.
         """
         scheduler = MockScheduler("test")
         scheduler.initialize(sample_mission)
 
-        with pytest.raises(ValueError, match="time_step_minutes must be positive"):
-            scheduler._precompute_satellite_positions(time_step_minutes=0)
+        with pytest.raises(ValueError, match="time_step_seconds must be positive"):
+            scheduler._precompute_satellite_positions(time_step_seconds=0)
 
     def test_precompute_raises_value_error_for_negative_time_step(
         self, sample_mission
     ):
         """
-        Test Issue 2 Fix: time_step_minutes=-1 should raise ValueError.
+        Test Issue 2 Fix: time_step_seconds=-1 should raise ValueError.
         Negative time step is nonsensical and would cause errors.
         """
         scheduler = MockScheduler("test")
         scheduler.initialize(sample_mission)
 
-        with pytest.raises(ValueError, match="time_step_minutes must be positive"):
-            scheduler._precompute_satellite_positions(time_step_minutes=-1)
+        with pytest.raises(ValueError, match="time_step_seconds must be positive"):
+            scheduler._precompute_satellite_positions(time_step_seconds=-1)
 
     def test_precompute_raises_value_error_for_negative_float_time_step(
         self, sample_mission
@@ -252,29 +252,29 @@ class TestTimeStepValidation:
         scheduler = MockScheduler("test")
         scheduler.initialize(sample_mission)
 
-        with pytest.raises(ValueError, match="time_step_minutes must be positive"):
-            scheduler._precompute_satellite_positions(time_step_minutes=-0.5)
+        with pytest.raises(ValueError, match="time_step_seconds must be positive"):
+            scheduler._precompute_satellite_positions(time_step_seconds=-0.5)
 
     def test_precompute_accepts_valid_positive_time_step(
         self, sample_mission
     ):
-        """Test that valid positive time_step_minutes works correctly"""
+        """Test that valid positive time_step_seconds works correctly"""
         scheduler = MockScheduler("test")
         scheduler.initialize(sample_mission)
 
         # Should not raise any exception
-        scheduler._precompute_satellite_positions(time_step_minutes=10)
+        scheduler._precompute_satellite_positions(time_step_seconds=10)
         # If we get here without exception, test passes
 
     def test_precompute_accepts_small_positive_time_step(
         self, sample_mission
     ):
-        """Test that small but valid positive time_step_minutes works"""
+        """Test that small but valid positive time_step_seconds works"""
         scheduler = MockScheduler("test")
         scheduler.initialize(sample_mission)
 
         # Should not raise any exception
-        scheduler._precompute_satellite_positions(time_step_minutes=1)
+        scheduler._precompute_satellite_positions(time_step_seconds=1)
         # If we get here without exception, test passes
 
 
@@ -292,7 +292,7 @@ class TestPrecomputeEdgeCases:
         scheduler.mission = None
 
         # Should not raise exception, just return early
-        result = scheduler._precompute_satellite_positions(time_step_minutes=10)
+        result = scheduler._precompute_satellite_positions(time_step_seconds=10)
         assert result is None
 
     def test_precompute_handles_empty_satellites(self, sample_mission):
@@ -302,7 +302,7 @@ class TestPrecomputeEdgeCases:
         sample_mission.satellites = []
 
         # Should not raise exception
-        scheduler._precompute_satellite_positions(time_step_minutes=10)
+        scheduler._precompute_satellite_positions(time_step_seconds=10)
 
     def test_precompute_handles_window_cache_with_windows(
         self, sample_mission, sample_satellite, mission_start_time
@@ -330,7 +330,7 @@ class TestPrecomputeEdgeCases:
             return_value=([6871000.0, 0.0, 0.0], [0.0, 7000.0, 0.0])
         ):
             # Should not raise exception
-            scheduler._precompute_satellite_positions(time_step_minutes=10)
+            scheduler._precompute_satellite_positions(time_step_seconds=10)
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ ALGORITHM_CATEGORIES = {
 # ============================================================================
 
 DEFAULT_IMAGING_CONFIG = {
-    'use_simplified_slew': False,  # 默认使用精细模式（标准模式）
+    # 高精度要求：始终使用精确模式，简化模式已移除
     'consider_power': True,
     'consider_storage': True,
     'enable_attitude_calculation': True,  # 启用姿态角计算

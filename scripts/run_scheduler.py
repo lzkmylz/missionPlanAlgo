@@ -161,7 +161,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         '--simplified',
         action='store_true',
-        help='使用简化模式 (跳过昂贵的轨道预计算)'
+        help=argparse.SUPPRESS  # 隐藏此参数，高精度要求下已禁用
     )
 
     # 对比模式参数
@@ -438,6 +438,12 @@ def main(args: Optional[List[str]] = None) -> int:
     print("="*70)
 
     try:
+        # 检查是否使用了禁用的简化模式
+        if parsed_args.simplified:
+            raise ValueError(
+                "--simplified 选项已被禁用。高精度要求下必须使用精确计算模式。"
+            )
+
         # 1. 加载场景
         print(f"\n[1/3] 加载场景: {parsed_args.scenario}")
         mission = Mission.load(parsed_args.scenario)

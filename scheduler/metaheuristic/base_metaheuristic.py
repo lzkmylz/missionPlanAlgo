@@ -125,10 +125,17 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
     def _convert_config(self, config: Dict[str, Any]) -> MetaheuristicConfig:
         """Convert legacy config dict to MetaheuristicConfig."""
         # Extract constraint settings
+        # 高精度要求：强制使用标准模式（精确计算），禁止简化模式
+        if config.get('use_simplified_slew', False):
+            raise ValueError(
+                "use_simplified_slew=True is not allowed. "
+                "High precision mode requires exact calculations."
+            )
+
         constraints = ConstraintConfig(
             consider_power=config.get('consider_power', True),
             consider_storage=config.get('consider_storage', True),
-            mode='simplified' if config.get('use_simplified_slew', False) else 'standard',
+            mode='standard',  # 强制使用标准模式（精确计算）
             enable_saa_check=config.get('enable_saa_check', True),
             enable_attitude_calculation=config.get('enable_attitude_calculation', True),
         )
@@ -255,31 +262,22 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         )
 
         # 初始化批量约束检查器（与greedy调度器保持一致，使用向量化批量优化）
-        use_simplified = self._config.constraints.mode == 'simplified'
-        if not use_simplified:
-            # 使用统一批量约束检查器（向量化优化）
-            self._batch_constraint_checker = UnifiedBatchConstraintChecker(
-                mission=self.mission,
-                use_precise_model=True,
-                consider_power=self._config.constraints.consider_power,
-                consider_storage=self._config.constraints.consider_storage
-            )
-            # 同时初始化基类的批量检查器
-            self._slew_checker = BatchSlewConstraintChecker(
-                self.mission,
-                use_precise_model=True
-            )
-        else:
-            # 简化模式：使用传统约束检查器
-            self._constraint_checker = ConstraintChecker(
-                mission=self.mission,
-                config=self._config.constraints,
-            )
-            self._constraint_checker.initialize()
+        # 高精度要求：强制使用批量约束检查器，禁止简化模式
+        self._batch_constraint_checker = UnifiedBatchConstraintChecker(
+            mission=self.mission,
+            use_precise_model=True,
+            consider_power=self._config.constraints.consider_power,
+            consider_storage=self._config.constraints.consider_storage
+        )
+        # 同时初始化基类的批量检查器
+        self._slew_checker = BatchSlewConstraintChecker(
+            self.mission,
+            use_precise_model=True
+        )
 
         # 预计算卫星位置以加速姿态角计算（默认启用，除非显式禁用）
         precompute_enabled = self.config.get('precompute_positions', True) if self.config else True
-        if not use_simplified and precompute_enabled:
+        if precompute_enabled:
             print("    预计算卫星位置...")
             step_seconds = self.config.get('precompute_step_seconds', 1.0) if self.config else 1.0
             self._precompute_satellite_positions(time_step_seconds=step_seconds)
@@ -397,16 +395,13 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             if sat_position is None and hasattr(self, '_attitude_calculator'):
                 try:
                     sat_position, sat_velocity = self._attitude_calculator._get_satellite_state(sat, actual_start)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # 高精度要求：卫星状态获取失败应抛出错误
+                    raise RuntimeError(f"卫星状态获取失败 ({sat.id} at {actual_start}): {e}") from e
 
-            # 如果仍然没有位置，使用默认值（地球表面上方500km）
+            # 高精度要求：必须有有效的卫星位置
             if sat_position is None:
-                import math
-                R_earth = 6371000.0  # 地球半径（米）
-                alt = 500000.0  # 默认高度500km
-                sat_position = (R_earth + alt, 0.0, 0.0)
-                sat_velocity = (0.0, 7000.0, 0.0)  # 默认速度约7km/s
+                raise RuntimeError(f"无法获取卫星 {sat.id} 在 {actual_start} 的位置信息")
 
             candidate = UnifiedBatchCandidate(
                 sat_id=sat.id,
@@ -470,54 +465,11 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             if self._config.constraints.consider_storage:
                 state.sat_resources[sat_idx]['storage'] += storage_produced
         else:
-            # 回退到传统约束检查（简化模式）
-            self._evaluate_task_assignment_legacy(task_idx, sat_idx, state, sat, task,
-                                                   feasible_window, imaging_mode, imaging_duration,
-                                                   actual_start, actual_end)
-
-    def _evaluate_task_assignment_legacy(
-        self, task_idx: int, sat_idx: int, state: EvaluationState,
-        sat: Any, task: Any, feasible_window: Any, imaging_mode: Any,
-        imaging_duration: float, actual_start: datetime, actual_end: datetime
-    ) -> None:
-        """传统任务分配评估（向后兼容，简化模式使用）"""
-        # Check SAA
-        if not self._is_saa_feasible(sat.id, feasible_window):
-            return
-
-        # Check constraints using unified checker
-        context = ConstraintContext(
-            satellite=sat,
-            target=task,
-            window_start=actual_start,
-            window_end=actual_end,
-            prev_target=state.sat_last_target.get(sat_idx),
-            prev_end_time=state.sat_last_end_time.get(sat_idx),
-            imaging_duration=imaging_duration,
-            current_power=state.sat_resources[sat_idx]['power'],
-            current_storage=state.sat_resources[sat_idx]['storage'],
-        )
-
-        result = self._constraint_checker.check_task(context)
-        if not result.feasible:
-            return
-
-        # Update state for scheduled task
-        state.score += 10.0
-        state.scheduled_count += 1
-
-        target_id = getattr(task, 'target_id', str(task_idx))
-        state.target_obs_count[target_id] = state.target_obs_count.get(target_id, 0) + 1
-
-        state.sat_task_times[sat_idx].append((actual_start, actual_end))
-        state.sat_last_target[sat_idx] = task
-        state.sat_last_end_time[sat_idx] = actual_end
-
-        # Update resources
-        if self._config.constraints.consider_power and result.details.get('power_consumed'):
-            state.sat_resources[sat_idx]['power'] -= result.details['power_consumed']
-        if self._config.constraints.consider_storage and result.details.get('storage_used'):
-            state.sat_resources[sat_idx]['storage'] += result.details['storage_used']
+            # 高精度要求：必须使用批量约束检查器
+            raise RuntimeError(
+                "Batch constraint checker not initialized. "
+                "High precision mode requires UnifiedBatchConstraintChecker."
+            )
 
     def _find_feasible_window(
         self, sat_idx: int, sat: Any, task: Any, state: EvaluationState

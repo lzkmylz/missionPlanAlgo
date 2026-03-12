@@ -36,7 +36,13 @@ class ConstraintConfig:
 
     def __post_init__(self):
         """Validate configuration."""
-        valid_modes = ('simplified', 'standard', 'full')
+        # 高精度要求：不接受简化模式
+        valid_modes = ('standard', 'full')
+        if self.mode == 'simplified':
+            raise ValueError(
+                "mode='simplified' is not allowed. "
+                "High precision mode requires 'standard' or 'full'."
+            )
         if self.mode not in valid_modes:
             raise ValueError(f"mode must be one of {valid_modes}, got {self.mode}")
 
@@ -223,7 +229,6 @@ dispersed across scheduler implementations.
 def convert_legacy_config(
     consider_power: bool = True,
     consider_storage: bool = True,
-    use_simplified_slew: bool = False,
     enable_saa_check: bool = True,
     enable_attitude_calculation: bool = False,
     **kwargs
@@ -235,7 +240,6 @@ def convert_legacy_config(
     Args:
         consider_power: Legacy flag
         consider_storage: Legacy flag
-        use_simplified_slew: Legacy flag
         enable_saa_check: Legacy flag
         enable_attitude_calculation: Legacy flag
         **kwargs: Additional configuration parameters
@@ -243,7 +247,8 @@ def convert_legacy_config(
     Returns:
         SchedulerConfig with equivalent settings
     """
-    mode = 'simplified' if use_simplified_slew else 'standard'
+    # 高精度要求：始终使用标准模式
+    mode = 'standard'
 
     constraints = ConstraintConfig(
         consider_power=consider_power,

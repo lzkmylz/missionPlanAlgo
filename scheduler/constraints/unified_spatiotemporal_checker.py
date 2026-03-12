@@ -81,19 +81,16 @@ class UnifiedSpatiotemporalChecker:
     def __init__(
         self,
         mission: Mission,
-        slew_checker: Optional[SlewConstraintChecker] = None,
-        use_simplified_slew: bool = False
+        slew_checker: Optional[SlewConstraintChecker] = None
     ):
         """初始化统一时空约束检查器
 
         Args:
             mission: 任务对象
             slew_checker: 机动约束检查器（可选）
-            use_simplified_slew: 是否使用简化机动计算
         """
         self.mission = mission
         self._slew_checker = slew_checker
-        self._use_simplified_slew = use_simplified_slew
 
         # 每个卫星的已调度任务列表
         self._scheduled_tasks: Dict[str, List[ScheduledTaskInfo]] = {}
@@ -318,34 +315,17 @@ class UnifiedSpatiotemporalChecker:
         prev_end_time: datetime,
         window_start: datetime
     ) -> SlewFeasibilityResult:
-        """检查机动可行性"""
-        if self._use_simplified_slew:
-            return self._simplified_slew_check(prev_end_time, window_start)
-
+        """检查机动可行性（高精度要求：始终使用精确检查器）"""
         if self._slew_checker:
             return self._slew_checker.check_slew_feasibility(
                 satellite_id, prev_target, current_target,
                 prev_end_time, window_start
             )
 
-        # 默认简化检查
-        return self._simplified_slew_check(prev_end_time, window_start)
-
-    def _simplified_slew_check(
-        self,
-        prev_end_time: datetime,
-        window_start: datetime
-    ) -> SlewFeasibilityResult:
-        """简化机动检查"""
-        slew_time = 30.0  # 默认30秒机动时间
-        earliest_start = prev_end_time + timedelta(seconds=slew_time)
-        actual_start = max(window_start, earliest_start)
-
-        return SlewFeasibilityResult(
-            feasible=True,
-            slew_angle=0.0,
-            slew_time=slew_time,
-            actual_start=actual_start
+        # 高精度要求：如果没有精确检查器则报错
+        raise RuntimeError(
+            "Slew checker not initialized. "
+            "High precision mode requires SlewConstraintChecker."
         )
 
     def _find_time_conflict(

@@ -135,8 +135,7 @@ imaging_config = {
     'consider_power': True,           # 电量约束
     'consider_storage': True,         # 存储约束
 
-    # 机动约束
-    'use_simplified_slew': False,     # 使用精确机动计算
+    # 高精度要求：始终使用精确机动计算
 
     # 姿态约束
     'enable_attitude_calculation': True,  # 计算姿态角

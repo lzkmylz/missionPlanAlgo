@@ -178,13 +178,16 @@ class SlewConstraintChecker:
         # 获取卫星位置（用于正确计算机动角度）
         sat_position, _ = self._get_satellite_position(satellite, prev_end_time)
         if sat_position is None:
-            # 如果无法获取卫星位置，使用简化计算
-            slew_angle = self._calculate_simplified_slew_angle(prev_target, current_target)
-        else:
-            # 使用 ECEF 坐标正确计算机动角度
-            slew_angle = self._calculate_slew_angle_ecef(
-                sat_position, prev_target, current_target
+            # 高精度要求：无法获取卫星位置时抛出错误
+            raise RuntimeError(
+                f"Cannot get satellite position for {satellite_id} at {prev_end_time}. "
+                "High precision mode requires exact position data."
             )
+
+        # 使用 ECEF 坐标正确计算机动角度
+        slew_angle = self._calculate_slew_angle_ecef(
+            sat_position, prev_target, current_target
+        )
 
         # 检查机动角度是否超过限制（使用原始角度）
         if slew_angle > slew_calc.max_slew_angle:
@@ -328,31 +331,6 @@ class SlewConstraintChecker:
 
         return angle_deg
 
-    def _calculate_simplified_slew_angle(
-        self,
-        target1: Target,
-        target2: Target
-    ) -> float:
-        """简化机动角度计算（当无法获取卫星位置时）
-
-        使用经纬度差估算角度。注意：这是近似方法，在高纬度不准确。
-
-        Args:
-            target1: 起始目标
-            target2: 结束目标
-
-        Returns:
-            估算的机动角度（度）
-        """
-        lon_diff = target2.longitude - target1.longitude
-        lat_diff = target2.latitude - target1.latitude
-
-        # 考虑经度随纬度收缩
-        lat_rad = math.radians((target1.latitude + target2.latitude) / 2)
-        lon_diff_corrected = lon_diff * math.cos(lat_rad)
-
-        return math.sqrt(lon_diff_corrected**2 + lat_diff**2)
-
     def _geodetic_to_ecef(
         self,
         lon: float,
@@ -412,8 +390,7 @@ class SlewConstraintChecker:
         current_target: Target,
         prev_end_time: datetime,
         window_start: datetime,
-        imaging_duration: float = 0.0,
-        use_simplified: bool = False
+        imaging_duration: float = 0.0
     ) -> SlewFeasibilityResult:
         """检查机动可行性（与SlewChecker兼容的接口）
 
@@ -426,7 +403,6 @@ class SlewConstraintChecker:
             prev_end_time: 上一个任务结束时间
             window_start: 当前窗口开始时间
             imaging_duration: 成像持续时间（秒）
-            use_simplified: 使用简化计算（此参数被忽略，保持接口兼容）
 
         Returns:
             SlewFeasibilityResult: 可行性结果

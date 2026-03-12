@@ -44,11 +44,10 @@ def example_basic_usage():
         soc_threshold=0.30          # 电量阈值 30%
     )
 
-    # 创建统一机动约束检查器
+    # 创建统一机动约束检查器（高精度要求：始终使用精确模式）
     checker = UnifiedManeuverChecker(
         mission=mission,
-        config=config,
-        use_simplified_slew=False   # 使用完整的姿态计算
+        config=config
     )
 
     # 示例：检查一个成像任务
@@ -129,11 +128,11 @@ def example_time_conflict():
     scenario_path = "scenarios/large_scale_frequency.json"
     mission = Mission.load(scenario_path)
 
-    config = AttitudeManagementConfig(use_simplified_slew=True)
+    # 高精度要求：始终使用精确模式
+    config = AttitudeManagementConfig()
     checker = UnifiedManeuverChecker(
         mission=mission,
-        config=config,
-        use_simplified_slew=True
+        config=config
     )
 
     satellite = mission.satellites[0]

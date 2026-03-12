@@ -374,21 +374,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
                     )
 
         except Exception as e:
-            logger.warning(f"Precise maneuver calculation failed for {satellite.id}: {e}")
-            # 回退到简化模型（不复位，直接机动）
-            result = super().check_slew_feasibility(
-                satellite.id, prev_target, current_target,
-                prev_end_time, window_start, imaging_duration
-            )
-            # 更新状态到目标姿态
-            if result.feasible:
-                self._update_satellite_state(
-                    satellite_id=satellite.id,
-                    time=result.actual_start,
-                    attitude=target_attitude,
-                    angular_momentum=None
-                )
-            return result
+            # 高精度要求：精确机动计算失败应抛出错误
+            raise RuntimeError(f"精确机动计算失败 ({satellite.id}): {e}") from e
 
         # 4. 计算机动后实际开始时间（包括复位时间 + 任务机动时间）
         total_slew_time = total_reset_time + total_task_time
@@ -479,34 +466,12 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             nadir_attitude.quaternion, target_attitude.quaternion
         )
 
-        try:
-            # 4. 执行机动分析（从对地定向到目标）
-            maneuver = calc.calculate_slew_maneuver(
-                prev_attitude=nadir_attitude,
-                target_attitude=target_attitude,
-                current_time=window_start
-            )
-        except Exception as e:
-            logger.warning(f"Nadir-to-target maneuver calculation failed: {e}")
-            # 使用简化计算
-            slew_time = self._estimate_slew_time(satellite, slew_angle)
-            actual_start = window_start + timedelta(seconds=slew_time)
-
-            # 更新状态
-            self._update_satellite_state(
-                satellite_id=satellite.id,
-                time=actual_start,
-                attitude=target_attitude,
-                angular_momentum=None
-            )
-
-            return SlewFeasibilityResult(
-                feasible=True,
-                slew_angle=slew_angle,
-                slew_time=slew_time,
-                actual_start=actual_start,
-                reason=None
-            )
+        # 4. 执行机动分析（从对地定向到目标）
+        maneuver = calc.calculate_slew_maneuver(
+            prev_attitude=nadir_attitude,
+            target_attitude=target_attitude,
+            current_time=window_start
+        )
 
         # 5. 检查约束满足
         if not maneuver.feasible:
@@ -862,18 +827,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
                 current_time=window_start
             )
         except Exception as e:
-            logger.warning(f"First task precise maneuver calculation failed: {e}")
-            # 使用简化计算
-            slew_time = self._estimate_slew_time(satellite, slew_angle)
-            actual_start = window_start + timedelta(seconds=slew_time)
-
-            return SlewFeasibilityResult(
-                feasible=True,
-                slew_angle=slew_angle,
-                slew_time=slew_time,
-                actual_start=actual_start,
-                reason=None
-            )
+            # 高精度要求：精确机动计算失败应抛出错误
+            raise RuntimeError(f"首次任务精确机动计算失败 ({satellite.id}): {e}") from e
 
         # 5. 检查约束满足
         if not maneuver.feasible:
@@ -1008,8 +963,7 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
         current_target: Target,
         prev_end_time: datetime,
         window_start: datetime,
-        imaging_duration: float,
-        use_simplified: bool = False,
+        imaging_duration: float
     ) -> 'ConstraintResult':
         """检查姿态机动约束（与SlewChecker.check_slew接口兼容）
 
@@ -1023,7 +977,6 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             prev_end_time: 上一个任务结束时间
             window_start: 当前窗口开始时间
             imaging_duration: 成像持续时间 (秒)
-            use_simplified: 使用简化模型 (保留参数，但精确模型始终使用精确计算)
 
         Returns:
             ConstraintResult: 约束检查结果

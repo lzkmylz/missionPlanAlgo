@@ -35,19 +35,18 @@ def example_traditional_vs_maneuver():
         config={
             'consider_power': True,
             'consider_storage': True,
-            'use_simplified_slew': True,
+            # 高精度要求：始终使用精确模式
             'use_unified_maneuver': False,
         }
     )
     traditional_checker.initialize()
 
-    # 创建统一机动约束检查器
+    # 创建统一机动约束检查器（高精度要求：始终使用精确模式）
     maneuver_checker = MetaheuristicConstraintChecker(
         mission,
         config={
             'consider_power': True,
             'consider_storage': True,
-            'use_simplified_slew': False,
             'use_unified_maneuver': True,
             'max_slew_rate': 3.0,
             'settling_time': 5.0,
@@ -136,7 +135,7 @@ def example_batch_check():
     checker = MetaheuristicConstraintChecker(
         mission,
         config={
-            'use_simplified_slew': True,
+            # 高精度要求：始终使用精确模式
             'use_unified_maneuver': True,
         }
     )

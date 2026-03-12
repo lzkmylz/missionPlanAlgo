@@ -425,7 +425,11 @@ class BatchSlewCalculator:
     def __init__(self):
         self.use_numba = HAS_NUMBA
         if not self.use_numba:
-            logger.warning("Numba not available, batch calculator will use slow Python fallback")
+            # 高精度要求：Numba是必需的
+            raise RuntimeError(
+                "Numba is required for high-precision batch calculations. "
+                "Please install: pip install numba"
+            )
         else:
             # 预热Numba JIT编译器，避免第一次调用时的编译开销
             self._warmup_numba()
@@ -581,8 +585,8 @@ class BatchSlewCalculator:
                     data.out_momentum_margin
                 )
             except Exception as e:
-                logger.warning(f"Numba batch computation failed: {e}, falling back to Python")
-                self._compute_batch_python(data)
+                # 高精度要求：Numba批量计算失败应抛出错误
+                raise RuntimeError(f"批量机动计算失败: {e}") from e
         else:
             self._compute_batch_python(data)
 

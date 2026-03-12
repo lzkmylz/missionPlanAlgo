@@ -211,7 +211,7 @@ def _load_precomputed_orbits_from_java(self) -> bool:
 
 ```python
 DEFAULT_IMAGING_CONFIG = {
-    'use_simplified_slew': False,           # 禁用简化模式
+    # 高精度要求：始终使用精确模式，简化模式已移除
     'enable_attitude_calculation': True,    # 启用姿态角计算
     'precompute_positions': True,           # 预计算位置（如未加载Java数据）
     'precompute_step_seconds': 1.0,         # 1秒步长（与HPOP精扫描匹配）
@@ -219,7 +219,7 @@ DEFAULT_IMAGING_CONFIG = {
 }
 ```
 
-**姿态计算解耦**: 姿态计算与简化模式完全解耦，只要 `enable_attitude_calculation=True` 就始终计算。
+**姿态计算**: 只要 `enable_attitude_calculation=True` 就始终计算姿态角。
 
 ### 默认频次需求配置
 
@@ -368,7 +368,7 @@ results = checker.check_slew_feasibility_batch(candidates)
 ```
 
 **启用条件**:
-- 非简化模式 (`use_simplified_slew=False`)
+- 高精度要求：始终使用批量约束检查器
 - 多个候选（大于1个）时自动启用批量优化
 - 单候选时回退到单个检查（保持接口兼容）
 
@@ -806,3 +806,82 @@ config = {
 - 将预计算结果持久化到磁盘（如Parquet格式），避免每次重新计算
 - 使用内存映射（mmap）管理大缓存，减少内存占用
 - GPU加速姿态预计算（CUDA/Numba.cuda）
+
+---
+
+## API 变更记录
+
+### 2026-03-12: 移除简化模式（向后兼容性破坏）
+
+**变更类型**: 向后兼容性破坏 (Breaking Change)
+
+**原因**: 项目要求保持高精度计算，简化模式（近似计算）与这一目标冲突。
+
+**移除的API**:
+
+| 类/函数 | 移除的参数/方法 | 替代方案 |
+|---------|----------------|----------|
+| `ConstraintConfig` | `mode="simplified"` | 仅支持 `mode="standard"` 或 `"full"` |
+| `MetaheuristicConstraintChecker` | `use_simplified_slew` 参数 | 强制使用 `UnifiedBatchConstraintChecker` |
+| `UnifiedManeuverChecker.__init__` | `use_simplified_slew` 参数 | 始终使用精确模型 |
+| `UnifiedSpatiotemporalChecker.__init__` | `use_simplified_slew` 参数 | 始终使用精确模型 |
+| `SlewConstraintChecker.check_slew` | `use_simplified` 参数 | 始终使用精确计算 |
+| `PreciseSlewConstraintChecker.check_slew` | `use_simplified` 参数 | 始终使用精确计算 |
+| `ConstraintChecker.check_slew` | `use_simplified` 参数 | 始终使用精确计算 |
+| `UnifiedManeuverChecker` | `_check_simplified()` 方法 | 已完全移除 |
+| `UnifiedSpatiotemporalChecker` | `_simplified_slew_check()` 方法 | 已完全移除 |
+| `SlewConstraintChecker` | `_calculate_simplified_slew_angle()` 方法 | 使用ECEF精确计算 |
+| `BaseScheduler` | `_use_simplified_slew` 属性 | 强制使用批量检查器 |
+| `scripts/run_scheduler.py` | `--simplified` 参数 | 已隐藏，使用时报错 |
+| `scripts/config.py` | `use_simplified_slew` 配置项 | 已移除 |
+
+**迁移指南**:
+
+```python
+# 旧代码（不再支持）
+checker = MetaheuristicConstraintChecker(
+    mission,
+    config={"use_simplified_slew": True}  # ValueError\!
+)
+
+# 新代码（强制精确模式）
+checker = MetaheuristicConstraintChecker(
+    mission,
+    config={"consider_power": True}  # 始终使用精确计算
+)
+```
+
+**错误处理变化**:
+- 旧行为：无法获取卫星位置时使用简化估算
+- 新行为：抛出 `RuntimeError` 要求精确位置数据
+
+```python
+# 旧行为（静默回退到估算）
+if sat_position is None:
+    slew_angle = self._calculate_simplified_slew_angle(...)
+
+# 新行为（抛出错误）
+if sat_position is None:
+    raise RuntimeError(
+        "Cannot get satellite position. "
+        "High precision mode requires exact position data."
+    )
+```
+
+**受影响的外部接口**:
+- 所有调度器初始化参数
+- 约束检查器构造函数
+- 命令行参数 `--simplified`
+
+**验证方法**:
+```python
+# 验证简化模式被拒绝
+try:
+    config = ConstraintConfig(mode="simplified")
+except ValueError as e:
+    print(f"Correctly rejected: {e}")
+
+# 验证精确模式正常工作
+config = ConstraintConfig(mode="standard")  # OK
+checker = MetaheuristicConstraintChecker(mission)  # OK
+```

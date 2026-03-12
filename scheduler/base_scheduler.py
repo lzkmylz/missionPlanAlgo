@@ -224,10 +224,6 @@ class BaseScheduler(ABC):
         self._iterations = 0
         self._convergence_curve = []
 
-        # 性能优化配置：使用简化机动检查加速贪心类算法
-        self._use_simplified_slew = self.config.get('use_simplified_slew', False)
-        self._slew_time_estimate = self.config.get('slew_time_estimate', 30.0)  # 默认30秒
-
         # 禁用实时轨道传播，强制使用预计算数据
         # 这是确保完整精确计算的一部分
         os.environ['DISABLE_REALTIME_PROPAGATION'] = '1'
@@ -246,8 +242,8 @@ class BaseScheduler(ABC):
     def _initialize_slew_checker(self) -> None:
         """初始化机动约束检查器
 
-        默认使用 BatchSlewConstraintChecker 以启用向量化批量计算优化。
-        这是所有调度器的默认姿态约束检查方案。
+        强制使用 BatchSlewConstraintChecker 以启用向量化批量计算优化。
+        高精度要求：所有调度器必须使用精确模型，禁止简化模式。
         """
         if self.mission is None:
             return
@@ -256,11 +252,8 @@ class BaseScheduler(ABC):
         if self._slew_checker is not None:
             return
 
-        # 在简化模式下跳过初始化以避免昂贵的计算
-        if self._use_simplified_slew:
-            return
-
-        # 默认使用批量姿态约束检查器（向量化优化）
+        # 强制使用批量姿态约束检查器（向量化优化）
+        # 高精度要求：禁止简化模式
         self._slew_checker = BatchSlewConstraintChecker(
             self.mission,
             use_precise_model=True
@@ -290,6 +283,10 @@ class BaseScheduler(ABC):
         Raises:
             ValueError: 如果 time_step_seconds 小于或等于 0
         """
+        # 参数验证必须在任何操作之前
+        if time_step_seconds <= 0:
+            raise ValueError(f"time_step_seconds must be positive, got {time_step_seconds}")
+
         if self.mission is None:
             return
 
@@ -304,9 +301,6 @@ class BaseScheduler(ABC):
             # Java数据已在批量传播器中，不需要预同步到_position_cache
             # _batch_precalculate_attitudes会直接从批量传播器批量获取所需位置
             return
-
-        if time_step_seconds <= 0:
-            raise ValueError(f"time_step_seconds must be positive, got {time_step_seconds}")
 
         import time
         from datetime import timedelta
@@ -352,8 +346,9 @@ class BaseScheduler(ABC):
                             if self._slew_checker is None and self._position_cache is not None:
                                 self._position_cache.set_position(sat.id, t, pos, vel)
                     continue
-                except Exception:
-                    pass  # 回退到逐点计算
+                except Exception as e:
+                    # 高精度要求：批量传播失败应抛出错误，而不是静默回退
+                    raise RuntimeError(f"批量轨道传播失败: {e}") from e
 
             # 逐点计算
             for t in discrete_times:
@@ -368,23 +363,21 @@ class BaseScheduler(ABC):
                         # Issue 1 Fix: Also store in position_cache when slew_checker is None
                         if self._slew_checker is None and self._position_cache is not None:
                             self._position_cache.set_position(sat.id, t, position, velocity)
-                except Exception:
-                    continue
+                except Exception as e:
+                    # 高精度要求：轨道传播失败应抛出错误
+                    raise RuntimeError(f"卫星状态计算失败 ({sat.id} at {t}): {e}") from e
 
         elapsed = time.time() - start_time
         if total_positions > 0:
             print(f"    预计算完成: {total_positions} 个位置 ({elapsed:.2f}s)")
 
     def _initialize_saa_checker(self) -> None:
-        """初始化 SAA 约束检查器 - 默认使用向量化批量优化"""
+        """初始化 SAA 约束检查器 - 强制使用向量化批量优化"""
         if self.mission is None:
             return
 
-        # 在简化模式下跳过初始化以避免昂贵的计算
-        if self._use_simplified_slew:
-            return
-
-        # 默认使用批量SAA约束检查器（向量化优化）
+        # 强制使用批量SAA约束检查器（向量化优化）
+        # 高精度要求：禁止简化模式
         self._saa_checker = BatchSAAConstraintChecker(
             self.mission,
             self._attitude_calculator
@@ -524,8 +517,9 @@ class BaseScheduler(ABC):
                 result = propagator.get_state_at_time(satellite.id, timestamp)
                 if result is not None:
                     return result
-        except Exception:
-            pass
+        except Exception as e:
+            # 高精度要求：批量传播器失败应记录或抛出错误
+            logger.warning(f"批量传播器获取状态失败 ({satellite.id} at {timestamp}): {e}")
 
         # 3. 如果缓存都不可用，使用卫星轨道传播
         try:
@@ -537,8 +531,9 @@ class BaseScheduler(ABC):
                     position = (state.x, state.y, state.z)
                     velocity = (state.vx, state.vy, state.vz)
                     return position, velocity
-        except Exception:
-            pass
+        except Exception as e:
+            # 高精度要求：轨道传播失败应抛出错误
+            raise RuntimeError(f"轨道传播失败 ({satellite.id} at {timestamp}): {e}") from e
 
         return None, None
 
@@ -972,8 +967,9 @@ class BaseScheduler(ABC):
                 attitude = self._calculate_attitude_from_cache(sat, target, imaging_time)
                 if attitude is not None:
                     results[(sat.id, imaging_time)] = attitude
-            except Exception:
-                pass
+            except Exception as e:
+                # 高精度要求：姿态计算失败应抛出错误
+                raise RuntimeError(f"姿态计算失败 ({sat.id} at {imaging_time}): {e}") from e
 
         return results
 
@@ -1074,43 +1070,41 @@ class BaseScheduler(ABC):
         # 确保_slew_checker已初始化
         self._ensure_slew_checker_initialized()
 
-        # 优先使用SlewConstraintChecker
-        if self._slew_checker is not None:
-            try:
-                # 获取卫星以取得最大侧摆角
-                sat = None
-                if self.mission:
-                    sat = self.mission.get_satellite_by_id(sat_id)
+        # 高精度要求：必须使用SlewConstraintChecker进行精确计算
+        if self._slew_checker is None:
+            raise RuntimeError(
+                "Slew checker not initialized. "
+                "High precision mode requires SlewConstraintChecker for slew estimation."
+            )
 
-                if sat:
-                    # 使用SlewConstraintChecker的简化计算方法
-                    slew_angle = self._slew_checker._calculate_simplified_slew_angle(
-                        prev_target, current_target
-                    )
-                    max_slew_angle = sat.capabilities.max_off_nadir
-                    slew_angle = min(slew_angle, max_slew_angle)
+        try:
+            # 获取卫星以取得最大侧摆角
+            sat = None
+            if self.mission:
+                sat = self.mission.get_satellite_by_id(sat_id)
 
-                    # 获取SlewCalculator计算机动时间
-                    slew_calc = self._slew_checker._slew_calculators.get(sat_id)
-                    if slew_calc:
-                        slew_time = slew_calc.calculate_slew_time(slew_angle)
-                        return slew_angle, slew_time
-            except Exception:
-                # 如果SlewConstraintChecker失败，回退到简化计算
-                pass
-
-        # 回退到简化计算（与原始代码一致）
-        lon_diff = current_target.longitude - prev_target.longitude
-        lat_diff = current_target.latitude - prev_target.latitude
-        slew_angle = math.sqrt(lon_diff**2 + lat_diff**2)
-
-        # 限制在最大侧摆角内
-        if self.mission:
-            sat = self.mission.get_satellite_by_id(sat_id)
             if sat:
-                slew_angle = min(slew_angle, sat.capabilities.max_off_nadir)
+                # 使用精确机动角度计算
+                slew_result = self._slew_checker.check_slew_feasibility(
+                    sat_id, prev_target, current_target,
+                    datetime.now(), datetime.now()  # 时间参数在此场景中不重要
+                )
+                if slew_result and slew_result.feasible:
+                    return slew_result.slew_angle, slew_result.slew_time
 
-        return slew_angle, 0.0  # 简化计算不计算机动时间
+            # 如果计算失败，抛出错误（高精度要求：不允许回退到简化计算）
+            raise RuntimeError(
+                "Failed to calculate precise slew angle and time. "
+                "High precision mode requires exact calculations."
+            )
+        except RuntimeError:
+            raise
+        except Exception as e:
+            # 高精度要求：精确计算失败时抛出错误，不回退
+            raise RuntimeError(
+                f"Slew calculation failed: {e}. "
+                "High precision mode requires exact calculations."
+            ) from e
 
     def _initialize_attitude_checker(self) -> None:
         """初始化姿态约束检查器"""

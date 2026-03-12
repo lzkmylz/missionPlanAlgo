@@ -106,7 +106,6 @@ class SlewChecker:
         prev_end_time: datetime,
         window_start: datetime,
         imaging_duration: float,
-        use_simplified: bool = False,
     ) -> ConstraintResult:
         """Check slew feasibility.
 
@@ -117,7 +116,6 @@ class SlewChecker:
             prev_end_time: End time of previous task
             window_start: Window start time
             imaging_duration: Required imaging duration
-            use_simplified: Use simplified calculation
 
         Returns:
             ConstraintResult with slew information
@@ -131,30 +129,14 @@ class SlewChecker:
 
         if prev_target is None:
             # First task for this satellite: calculate from nadir to target
-            # For simplified model, use a reasonable default slew angle
             slew_angle = self._calculate_slew_angle(None, current_target)
             result.slew_angle = slew_angle
-
-            if use_simplified:
-                result.slew_time = 5.0 + 2.0 * min(slew_angle, 45.0)
-            else:
-                slew_time = calculator.calculate_slew_time(slew_angle)
-                result.slew_time = slew_time
+            slew_time = calculator.calculate_slew_time(slew_angle)
+            result.slew_time = slew_time
             result.actual_start = window_start + timedelta(seconds=result.slew_time)
             return result
 
-        if use_simplified:
-            # Simplified mode: calculate basic slew angle but use default settling time
-            slew_angle = self._calculate_slew_angle(prev_target, current_target)
-            result.slew_angle = slew_angle
-            # Use a simple linear model for slew time in simplified mode
-            # 5 seconds base + 2 seconds per degree
-            slew_time = 5.0 + 2.0 * min(slew_angle, 45.0)  # Cap at 45 degrees
-            result.slew_time = slew_time
-            result.actual_start = window_start
-            return result
-
-        # Calculate slew angle using target positions
+        # Calculate slew angle using target positions (high precision mode)
         slew_angle = self._calculate_slew_angle(prev_target, current_target)
         result.slew_angle = slew_angle
 
@@ -1050,7 +1032,6 @@ class ConstraintChecker:
             prev_end_time=prev_end,
             window_start=context.window_start,
             imaging_duration=imaging_duration,
-            use_simplified=(self.config.mode == 'simplified'),
         )
 
     def _check_saa(self, context: ConstraintContext) -> ConstraintResult:

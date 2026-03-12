@@ -34,7 +34,7 @@ def example_traditional_vs_unified():
         config={
             'consider_power': True,
             'consider_storage': True,
-            'use_simplified_slew': True,
+            # 高精度要求：始终使用精确模式
             'use_unified_constraints': False,  # 禁用统一约束
         }
     )
@@ -46,7 +46,7 @@ def example_traditional_vs_unified():
         config={
             'consider_power': True,
             'consider_storage': True,
-            'use_simplified_slew': True,
+            # 高精度要求：始终使用精确模式
             'use_unified_constraints': True,  # 启用统一约束
         }
     )
@@ -152,7 +152,7 @@ def example_batch_check():
     checker = MetaheuristicConstraintChecker(
         mission,
         config={
-            'use_simplified_slew': True,
+            # 高精度要求：始终使用精确模式
             'use_unified_constraints': True,
         }
     )

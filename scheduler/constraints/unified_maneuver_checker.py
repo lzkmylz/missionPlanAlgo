@@ -119,19 +119,16 @@ class UnifiedManeuverChecker:
     def __init__(
         self,
         mission: Mission,
-        config: Optional[AttitudeManagementConfig] = None,
-        use_simplified_slew: bool = False
+        config: Optional[AttitudeManagementConfig] = None
     ):
         """初始化统一机动约束检查器
 
         Args:
             mission: 任务对象
             config: 姿态管理配置，如果为None则使用默认配置
-            use_simplified_slew: 是否使用简化机动计算（用于测试）
         """
         self.mission = mission
         self.config = config if config is not None else AttitudeManagementConfig()
-        self._use_simplified_slew = use_simplified_slew
 
         # 初始化姿态管理器
         self.attitude_manager = AttitudeManager(self.config)
@@ -250,14 +247,7 @@ class UnifiedManeuverChecker:
         if hasattr(target, 'latitude') and hasattr(target, 'longitude'):
             target_position = (target.latitude, target.longitude)
 
-        # 4. 使用简化模型或完整模型
-        if self._use_simplified_slew:
-            return self._check_simplified(
-                satellite_id, sat_state, window_start, window_end,
-                imaging_duration, task_id
-            )
-
-        # 5. 计算姿态切换
+        # 4. 计算姿态切换（高精度要求：始终使用精确模型）
         try:
             transition_result = self.attitude_manager.plan_transition(
                 from_mode=from_mode,
@@ -364,53 +354,6 @@ class UnifiedManeuverChecker:
             to_mode=to_mode,
             power_before=power_before,
             power_after=power_after,
-            window_available=True,
-            slew_feasible=True
-        )
-
-    def _check_simplified(
-        self,
-        satellite_id: str,
-        sat_state: SatelliteTaskState,
-        window_start: datetime,
-        window_end: datetime,
-        imaging_duration: float,
-        task_id: Optional[str] = None
-    ) -> ManeuverCheckResult:
-        """简化机动检查（用于快速评估）"""
-        slew_time = 30.0  # 默认30秒机动时间
-        earliest_start = sat_state.last_end_time + timedelta(seconds=slew_time)
-        actual_start = max(window_start, earliest_start)
-        actual_end = actual_start + timedelta(seconds=imaging_duration)
-
-        # 检查窗口边界
-        if actual_end > window_end:
-            return ManeuverCheckResult(
-                feasible=False,
-                actual_start=actual_start,
-                actual_end=actual_end,
-                slew_time=slew_time,
-                window_available=False,
-                conflict_reason=f"Window too short"
-            )
-
-        # 检查时间冲突
-        conflict_task = self._find_time_conflict(satellite_id, actual_start, actual_end)
-        if conflict_task:
-            return ManeuverCheckResult(
-                feasible=False,
-                actual_start=actual_start,
-                actual_end=actual_end,
-                slew_time=slew_time,
-                conflict_reason=f"Time conflict with task {conflict_task.task_id}",
-                conflict_with=conflict_task.task_id
-            )
-
-        return ManeuverCheckResult(
-            feasible=True,
-            actual_start=actual_start,
-            actual_end=actual_end,
-            slew_time=slew_time,
             window_available=True,
             slew_feasible=True
         )

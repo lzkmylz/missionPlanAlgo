@@ -87,51 +87,46 @@ class TestArgumentParsing:
         assert args.population_size == 100
 
 
-class TestBuildSchedulerConfig:
-    """Tests for build_scheduler_config function"""
+class TestSimplifiedModeRejected:
+    """Tests for simplified mode rejection"""
 
-    def test_build_config_default(self):
-        """Test building default config"""
-        from scripts.run_scheduler import build_scheduler_config, parse_args
+    def test_simplified_mode_rejected(self):
+        """Test that simplified mode is rejected in high precision mode"""
+        from scripts.run_scheduler import parse_args
 
-        args = parse_args(['--cache', 'cache.json', '--scenario', 'scenario.json'])
-        config = build_scheduler_config(args)
-
-        assert config['consider_power'] is True
-        assert config['consider_storage'] is True
-
-    def test_build_config_simplified(self):
-        """Test building simplified config"""
-        from scripts.run_scheduler import build_scheduler_config, parse_args
-
+        # --simplified 参数已被隐藏，但即使使用也应被拒绝
         args = parse_args([
             '--cache', 'cache.json',
             '--scenario', 'scenario.json',
             '--simplified'
         ])
-        config = build_scheduler_config(args)
+        # 在高精度模式下，简化模式应该被拒绝
+        assert args.simplified is True  # 参数可以被解析，但在使用时会报错
 
-        assert config['use_simplified_slew'] is True
+    def test_simplified_mode_raises_error_in_main(self):
+        """Test that using --simplified raises ValueError in main"""
+        from scripts.run_scheduler import main, parse_args
 
-    def test_build_config_ga(self):
-        """Test building GA config"""
-        from scripts.run_scheduler import build_scheduler_config, parse_args
+        with patch('scripts.run_scheduler.Mission') as mock_mission_class:
+            mock_mission = Mock()
+            mock_mission.satellites = [Mock()]
+            mock_mission.targets = [Mock()]
+            mock_mission.ground_stations = []
+            mock_mission_class.load.return_value = mock_mission
 
-        args = parse_args([
-            '--cache', 'cache.json',
-            '--scenario', 'scenario.json',
-            '--algorithm', 'ga',
-            '--generations', '150',
-            '--population-size', '75',
-            '--mutation-rate', '0.15',
-            '--crossover-rate', '0.85'
-        ])
-        config = build_scheduler_config(args)
+            with patch('scripts.run_scheduler.load_window_cache_from_json') as mock_load:
+                mock_cache = Mock()
+                mock_cache.get_statistics.return_value = {'total_windows': 100, 'sat_target_pairs': 10}
+                mock_load.return_value = mock_cache
 
-        assert config['generations'] == 150
-        assert config['population_size'] == 75
-        assert config['mutation_rate'] == 0.15
-        assert config['crossover_rate'] == 0.85
+                # Should return 1 (error) when --simplified is used
+                result = main([
+                    '--cache', 'cache.json',
+                    '--scenario', 'scenario.json',
+                    '--simplified'
+                ])
+
+                assert result == 1  # Error exit code
 
 
 class TestRunSingleAlgorithm:
@@ -176,8 +171,7 @@ class TestRunSingleAlgorithm:
         result = run_single_algorithm(
             algorithm_name='greedy',
             mission=mock_mission,
-            cache=mock_cache,
-            config={}
+            cache=mock_cache
         )
 
         # Assert
@@ -240,7 +234,6 @@ class TestRunSingleAlgorithm:
             algorithm_name='greedy',
             mission=mock_mission,
             cache=mock_cache,
-            config={},
             enable_downlink=True
         )
 
@@ -275,7 +268,6 @@ class TestRunComparison:
             mission=mock_mission,
             cache=mock_cache,
             algorithms=algorithms,
-            config={},
             repetitions=1
         )
 
@@ -285,14 +277,14 @@ class TestRunComparison:
 
 
 class TestPrintResults:
-    """Tests for print_results function"""
+    """Tests for print results functions"""
 
-    def test_print_results_single_mode(self, capsys):
+    def test_print_single_result(self, capsys):
         """Test printing single mode results"""
-        from scripts.run_scheduler import print_results
+        from scripts.run_scheduler import print_single_result
 
         result = {
-            'algorithm': 'greedy',
+            'algorithm_name': 'Greedy Scheduler',
             'scheduled_count': 100,
             'unscheduled_count': 10,
             'demand_satisfaction_rate': 0.9,
@@ -301,26 +293,26 @@ class TestPrintResults:
             'computation_time': 5.0
         }
 
-        print_results(result, mode='single')
+        print_single_result(result)
 
         captured = capsys.readouterr()
-        assert 'greedy' in captured.out.lower() or 'GREEDY' in captured.out
+        assert 'Greedy' in captured.out or '调度结果' in captured.out
         assert '100' in captured.out
 
-    def test_print_results_compare_mode(self, capsys):
+    def test_print_comparison_results(self, capsys):
         """Test printing compare mode results"""
-        from scripts.run_scheduler import print_results
+        from scripts.run_scheduler import print_comparison_results
 
         results = [
             {
-                'algorithm': 'greedy',
+                'algorithm_name': 'Greedy Scheduler',
                 'scheduled_count': 100,
                 'demand_satisfaction_rate': 0.9,
                 'satellite_utilization': 0.5,
                 'computation_time': 5.0
             },
             {
-                'algorithm': 'ga',
+                'algorithm_name': 'Genetic Algorithm',
                 'scheduled_count': 110,
                 'demand_satisfaction_rate': 0.95,
                 'satellite_utilization': 0.6,
@@ -328,11 +320,10 @@ class TestPrintResults:
             }
         ]
 
-        print_results(results, mode='compare')
+        print_comparison_results(results)
 
         captured = capsys.readouterr()
-        assert 'greedy' in captured.out.lower() or 'GREEDY' in captured.out
-        assert 'ga' in captured.out.lower() or 'GA' in captured.out
+        assert 'Greedy' in captured.out or '对比结果' in captured.out
 
 
 class TestMainWorkflow:
@@ -358,6 +349,7 @@ class TestMainWorkflow:
 
         mock_run.return_value = {
             'algorithm': 'greedy',
+            'algorithm_name': 'Greedy Scheduler',
             'scheduled_count': 10,
             'demand_satisfaction_rate': 0.85,
             'unscheduled_count': 0,

@@ -37,10 +37,10 @@ def example_basic_usage():
     for sat in mission.satellites:
         slew_checker.initialize_satellite(sat)
 
+    # 高精度要求：始终使用精确模式
     checker = UnifiedSpatiotemporalChecker(
         mission=mission,
-        slew_checker=slew_checker,
-        use_simplified_slew=False
+        slew_checker=slew_checker
     )
 
     # 示例：检查一个任务
@@ -96,9 +96,9 @@ def example_time_conflict():
     scenario_path = "scenarios/large_scale_frequency.json"
     mission = Mission.load(scenario_path)
 
+    # 高精度要求：始终使用精确模式
     checker = UnifiedSpatiotemporalChecker(
-        mission=mission,
-        use_simplified_slew=True
+        mission=mission
     )
 
     satellite = mission.satellites[0]
