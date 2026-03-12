@@ -6,6 +6,9 @@
 
 重构说明：此模块现在委托给 scheduler.common.constraint_checker 中的
 统一约束检查器，消除代码重复。
+
+更新：已统一使用批量约束检查器（UnifiedBatchConstraintChecker），
+与greedy调度器保持一致，支持向量化批量优化。
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -15,6 +18,15 @@ import logging
 from core.models import Mission, Satellite, Target
 from scheduler.base_scheduler import ScheduledTask, TaskFailureReason
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
+
+# 批量约束检查器导入 - 与greedy调度器保持一致
+from scheduler.constraints.unified_batch_constraint_checker import (
+    UnifiedBatchConstraintChecker, UnifiedBatchCandidate
+)
+from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstraintChecker
+from scheduler.constraints.batch_saa_constraint_checker import BatchSAAConstraintChecker
+
+# 传统检查器保留用于向后兼容
 from scheduler.constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.constraints.saa_constraint_checker import SAAConstraintChecker
 from scheduler.constraints import UnifiedSpatiotemporalChecker, SpatiotemporalCheckResult
@@ -32,6 +44,9 @@ class MetaheuristicConstraintChecker:
 
     将贪心算法中的约束检查逻辑提取为可复用组件，
     供所有元启发式算法统一使用。
+
+    更新：已统一使用批量约束检查器（UnifiedBatchConstraintChecker），
+    与greedy调度器保持一致，支持向量化批量优化。
     """
 
     def __init__(self, mission: Mission, config: Dict[str, Any] = None):
@@ -44,6 +59,7 @@ class MetaheuristicConstraintChecker:
                 - consider_power: 是否考虑电量约束（默认True）
                 - consider_storage: 是否考虑存储约束（默认True）
                 - use_simplified_slew: 是否使用简化机动检查（默认False）
+                - use_batch_checker: 是否使用批量约束检查器（默认True，与greedy一致）
         """
         self.mission = mission
         self.config = config or {}
@@ -51,6 +67,8 @@ class MetaheuristicConstraintChecker:
         self.consider_power = self.config.get('consider_power', True)
         self.consider_storage = self.config.get('consider_storage', True)
         self.use_simplified_slew = self.config.get('use_simplified_slew', False)
+        # 默认启用批量检查器（与greedy调度器保持一致）
+        self.use_batch_checker = self.config.get('use_batch_checker', True)
 
         # 初始化成像时间计算器
         self._imaging_calculator = ImagingTimeCalculator(
@@ -60,7 +78,17 @@ class MetaheuristicConstraintChecker:
         )
         self._power_profile = PowerProfile(self.config.get('power_coefficients'))
 
-        # 统一约束检查器（优先使用，消除代码重复）
+        # 批量约束检查器（优先使用，与greedy调度器一致）
+        self._batch_constraint_checker: Optional[UnifiedBatchConstraintChecker] = None
+        if self.use_batch_checker and not self.use_simplified_slew:
+            self._batch_constraint_checker = UnifiedBatchConstraintChecker(
+                mission=mission,
+                use_precise_model=True,
+                consider_power=self.consider_power,
+                consider_storage=self.consider_storage
+            )
+
+        # 统一约束检查器（向后兼容，简化模式使用）
         constraint_config = ConstraintConfig(
             consider_power=self.consider_power,
             consider_storage=self.consider_storage,
@@ -90,13 +118,18 @@ class MetaheuristicConstraintChecker:
         """初始化约束检查器和资源跟踪"""
         self._initialize_resource_tracking()
 
-        # 优先初始化统一约束检查器（消除代码重复）
+        # 初始化批量约束检查器（与greedy调度器一致）
+        if self._batch_constraint_checker is not None:
+            logger.info("Initialized UnifiedBatchConstraintChecker for batch constraint checking")
+
+        # 优先初始化统一约束检查器（向后兼容，简化模式使用）
         if self._unified_constraint_checker is not None:
             self._unified_constraint_checker.initialize()
 
         # 向后兼容：初始化传统约束检查器
-        self._initialize_slew_checker()
-        self._initialize_saa_checker()
+        if not self.use_batch_checker or self.use_simplified_slew:
+            self._initialize_slew_checker()
+            self._initialize_saa_checker()
         self._initialize_unified_checker()
         self._initialize_maneuver_checker()
 
@@ -296,7 +329,8 @@ class MetaheuristicConstraintChecker:
         """
         检查单个任务分配的可行性
 
-        优先使用统一约束检查器，消除与GreedyScheduler的代码重复。
+        优先使用批量约束检查器（UnifiedBatchConstraintChecker），
+        与GreedyScheduler保持一致，支持向量化批量优化。
 
         Args:
             sat_id: 卫星ID
@@ -325,7 +359,89 @@ class MetaheuristicConstraintChecker:
         prev_target = usage.get('last_target')
         scheduled_tasks = usage.get('scheduled_tasks', [])
 
-        # 优先使用统一约束检查器
+        # 优先使用批量约束检查器（与greedy调度器一致）
+        if self._batch_constraint_checker is not None:
+            # 计算资源需求
+            power_needed = 0.0
+            storage_produced = 0.0
+            if self.consider_power:
+                power_coefficient = 0.1  # 默认系数
+                power_needed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
+            if self.consider_storage:
+                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                storage_produced = self._imaging_calculator.get_storage_consumption(target, imaging_mode, data_rate)
+
+            # 获取卫星位置（使用默认值，因为在工具类中可能没有实时位置计算）
+            import math
+            R_earth = 6371000.0  # 地球半径（米）
+            alt = 500000.0  # 默认高度500km
+            sat_position = (R_earth + alt, 0.0, 0.0)
+            sat_velocity = (0.0, 7000.0, 0.0)  # 默认速度约7km/s
+
+            # 构建批量检查候选
+            candidate = UnifiedBatchCandidate(
+                sat_id=sat_id,
+                satellite=sat,
+                target=target,
+                window_start=window_start,
+                window_end=window_end,
+                prev_end_time=last_task_end if last_task_end else self.mission.start_time,
+                imaging_duration=imaging_duration,
+                prev_target=prev_target,
+                power_needed=power_needed,
+                storage_produced=storage_produced,
+                sat_position=sat_position,
+                sat_velocity=sat_velocity
+            )
+
+            # 构建卫星状态字典
+            satellite_states = {
+                sat_id: {
+                    'power': usage.get('power', sat.capabilities.power_capacity),
+                    'storage': usage.get('storage', 0.0)
+                }
+            }
+
+            # 构建已调度任务列表
+            existing_tasks = [
+                {
+                    'satellite_id': sat_id,
+                    'start_time': task['start'],
+                    'end_time': task['end']
+                }
+                for task in scheduled_tasks
+            ]
+
+            # 执行批量约束检查
+            results = self._batch_constraint_checker.check_all_constraints_batch(
+                candidates=[candidate],
+                existing_tasks=existing_tasks,
+                satellite_states=satellite_states,
+                early_termination=True
+            )
+
+            if not results or not results[0].feasible:
+                result = results[0] if results else None
+                reason = result.reason if result and result.reason else "Constraint violation"
+                return False, reason, None
+
+            result = results[0]
+            actual_start = result.slew_result.actual_start if result.slew_result else window_start
+            actual_end = actual_start + timedelta(seconds=imaging_duration)
+
+            # 构建额外信息
+            info = {
+                'imaging_mode': imaging_mode,
+                'imaging_duration': imaging_duration,
+                'slew_angle': result.slew_result.slew_angle if result.slew_result else 0.0,
+                'slew_time': result.slew_result.slew_time if result.slew_result else 0.0,
+                'actual_start': actual_start,
+                'actual_end': actual_end,
+            }
+
+            return True, None, info
+
+        # 回退到传统统一约束检查器（向后兼容，简化模式使用）
         if self._unified_constraint_checker is not None:
             context = ConstraintContext(
                 satellite=sat,
@@ -555,12 +671,14 @@ class MetaheuristicConstraintChecker:
         task_id: Optional[str] = None
     ) -> SpatiotemporalCheckResult:
         """
-        使用统一时空约束检查器检查任务放置
+        使用批量约束检查器检查任务放置（与greedy调度器一致）
 
-        这是推荐的约束检查方法，它将以下约束统一考虑：
+        优先使用 UnifiedBatchConstraintChecker 进行向量化批量优化：
         - 时间窗口冲突（与已调度任务）
         - 机动能力约束
         - 机动时间约束
+        - SAA约束
+        - 资源约束
 
         Args:
             sat_id: 卫星ID
@@ -573,20 +691,114 @@ class MetaheuristicConstraintChecker:
         Returns:
             SpatiotemporalCheckResult: 统一约束检查结果
         """
-        if self._unified_checker is None:
-            # 如果统一检查器未初始化，使用旧的分别检查方法
-            logger.warning("Unified checker not initialized, using separate checks")
-            return self._check_task_placement_legacy(
-                sat_id, target, window_start, window_end, imaging_duration, task_id
+        # 优先使用批量约束检查器（与greedy调度器一致）
+        if self._batch_constraint_checker is not None:
+            sat = self.mission.get_satellite_by_id(sat_id)
+            if not sat:
+                return SpatiotemporalCheckResult(
+                    feasible=False,
+                    conflict_reason="Satellite not found"
+                )
+
+            # 获取资源使用情况
+            usage = self._sat_resource_usage.get(sat_id, {})
+            last_task_end = usage.get('last_task_end', self.mission.start_time)
+            prev_target = usage.get('last_target')
+            scheduled_tasks = usage.get('scheduled_tasks', [])
+
+            # 计算资源需求
+            power_needed = 0.0
+            storage_produced = 0.0
+            if self.consider_power:
+                power_coefficient = 0.1
+                power_needed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
+            if self.consider_storage:
+                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                storage_produced = self._imaging_calculator.get_storage_consumption(target, None, data_rate)
+
+            # 获取卫星位置（使用默认值）
+            import math
+            R_earth = 6371000.0  # 地球半径（米）
+            alt = 500000.0  # 默认高度500km
+            sat_position = (R_earth + alt, 0.0, 0.0)
+            sat_velocity = (0.0, 7000.0, 0.0)  # 默认速度约7km/s
+
+            # 构建批量检查候选
+            candidate = UnifiedBatchCandidate(
+                sat_id=sat_id,
+                satellite=sat,
+                target=target,
+                window_start=window_start,
+                window_end=window_end,
+                prev_end_time=last_task_end if last_task_end else self.mission.start_time,
+                imaging_duration=imaging_duration,
+                prev_target=prev_target,
+                power_needed=power_needed,
+                storage_produced=storage_produced,
+                sat_position=sat_position,
+                sat_velocity=sat_velocity
             )
 
-        return self._unified_checker.check_task_placement(
-            satellite_id=sat_id,
-            target=target,
-            window_start=window_start,
-            window_end=window_end,
-            imaging_duration=imaging_duration,
-            task_id=task_id
+            # 构建卫星状态字典
+            satellite_states = {
+                sat_id: {
+                    'power': usage.get('power', sat.capabilities.power_capacity),
+                    'storage': usage.get('storage', 0.0)
+                }
+            }
+
+            # 构建已调度任务列表
+            existing_tasks = [
+                {
+                    'satellite_id': sat_id,
+                    'start_time': task['start'],
+                    'end_time': task['end']
+                }
+                for task in scheduled_tasks
+            ]
+
+            # 执行批量约束检查
+            results = self._batch_constraint_checker.check_all_constraints_batch(
+                candidates=[candidate],
+                existing_tasks=existing_tasks,
+                satellite_states=satellite_states,
+                early_termination=True
+            )
+
+            if not results:
+                return SpatiotemporalCheckResult(
+                    feasible=False,
+                    conflict_reason="Batch check failed"
+                )
+
+            result = results[0]
+
+            return SpatiotemporalCheckResult(
+                feasible=result.feasible,
+                actual_start=result.slew_result.actual_start if result.slew_result else window_start,
+                actual_end=result.slew_result.actual_start + timedelta(seconds=imaging_duration) if result.slew_result else window_end,
+                slew_angle=result.slew_result.slew_angle if result.slew_result else 0.0,
+                slew_time=result.slew_result.slew_time if result.slew_result else 0.0,
+                window_available=result.slew_result is not None and result.slew_result.feasible if result.slew_result else False,
+                slew_feasible=result.slew_feasible,
+                conflict_reason=result.reason
+            )
+
+        # 回退到传统统一时空检查器
+        if self._unified_checker is not None:
+            return self._unified_checker.check_task_placement(
+                satellite_id=sat_id,
+                target=target,
+                window_start=window_start,
+                window_end=window_end,
+                imaging_duration=imaging_duration,
+                task_id=task_id
+            )
+
+        # 如果统一检查器未初始化，使用旧的分别检查方法
+        logger.warning("Batch and unified checkers not initialized, using legacy checks")
+        return self._check_task_placement_legacy(
+            sat_id, target, window_start, window_end, imaging_duration, task_id
         )
 
     def _check_task_placement_legacy(

@@ -17,6 +17,12 @@ from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 from payload.imaging_time_calculator import ImagingTimeCalculator
 from core.models import Mission, ImagingMode
 
+# 批量约束检查器导入 - 与greedy调度器保持一致
+from scheduler.constraints.unified_batch_constraint_checker import (
+    UnifiedBatchConstraintChecker, UnifiedBatchCandidate
+)
+from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstraintChecker
+
 
 @dataclass
 class Solution:
@@ -238,13 +244,6 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             consider_storage=self._config.constraints.consider_storage,
         )
 
-        # Constraint checker
-        self._constraint_checker = ConstraintChecker(
-            mission=self.mission,
-            config=self._config.constraints,
-        )
-        self._constraint_checker.initialize()
-
         # Task time manager
         self._task_time_manager = TaskTimeManager(self.sat_count)
 
@@ -255,8 +254,30 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             default_duration=self._config.default_imaging_duration,
         )
 
-        # 预计算卫星位置以加速姿态角计算（默认启用，除非显式禁用）
+        # 初始化批量约束检查器（与greedy调度器保持一致，使用向量化批量优化）
         use_simplified = self._config.constraints.mode == 'simplified'
+        if not use_simplified:
+            # 使用统一批量约束检查器（向量化优化）
+            self._batch_constraint_checker = UnifiedBatchConstraintChecker(
+                mission=self.mission,
+                use_precise_model=True,
+                consider_power=self._config.constraints.consider_power,
+                consider_storage=self._config.constraints.consider_storage
+            )
+            # 同时初始化基类的批量检查器
+            self._slew_checker = BatchSlewConstraintChecker(
+                self.mission,
+                use_precise_model=True
+            )
+        else:
+            # 简化模式：使用传统约束检查器
+            self._constraint_checker = ConstraintChecker(
+                mission=self.mission,
+                config=self._config.constraints,
+            )
+            self._constraint_checker.initialize()
+
+        # 预计算卫星位置以加速姿态角计算（默认启用，除非显式禁用）
         precompute_enabled = self.config.get('precompute_positions', True) if self.config else True
         if not use_simplified and precompute_enabled:
             print("    预计算卫星位置...")
@@ -320,6 +341,9 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
     ) -> None:
         """Evaluate single task assignment.
 
+        Uses batch constraint checking (UnifiedBatchConstraintChecker) for consistency
+        with greedy scheduler and optimal performance.
+
         Args:
             task_idx: Index of task in tasks list
             sat_idx: Index of assigned satellite
@@ -344,6 +368,119 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         if not actual_start or actual_end > feasible_window.end_time:
             return
 
+        # 使用批量约束检查器（与greedy调度器一致）
+        if hasattr(self, '_batch_constraint_checker') and self._batch_constraint_checker is not None:
+            # 构建批量检查候选
+            prev_target = state.sat_last_target.get(sat_idx)
+            prev_end_time = state.sat_last_end_time.get(sat_idx)
+
+            # 计算资源需求
+            power_needed = 0.0
+            storage_produced = 0.0
+            if self._config.constraints.consider_power:
+                power_coefficient = 0.1  # 默认系数
+                power_needed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
+            if self._config.constraints.consider_storage:
+                data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                storage_produced = self._imaging_calculator.get_storage_consumption(task, imaging_mode, data_rate)
+
+            # 获取卫星位置（从缓存或实时计算）
+            sat_position = None
+            sat_velocity = None
+            if hasattr(self, '_position_cache') and self._position_cache is not None:
+                # 尝试从位置缓存获取
+                pos_vel = self._position_cache.get_position(sat.id, actual_start)
+                if pos_vel:
+                    sat_position, sat_velocity = pos_vel
+
+            # 如果缓存中没有，尝试从姿态计算器获取
+            if sat_position is None and hasattr(self, '_attitude_calculator'):
+                try:
+                    sat_position, sat_velocity = self._attitude_calculator._get_satellite_state(sat, actual_start)
+                except Exception:
+                    pass
+
+            # 如果仍然没有位置，使用默认值（地球表面上方500km）
+            if sat_position is None:
+                import math
+                R_earth = 6371000.0  # 地球半径（米）
+                alt = 500000.0  # 默认高度500km
+                sat_position = (R_earth + alt, 0.0, 0.0)
+                sat_velocity = (0.0, 7000.0, 0.0)  # 默认速度约7km/s
+
+            candidate = UnifiedBatchCandidate(
+                sat_id=sat.id,
+                satellite=sat,
+                target=task,
+                window_start=actual_start,
+                window_end=actual_end,
+                prev_end_time=prev_end_time if prev_end_time else self.mission.start_time,
+                imaging_duration=imaging_duration,
+                prev_target=prev_target,
+                power_needed=power_needed,
+                storage_produced=storage_produced,
+                sat_position=sat_position,
+                sat_velocity=sat_velocity
+            )
+
+            # 构建卫星状态字典
+            satellite_states = {
+                sat.id: {
+                    'power': state.sat_resources[sat_idx]['power'],
+                    'storage': state.sat_resources[sat_idx]['storage']
+                }
+            }
+
+            # 构建已调度任务列表（用于时间冲突检查）
+            existing_tasks = []
+            for start, end in state.sat_task_times[sat_idx]:
+                existing_tasks.append({
+                    'satellite_id': sat.id,
+                    'start_time': start,
+                    'end_time': end
+                })
+
+            # 执行批量约束检查
+            results = self._batch_constraint_checker.check_all_constraints_batch(
+                candidates=[candidate],
+                existing_tasks=existing_tasks,
+                satellite_states=satellite_states,
+                early_termination=True
+            )
+
+            if not results or not results[0].feasible:
+                return
+
+            result = results[0]
+
+            # Update state for scheduled task
+            state.score += 10.0
+            state.scheduled_count += 1
+
+            target_id = getattr(task, 'target_id', str(task_idx))
+            state.target_obs_count[target_id] = state.target_obs_count.get(target_id, 0) + 1
+
+            state.sat_task_times[sat_idx].append((actual_start, actual_end))
+            state.sat_last_target[sat_idx] = task
+            state.sat_last_end_time[sat_idx] = actual_end
+
+            # Update resources
+            if self._config.constraints.consider_power:
+                state.sat_resources[sat_idx]['power'] -= power_needed
+            if self._config.constraints.consider_storage:
+                state.sat_resources[sat_idx]['storage'] += storage_produced
+        else:
+            # 回退到传统约束检查（简化模式）
+            self._evaluate_task_assignment_legacy(task_idx, sat_idx, state, sat, task,
+                                                   feasible_window, imaging_mode, imaging_duration,
+                                                   actual_start, actual_end)
+
+    def _evaluate_task_assignment_legacy(
+        self, task_idx: int, sat_idx: int, state: EvaluationState,
+        sat: Any, task: Any, feasible_window: Any, imaging_mode: Any,
+        imaging_duration: float, actual_start: datetime, actual_end: datetime
+    ) -> None:
+        """传统任务分配评估（向后兼容，简化模式使用）"""
         # Check SAA
         if not self._is_saa_feasible(sat.id, feasible_window):
             return
@@ -416,22 +553,30 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
     def _is_saa_feasible(self, sat_id: str, window: Any) -> bool:
         """Check if window is feasible w.r.t. SAA constraints.
 
-        Uses the unified constraint checker to perform SAA validation.
+        Uses the batch constraint checker for optimal performance.
         """
-        if self._constraint_checker is None:
-            return True  # Cannot check without constraint checker
-
         if not hasattr(window, 'start_time') or not hasattr(window, 'end_time'):
             return True  # Invalid window format
 
-        # Use the constraint checker's SAA checker if available
-        if hasattr(self._constraint_checker, '_saa_checker'):
-            result = self._constraint_checker._saa_checker.check_saa(
-                sat_id=sat_id,
-                start_time=window.start_time,
-                end_time=window.end_time,
-            )
-            return result.feasible
+        # 优先使用批量检查器的SAA检查器
+        if hasattr(self, '_batch_constraint_checker') and self._batch_constraint_checker is not None:
+            if hasattr(self._batch_constraint_checker, '_saa_checker'):
+                result = self._batch_constraint_checker._saa_checker.check_saa(
+                    sat_id=sat_id,
+                    start_time=window.start_time,
+                    end_time=window.end_time,
+                )
+                return result.feasible
+
+        # 回退到传统检查器
+        if hasattr(self, '_constraint_checker') and self._constraint_checker is not None:
+            if hasattr(self._constraint_checker, '_saa_checker'):
+                result = self._constraint_checker._saa_checker.check_saa(
+                    sat_id=sat_id,
+                    start_time=window.start_time,
+                    end_time=window.end_time,
+                )
+                return result.feasible
 
         return True  # Fallback if SAA checker not available
 
