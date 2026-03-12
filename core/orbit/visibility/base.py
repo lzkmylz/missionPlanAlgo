@@ -10,6 +10,8 @@ from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
 import math
 
+from core.constants import EARTH_RADIUS_M as CONST_EARTH_RADIUS_M
+
 
 @dataclass(frozen=True, slots=True)
 class VisibilityWindow:
@@ -55,7 +57,7 @@ class VisibilityCalculator(ABC):
             min_elevation: 最小仰角（度）
         """
         self.min_elevation = min_elevation
-        self.EARTH_RADIUS = 6371000.0  # 米
+        self.EARTH_RADIUS = CONST_EARTH_RADIUS_M  # 米
 
     @abstractmethod
     def compute_satellite_target_windows(

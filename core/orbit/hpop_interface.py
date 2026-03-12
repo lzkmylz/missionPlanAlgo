@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 import math
 import logging
 
+from core.constants import EARTH_RADIUS_M
+
 logger = logging.getLogger(__name__)
 
 
@@ -177,9 +179,6 @@ class HPOPPropagationResult:
         x, y, z = position
         r = math.sqrt(x**2 + y**2 + z**2)
 
-        # 地球半径
-        R_earth = 6371000.0  # meters
-
         # 纬度
         lat = math.degrees(math.asin(z / r))
 
@@ -187,7 +186,7 @@ class HPOPPropagationResult:
         lon = math.degrees(math.atan2(y, x))
 
         # 高度
-        alt = r - R_earth
+        alt = r - EARTH_RADIUS_M
 
         return lat, lon, alt
 

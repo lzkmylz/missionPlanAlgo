@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional
 import math
 
 from core.models import Target, TargetType, ImagingMode
+from core.constants import EARTH_RADIUS_M as CONST_EARTH_RADIUS_M, METERS_TO_KM
 
 
 @dataclass
@@ -28,7 +29,7 @@ class FootprintCalculator:
     """
 
     # 地球半径（米）
-    EARTH_RADIUS_M = 6371000.0
+    EARTH_RADIUS_M = CONST_EARTH_RADIUS_M
 
     def __init__(self, satellite_altitude_km: float = 500.0):
         """

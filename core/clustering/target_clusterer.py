@@ -17,6 +17,7 @@ from scipy.spatial.distance import squareform, pdist
 from scipy.cluster.hierarchy import linkage, fcluster
 
 from core.models.target import Target
+from core.constants import EARTH_RADIUS_KM
 
 
 @dataclass
@@ -131,7 +132,7 @@ class TargetClusterer:
         Returns:
             两点间距离(公里)
         """
-        R = 6371.0  # 地球半径(公里)
+        R = EARTH_RADIUS_KM  # 地球半径(公里)
 
         lon1_rad = math.radians(lon1)
         lat1_rad = math.radians(lat1)

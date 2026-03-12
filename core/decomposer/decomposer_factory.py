@@ -10,6 +10,12 @@ from .base_decomposer import BaseDecomposer, DecompositionStrategy
 from .grid_decomposer import GridDecomposer
 from .strip_decomposer import StripDecomposer
 from core.models import SatelliteType
+from core.constants import (
+    DEFAULT_SWATH_WIDTH_M,
+    SAR_1_SWATH_WIDTH_M,
+    SAR_2_SWATH_WIDTH_M,
+    DEFAULT_ORBIT_ALTITUDE_M,
+)
 
 
 class DecomposerFactory:
@@ -45,7 +51,7 @@ class DecomposerFactory:
             return GridDecomposer(resolution=resolution)
 
         elif strategy == DecompositionStrategy.STRIP:
-            swath_width = kwargs.get('swath_width', 10000.0)
+            swath_width = kwargs.get('swath_width', DEFAULT_SWATH_WIDTH_M)
             overlap_ratio = kwargs.get('overlap_ratio', 0.1)
             return StripDecomposer(
                 swath_width=swath_width,
@@ -78,7 +84,7 @@ class DecomposerFactory:
 
         elif satellite_type in [SatelliteType.SAR_1, SatelliteType.SAR_2]:
             # SAR卫星使用条带分解
-            swath_width = kwargs.get('swath_width', 10000.0)
+            swath_width = kwargs.get('swath_width', DEFAULT_SWATH_WIDTH_M)
             overlap_ratio = kwargs.get('overlap_ratio', 0.1)
             return StripDecomposer(
                 swath_width=swath_width,
@@ -114,7 +120,7 @@ class DecomposerFactory:
     def get_recommended_swath(
         cls,
         satellite_type: SatelliteType,
-        altitude: float = 500000.0
+        altitude: float = DEFAULT_ORBIT_ALTITUDE_M
     ) -> float:
         """
         获取推荐的幅宽
@@ -128,8 +134,8 @@ class DecomposerFactory:
         """
         # 基于卫星类型的默认幅宽
         default_swaths = {
-            SatelliteType.SAR_1: 10000.0,   # 10km
-            SatelliteType.SAR_2: 20000.0,   # 20km（增强型SAR）
+            SatelliteType.SAR_1: SAR_1_SWATH_WIDTH_M,   # 10km
+            SatelliteType.SAR_2: SAR_2_SWATH_WIDTH_M,   # 20km（增强型SAR）
         }
 
-        return default_swaths.get(satellite_type, 10000.0)
+        return default_swaths.get(satellite_type, DEFAULT_SWATH_WIDTH_M)

@@ -9,6 +9,11 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import math
 
+from core.constants import (
+    EARTH_RADIUS_M,
+    DEFAULT_DATA_RATE_MBPS,
+)
+
 
 @dataclass
 class Antenna:
@@ -27,7 +32,7 @@ class Antenna:
     name: str = ""
     elevation_min: float = 5.0  # 度
     elevation_max: float = 90.0  # 度
-    data_rate: float = 300.0  # Mbps
+    data_rate: float = DEFAULT_DATA_RATE_MBPS  # Mbps
     slew_rate: float = 10.0  # 度/秒
 
     def can_track(self, elevation: float) -> bool:
@@ -55,7 +60,7 @@ class Antenna:
             name=data.get('name', ''),
             elevation_min=data.get('elevation_min', 5.0),
             elevation_max=data.get('elevation_max', 90.0),
-            data_rate=data.get('data_rate', 300.0),
+            data_rate=data.get('data_rate', DEFAULT_DATA_RATE_MBPS),
             slew_rate=data.get('slew_rate', 10.0),
         )
 
@@ -98,11 +103,10 @@ class GroundStation:
         Returns:
             (x, y, z) in meters
         """
-        EARTH_RADIUS = 6371000.0  # 米
         lon_rad = math.radians(self.longitude)
         lat_rad = math.radians(self.latitude)
 
-        r = EARTH_RADIUS + self.altitude
+        r = EARTH_RADIUS_M + self.altitude
         x = r * math.cos(lat_rad) * math.cos(lon_rad)
         y = r * math.cos(lat_rad) * math.sin(lon_rad)
         z = r * math.sin(lat_rad)

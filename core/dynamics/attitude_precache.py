@@ -40,6 +40,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Numba JIT函数使用的常量（必须在模块级别定义以便Numba编译）
+_EARTH_RADIUS_M = 6371000.0  # 地球半径（米）
+_BYTES_PER_MB = 1024 * 1024  # 每MB的字节数
+_ATTITUDE_ENTRY_BYTES = 16   # 每个姿态缓存条目的大小（字节）
+
 
 @dataclass
 class AttitudePrecomputeConfig:
@@ -307,7 +312,7 @@ class AttitudePrecacheManager:
             'cache_hits': self._cache_hits,
             'cache_misses': self._cache_misses,
             'hit_rate': hit_rate,
-            'memory_mb': len(self._attitude_cache) * 16 / (1024 * 1024)
+            'memory_mb': len(self._attitude_cache) * _ATTITUDE_ENTRY_BYTES / _BYTES_PER_MB
         }
 
 
@@ -327,7 +332,7 @@ def _batch_compute_attitudes_numba(
     rolls = np.zeros(n, dtype=np.float64)
     pitches = np.zeros(n, dtype=np.float64)
 
-    R_earth = 6371000.0
+    R_earth = _EARTH_RADIUS_M
 
     for i in prange(n):
         # 目标位置(ECEF)

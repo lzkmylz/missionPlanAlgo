@@ -12,6 +12,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import math
 
+from core.constants import EARTH_RADIUS_M
+
 
 class TargetType(Enum):
     """目标类型枚举"""
@@ -35,10 +37,9 @@ class GeoPoint:
 
     def to_ecef(self) -> Tuple[float, float, float]:
         """转换为地心固定坐标（ECEF，米）"""
-        EARTH_RADIUS = 6371000.0
         lon_rad = math.radians(self.longitude)
         lat_rad = math.radians(self.latitude)
-        r = EARTH_RADIUS + self.altitude
+        r = EARTH_RADIUS_M + self.altitude
         x = r * math.cos(lat_rad) * math.cos(lon_rad)
         y = r * math.cos(lat_rad) * math.sin(lon_rad)
         z = r * math.sin(lat_rad)
@@ -144,13 +145,12 @@ class Target:
         if self.target_type != TargetType.POINT:
             raise ValueError("Only point targets have a single ECEF position")
 
-        EARTH_RADIUS = 6371000.0  # 米
         lon_rad = math.radians(self.longitude)
         lat_rad = math.radians(self.latitude)
 
-        x = EARTH_RADIUS * math.cos(lat_rad) * math.cos(lon_rad)
-        y = EARTH_RADIUS * math.cos(lat_rad) * math.sin(lon_rad)
-        z = EARTH_RADIUS * math.sin(lat_rad)
+        x = EARTH_RADIUS_M * math.cos(lat_rad) * math.cos(lon_rad)
+        y = EARTH_RADIUS_M * math.cos(lat_rad) * math.sin(lon_rad)
+        z = EARTH_RADIUS_M * math.sin(lat_rad)
 
         return (x, y, z)
 

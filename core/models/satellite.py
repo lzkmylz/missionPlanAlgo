@@ -15,6 +15,51 @@ from datetime import datetime, timezone
 import math
 import warnings
 
+from core.constants import (
+    EARTH_RADIUS_M,
+    EARTH_GM,
+    DEFAULT_ORBIT_ALTITUDE_M,
+    DEFAULT_ORBIT_INCLINATION_DEG,
+    DEFAULT_ORBIT_ECCENTRICITY,
+    DEFAULT_RAAN_DEG,
+    DEFAULT_ARG_OF_PERIGEE_DEG,
+    DEFAULT_MEAN_ANOMALY_DEG,
+    DEFAULT_STORAGE_CAPACITY_GB,
+    DEFAULT_POWER_CAPACITY_WH,
+    DEFAULT_DATA_RATE_MBPS,
+    DEFAULT_RESOLUTION_M,
+    DEFAULT_SWATH_WIDTH_M,
+    DEFAULT_MAX_OFF_NADIR_DEG,
+    OPTICAL_1_POWER_CAPACITY_WH,
+    OPTICAL_1_STORAGE_CAPACITY_GB,
+    OPTICAL_2_POWER_CAPACITY_WH,
+    OPTICAL_2_STORAGE_CAPACITY_GB,
+    SAR_1_POWER_CAPACITY_WH,
+    SAR_1_STORAGE_CAPACITY_GB,
+    SAR_2_POWER_CAPACITY_WH,
+    SAR_2_STORAGE_CAPACITY_GB,
+    OPTICAL_IMAGING_MIN_DURATION_S,
+    OPTICAL_IMAGING_MAX_DURATION_S,
+    SAR_1_SPOTLIGHT_MIN_DURATION_S,
+    SAR_1_SPOTLIGHT_MAX_DURATION_S,
+    SAR_1_SLIDING_SPOTLIGHT_MIN_DURATION_S,
+    SAR_1_SLIDING_SPOTLIGHT_MAX_DURATION_S,
+    SAR_1_STRIPMAP_MIN_DURATION_S,
+    SAR_1_STRIPMAP_MAX_DURATION_S,
+    SAR_2_SPOTLIGHT_MIN_DURATION_S,
+    SAR_2_SPOTLIGHT_MAX_DURATION_S,
+    SAR_2_SLIDING_SPOTLIGHT_MIN_DURATION_S,
+    SAR_2_SLIDING_SPOTLIGHT_MAX_DURATION_S,
+    SAR_2_STRIPMAP_MIN_DURATION_S,
+    SAR_2_STRIPMAP_MAX_DURATION_S,
+    REFERENCE_EPOCH,
+    J2000_JULIAN_DATE,
+    GMST_CONSTANT_1,
+    GMST_CONSTANT_2,
+    METERS_TO_KM,
+    KM_TO_METERS,
+)
+
 
 class SatelliteType(Enum):
     """卫星类型枚举"""
@@ -142,11 +187,11 @@ class Orbit:
 
     # 轨道六根数（经典开普勒轨道元素）
     semi_major_axis: Optional[float] = None  # 半长轴（米），None时从altitude计算
-    eccentricity: float = 0.0  # 偏心率（0-1）
-    inclination: float = 97.4  # 轨道倾角（度）
-    raan: float = 0.0  # 升交点赤经/RAAN（度）
-    arg_of_perigee: float = 0.0  # 近地点幅角（度）
-    mean_anomaly: float = 0.0  # 平近点角（度）
+    eccentricity: float = DEFAULT_ORBIT_ECCENTRICITY  # 偏心率（0-1）
+    inclination: float = DEFAULT_ORBIT_INCLINATION_DEG  # 轨道倾角（度）
+    raan: float = DEFAULT_RAAN_DEG  # 升交点赤经/RAAN（度）
+    arg_of_perigee: float = DEFAULT_ARG_OF_PERIGEE_DEG  # 近地点幅角（度）
+    mean_anomaly: float = DEFAULT_MEAN_ANOMALY_DEG  # 平近点角（度）
 
     # ★ 新增：轨道历元时间（用于六根数和简化参数）
     # TLE格式自动解析历元，不需要此字段
@@ -154,7 +199,7 @@ class Orbit:
     epoch: Optional[datetime] = None
 
     # 简化参数（向后兼容）
-    altitude: float = 500000.0  # 轨道高度（米）
+    altitude: float = DEFAULT_ORBIT_ALTITUDE_M  # 轨道高度（米）
 
     # TLE两行根数
     tle_line1: Optional[str] = None
@@ -187,32 +232,27 @@ class Orbit:
         elif self.semi_major_axis is not None:
             self.source = OrbitSource.ELEMENTS
             # 从半长轴计算高度
-            EARTH_RADIUS = 6371000.0
-            self.altitude = self.semi_major_axis - EARTH_RADIUS
+            self.altitude = self.semi_major_axis - EARTH_RADIUS_M
         elif self.altitude > 0:
             self.source = OrbitSource.SIMPLIFIED
             # 从高度计算半长轴
-            EARTH_RADIUS = 6371000.0
-            self.semi_major_axis = EARTH_RADIUS + self.altitude
+            self.semi_major_axis = EARTH_RADIUS_M + self.altitude
         else:
             # 默认值
             self.source = OrbitSource.SIMPLIFIED
-            self.altitude = 500000.0
-            EARTH_RADIUS = 6371000.0
-            self.semi_major_axis = EARTH_RADIUS + self.altitude
+            self.altitude = DEFAULT_ORBIT_ALTITUDE_M
+            self.semi_major_axis = EARTH_RADIUS_M + self.altitude
 
     def get_semi_major_axis(self) -> float:
         """获取半长轴（米）"""
         if self.semi_major_axis is not None:
             return self.semi_major_axis
-        EARTH_RADIUS = 6371000.0
-        return EARTH_RADIUS + self.altitude
+        return EARTH_RADIUS_M + self.altitude
 
     def get_period(self) -> float:
         """获取轨道周期（秒）"""
-        GM = 3.986004418e14  # 地球引力常数
         a = self.get_semi_major_axis()
-        return 2 * math.pi * math.sqrt(a**3 / GM)
+        return 2 * math.pi * math.sqrt(a**3 / EARTH_GM)
 
 
 @dataclass
@@ -220,7 +260,7 @@ class SatelliteCapabilities:
     """卫星能力配置"""
     # 成像能力
     imaging_modes: List[ImagingMode] = field(default_factory=list)
-    max_off_nadir: float = 30.0  # 最大侧摆角（度）
+    max_off_nadir: float = DEFAULT_MAX_OFF_NADIR_DEG  # 最大侧摆角（度）
     agility: Dict[str, float] = field(default_factory=lambda: {
         'max_slew_rate': 3.0,  # 度/秒
         'slew_acceleration': 1.5,  # 度/秒²
@@ -228,13 +268,13 @@ class SatelliteCapabilities:
     })
 
     # 存储和能源
-    storage_capacity: float = 500.0  # GB
-    power_capacity: float = 2000.0  # Wh
-    data_rate: float = 300.0  # Mbps
+    storage_capacity: float = DEFAULT_STORAGE_CAPACITY_GB  # GB
+    power_capacity: float = DEFAULT_POWER_CAPACITY_WH  # Wh
+    data_rate: float = DEFAULT_DATA_RATE_MBPS  # Mbps
 
     # 成像参数
-    resolution: float = 10.0  # 分辨率（米）
-    swath_width: float = 10000.0  # 幅宽（米）
+    resolution: float = DEFAULT_RESOLUTION_M  # 分辨率（米）
+    swath_width: float = DEFAULT_SWATH_WIDTH_M  # 幅宽（米）
 
     # 详细成像器配置（JSON模板中的详细参数）
     imager: Dict[str, Any] = field(default_factory=dict)
@@ -340,24 +380,33 @@ class Satellite:
         """根据卫星类型设置默认能力"""
         if self.sat_type == SatelliteType.OPTICAL_1:
             self.capabilities.imaging_modes = [ImagingMode.PUSH_BROOM]
-            self.capabilities.max_off_nadir = 30.0
-            self.capabilities.storage_capacity = 500.0
-            self.capabilities.power_capacity = 2000.0
-            self.capabilities.resolution = 10.0
-            # 光学卫星成像时长约束：最短6秒，最长12秒
+            self.capabilities.max_off_nadir = DEFAULT_MAX_OFF_NADIR_DEG
+            self.capabilities.storage_capacity = OPTICAL_1_STORAGE_CAPACITY_GB
+            self.capabilities.power_capacity = OPTICAL_1_POWER_CAPACITY_WH
+            self.capabilities.resolution = DEFAULT_RESOLUTION_M
+            # 光学卫星成像时长约束
             self.capabilities.imaging_mode_constraints = {
-                ImagingMode.PUSH_BROOM: {'min_duration': 6.0, 'max_duration': 12.0}
+                ImagingMode.PUSH_BROOM: {
+                    'min_duration': OPTICAL_IMAGING_MIN_DURATION_S,
+                    'max_duration': OPTICAL_IMAGING_MAX_DURATION_S
+                }
             }
         elif self.sat_type == SatelliteType.OPTICAL_2:
             self.capabilities.imaging_modes = [ImagingMode.PUSH_BROOM, ImagingMode.FRAME]
             self.capabilities.max_off_nadir = 45.0
-            self.capabilities.storage_capacity = 800.0
-            self.capabilities.power_capacity = 2500.0
+            self.capabilities.storage_capacity = OPTICAL_2_STORAGE_CAPACITY_GB
+            self.capabilities.power_capacity = OPTICAL_2_POWER_CAPACITY_WH
             self.capabilities.resolution = 5.0
-            # 光学卫星成像时长约束：最短6秒，最长12秒
+            # 光学卫星成像时长约束
             self.capabilities.imaging_mode_constraints = {
-                ImagingMode.PUSH_BROOM: {'min_duration': 6.0, 'max_duration': 12.0},
-                ImagingMode.FRAME: {'min_duration': 6.0, 'max_duration': 12.0}
+                ImagingMode.PUSH_BROOM: {
+                    'min_duration': OPTICAL_IMAGING_MIN_DURATION_S,
+                    'max_duration': OPTICAL_IMAGING_MAX_DURATION_S
+                },
+                ImagingMode.FRAME: {
+                    'min_duration': OPTICAL_IMAGING_MIN_DURATION_S,
+                    'max_duration': OPTICAL_IMAGING_MAX_DURATION_S
+                }
             }
         elif self.sat_type == SatelliteType.SAR_1:
             self.capabilities.imaging_modes = [
@@ -366,15 +415,23 @@ class Satellite:
                 ImagingMode.STRIPMAP
             ]
             self.capabilities.max_off_nadir = 35.0
-            self.capabilities.storage_capacity = 1000.0
-            self.capabilities.power_capacity = 3000.0
+            self.capabilities.storage_capacity = SAR_1_STORAGE_CAPACITY_GB
+            self.capabilities.power_capacity = SAR_1_POWER_CAPACITY_WH
             self.capabilities.resolution = 3.0
-            # SAR-1成像时长约束（基于典型SAR卫星数据）
-            # Spotlight: 最长20秒, Stripmap: 最长40秒
+            # SAR-1成像时长约束
             self.capabilities.imaging_mode_constraints = {
-                ImagingMode.SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 20.0},
-                ImagingMode.SLIDING_SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 25.0},
-                ImagingMode.STRIPMAP: {'min_duration': 15.0, 'max_duration': 40.0}
+                ImagingMode.SPOTLIGHT: {
+                    'min_duration': SAR_1_SPOTLIGHT_MIN_DURATION_S,
+                    'max_duration': SAR_1_SPOTLIGHT_MAX_DURATION_S
+                },
+                ImagingMode.SLIDING_SPOTLIGHT: {
+                    'min_duration': SAR_1_SLIDING_SPOTLIGHT_MIN_DURATION_S,
+                    'max_duration': SAR_1_SLIDING_SPOTLIGHT_MAX_DURATION_S
+                },
+                ImagingMode.STRIPMAP: {
+                    'min_duration': SAR_1_STRIPMAP_MIN_DURATION_S,
+                    'max_duration': SAR_1_STRIPMAP_MAX_DURATION_S
+                }
             }
         elif self.sat_type == SatelliteType.SAR_2:
             self.capabilities.imaging_modes = [
@@ -383,15 +440,23 @@ class Satellite:
                 ImagingMode.STRIPMAP
             ]
             self.capabilities.max_off_nadir = 50.0
-            self.capabilities.storage_capacity = 1500.0
-            self.capabilities.power_capacity = 4000.0
+            self.capabilities.storage_capacity = SAR_2_STORAGE_CAPACITY_GB
+            self.capabilities.power_capacity = SAR_2_POWER_CAPACITY_WH
             self.capabilities.resolution = 1.0
-            # SAR-2成像时长约束（增强型，支持更长成像）
-            # Spotlight: 最长25秒, Stripmap: 最长56秒
+            # SAR-2成像时长约束
             self.capabilities.imaging_mode_constraints = {
-                ImagingMode.SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 25.0},
-                ImagingMode.SLIDING_SPOTLIGHT: {'min_duration': 10.0, 'max_duration': 30.0},
-                ImagingMode.STRIPMAP: {'min_duration': 15.0, 'max_duration': 56.0}
+                ImagingMode.SPOTLIGHT: {
+                    'min_duration': SAR_2_SPOTLIGHT_MIN_DURATION_S,
+                    'max_duration': SAR_2_SPOTLIGHT_MAX_DURATION_S
+                },
+                ImagingMode.SLIDING_SPOTLIGHT: {
+                    'min_duration': SAR_2_SLIDING_SPOTLIGHT_MIN_DURATION_S,
+                    'max_duration': SAR_2_SLIDING_SPOTLIGHT_MAX_DURATION_S
+                },
+                ImagingMode.STRIPMAP: {
+                    'min_duration': SAR_2_STRIPMAP_MIN_DURATION_S,
+                    'max_duration': SAR_2_STRIPMAP_MAX_DURATION_S
+                }
             }
 
     def get_position_sgp4(self, dt: datetime) -> tuple:
@@ -424,8 +489,7 @@ class Satellite:
         mean_motion = 2 * math.pi / period
 
         # 计算从参考时间开始的秒数
-        ref_time = datetime(2024, 1, 1)
-        delta_t = (dt - ref_time).total_seconds()
+        delta_t = (dt - REFERENCE_EPOCH).total_seconds()
 
         # 平近点角
         M = self.orbit.mean_anomaly + math.radians(mean_motion * delta_t)
@@ -444,7 +508,7 @@ class Satellite:
         y = x_orb * math.sin(raan) + y_orb * math.cos(i) * math.cos(raan)
         z = y_orb * math.sin(i)
 
-        return (x / 1000, y / 1000, z / 1000)  # 转换为km以与SGP4一致
+        return (x * METERS_TO_KM, y * METERS_TO_KM, z * METERS_TO_KM)  # 转换为km以与SGP4一致
 
     def get_subpoint(self, dt: datetime) -> tuple:
         """
@@ -468,12 +532,12 @@ class Satellite:
         jd, fr = jday(dt.year, dt.month, dt.day,
                       dt.hour, dt.minute, dt.second + dt.microsecond / 1e6)
         # 简化格林尼治恒星时计算
-        gmst = (280.46061837 + 360.98564736629 * (jd - 2451545.0)) % 360
+        gmst = (GMST_CONSTANT_1 + GMST_CONSTANT_2 * (jd - J2000_JULIAN_DATE)) % 360
         lon = (math.degrees(math.atan2(y, x)) - gmst) % 360
         if lon > 180:
             lon -= 360
 
-        alt = r_norm * 1000 - 6371000  # 转换为米
+        alt = r_norm * KM_TO_METERS - EARTH_RADIUS_M  # 转换为米
 
         return (lat, lon, alt)
 
@@ -605,12 +669,12 @@ class Satellite:
             # 简化格式（向后兼容）
             orbit = Orbit(
                 orbit_type=OrbitType(orbit_data.get('orbit_type', 'SSO')),
-                altitude=orbit_data.get('altitude', 500000.0),
-                inclination=orbit_data.get('inclination', 97.4),
-                eccentricity=orbit_data.get('eccentricity', 0.0),
-                raan=orbit_data.get('raan', 0.0),
-                arg_of_perigee=orbit_data.get('arg_of_perigee', 0.0),
-                mean_anomaly=orbit_data.get('mean_anomaly', 0.0),
+                altitude=orbit_data.get('altitude', DEFAULT_ORBIT_ALTITUDE_M),
+                inclination=orbit_data.get('inclination', DEFAULT_ORBIT_INCLINATION_DEG),
+                eccentricity=orbit_data.get('eccentricity', DEFAULT_ORBIT_ECCENTRICITY),
+                raan=orbit_data.get('raan', DEFAULT_RAAN_DEG),
+                arg_of_perigee=orbit_data.get('arg_of_perigee', DEFAULT_ARG_OF_PERIGEE_DEG),
+                mean_anomaly=orbit_data.get('mean_anomaly', DEFAULT_MEAN_ANOMALY_DEG),
                 epoch=epoch,  # ★ 简化参数格式的epoch
             )
 
@@ -657,10 +721,10 @@ class Satellite:
 
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
-            max_off_nadir=cap_data.get('max_off_nadir', 30.0),
-            storage_capacity=cap_data.get('storage_capacity', 500.0),
-            power_capacity=cap_data.get('power_capacity', 2000.0),
-            data_rate=cap_data.get('data_rate', 300.0),
+            max_off_nadir=cap_data.get('max_off_nadir', DEFAULT_MAX_OFF_NADIR_DEG),
+            storage_capacity=cap_data.get('storage_capacity', DEFAULT_STORAGE_CAPACITY_GB),
+            power_capacity=cap_data.get('power_capacity', DEFAULT_POWER_CAPACITY_WH),
+            data_rate=cap_data.get('data_rate', DEFAULT_DATA_RATE_MBPS),
             imager=imager_data,
             imaging_mode_details=imaging_mode_details,
             imaging_mode_constraints=imaging_mode_constraints,

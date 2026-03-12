@@ -15,10 +15,7 @@ import math
 
 from core.models.target import Target, TargetType
 from core.clustering.target_clusterer import TargetCluster
-
-
-# 地球半径 (米)
-EARTH_RADIUS = 6371000.0
+from core.constants import EARTH_RADIUS_M
 
 
 @dataclass
@@ -335,7 +332,7 @@ class SlewCalculator:
         """
         lon_rad = math.radians(lon)
         lat_rad = math.radians(lat)
-        r = EARTH_RADIUS + alt
+        r = EARTH_RADIUS_M + alt
 
         x = r * math.cos(lat_rad) * math.cos(lon_rad)
         y = r * math.cos(lat_rad) * math.sin(lon_rad)

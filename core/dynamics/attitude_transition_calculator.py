@@ -25,6 +25,7 @@ from typing import Tuple, Optional
 from core.dynamics.attitude_mode import AttitudeMode, AttitudeTransition, TransitionResult
 from core.dynamics.sun_position_calculator import SunPositionCalculator
 from core.dynamics.power_generation_calculator import PowerGenerationCalculator, PowerConfig
+from core.constants import EARTH_RADIUS_M
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,6 @@ class AttitudeTransitionCalculator:
         sun_calculator: 太阳位置计算器
         config: 切换配置参数
     """
-
-    # 地球半径（米）
-    EARTH_RADIUS = 6371000.0
 
     def __init__(
         self,
@@ -380,7 +378,7 @@ class AttitudeTransitionCalculator:
         lon_rad = math.radians(lon)
 
         # 简化：使用地球平均半径
-        r = self.EARTH_RADIUS + alt
+        r = EARTH_RADIUS_M + alt
 
         x = r * math.cos(lat_rad) * math.cos(lon_rad)
         y = r * math.cos(lat_rad) * math.sin(lon_rad)

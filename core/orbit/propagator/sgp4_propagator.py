@@ -9,6 +9,8 @@ from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
 import math
 
+from core.constants import EARTH_RADIUS_KM, EARTH_ROTATION_RATE
+
 try:
     from sgp4.api import Satrec, jday
     SGP4_AVAILABLE = True
@@ -36,8 +38,7 @@ class SGP4Propagator:
     使用两行轨道根数(TLE)进行高精度轨道传播
     """
 
-    EARTH_RADIUS = 6371.0  # km
-    EARTH_ROTATION_RATE = 7.2921158553e-5  # rad/s
+    EARTH_RADIUS = EARTH_RADIUS_KM  # km
 
     def __init__(self, satrec: Satrec, satellite_id: str = ""):
         """

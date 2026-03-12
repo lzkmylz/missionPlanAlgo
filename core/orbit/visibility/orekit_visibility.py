@@ -18,6 +18,19 @@ from functools import lru_cache
 import threading
 
 from .base import VisibilityCalculator, VisibilityWindow
+from core.constants import (
+    EARTH_RADIUS_M,
+    EARTH_J2,
+    EARTH_GM,
+    EARTH_ROTATION_RATE,
+    REFERENCE_EPOCH,
+    DEFAULT_ORBIT_ALTITUDE_M,
+    DEFAULT_ORBIT_INCLINATION_DEG,
+    DEFAULT_ORBIT_ECCENTRICITY,
+    DEFAULT_RAAN_DEG,
+    DEFAULT_ARG_OF_PERIGEE_DEG,
+    DEFAULT_MEAN_ANOMALY_DEG,
+)
 
 # 尝试导入SGP4
 try:
@@ -314,17 +327,17 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         if orbit is None:
             # 默认500km SSO
-            altitude = 500000.0
-            inclination = 97.4
-            raan = 0.0
-            arg_of_perigee = 0.0
-            mean_anomaly_offset = 0.0
+            altitude = DEFAULT_ORBIT_ALTITUDE_M
+            inclination = DEFAULT_ORBIT_INCLINATION_DEG
+            raan = DEFAULT_RAAN_DEG
+            arg_of_perigee = DEFAULT_ARG_OF_PERIGEE_DEG
+            mean_anomaly_offset = DEFAULT_MEAN_ANOMALY_DEG
             # ★ 使用scenario_start_time作为默认历元
             from core.models.satellite import ensure_utc_datetime
-            ref_time = ensure_utc_datetime(scenario_start_time) or datetime(2024, 1, 1, tzinfo=timezone.utc)
+            ref_time = ensure_utc_datetime(scenario_start_time) or REFERENCE_EPOCH
         else:
-            altitude = getattr(orbit, 'altitude', 500000.0)
-            inclination = getattr(orbit, 'inclination', 97.4)
+            altitude = getattr(orbit, 'altitude', DEFAULT_ORBIT_ALTITUDE_M)
+            inclination = getattr(orbit, 'inclination', DEFAULT_ORBIT_INCLINATION_DEG)
             raan = getattr(orbit, 'raan', 0.0)
             arg_of_perigee = getattr(orbit, 'arg_of_perigee', 0.0)
             mean_anomaly_offset = getattr(orbit, 'mean_anomaly', 0.0)
@@ -337,7 +350,7 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
                 ref_time = ensure_utc_datetime(scenario_start_time)
             else:
                 # 最后fallback到固定日期，但必须带时区
-                ref_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+                ref_time = REFERENCE_EPOCH
 
         # 确保ref_time也是UTC
         if ref_time.tzinfo is None:
@@ -356,8 +369,8 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         # ★ 新增：J2摄动修正（长期项）
         # 地球J2项系数
-        J2 = 1.08263e-3
-        R_earth = 6371000.0  # 地球半径（米）
+        J2 = EARTH_J2
+        R_earth = EARTH_RADIUS_M  # 地球半径（米）
 
         # 半长轴和偏心率
         a = r
@@ -382,7 +395,7 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         # 计算地球自转角度
         theta_0 = math.radians(100.0)  # 初始偏移量（与Orekit对齐）
-        ref_time_fixed = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        ref_time_fixed = REFERENCE_EPOCH
         delta_t_fixed = (dt - ref_time_fixed).total_seconds()
         theta = theta_0 + EARTH_ROTATION_RATE * delta_t_fixed
 
@@ -608,14 +621,14 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
             orbit = getattr(satellite, 'orbit', None)
             if orbit is None:
                 # 使用默认轨道参数
-                altitude = 500000.0
-                inclination = 97.4
-                raan = 0.0
-                mean_anomaly = 0.0
+                altitude = DEFAULT_ORBIT_ALTITUDE_M
+                inclination = DEFAULT_ORBIT_INCLINATION_DEG
+                raan = DEFAULT_RAAN_DEG
+                mean_anomaly = DEFAULT_MEAN_ANOMALY_DEG
                 sat_epoch = None
             else:
-                altitude = getattr(orbit, 'altitude', 500000.0)
-                inclination = getattr(orbit, 'inclination', 97.4)
+                altitude = getattr(orbit, 'altitude', DEFAULT_ORBIT_ALTITUDE_M)
+                inclination = getattr(orbit, 'inclination', DEFAULT_ORBIT_INCLINATION_DEG)
                 raan = getattr(orbit, 'raan', 0.0)
                 mean_anomaly = getattr(orbit, 'mean_anomaly', 0.0)
                 # ★ 获取卫星指定的历元

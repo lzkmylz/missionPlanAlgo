@@ -10,7 +10,12 @@ STK可见性计算器
 """
 
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+from core.constants import (
+    REFERENCE_EPOCH,
+    DEFAULT_ORBIT_ALTITUDE_M,
+)
 import logging
 
 from .base import VisibilityCalculator, VisibilityWindow
@@ -726,11 +731,10 @@ class STKVisibilityCalculator(VisibilityCalculator):
             elif hasattr(target, 'longitude') and hasattr(target, 'latitude'):
                 # 简化的ECEF计算
                 import math
-                EARTH_RADIUS = 6371000.0
                 lon_rad = math.radians(target.longitude)
                 lat_rad = math.radians(target.latitude)
                 alt = getattr(target, 'altitude', 0.0)
-                r = EARTH_RADIUS + alt
+                r = EARTH_RADIUS_M + alt
                 x = r * math.cos(lat_rad) * math.cos(lon_rad)
                 y = r * math.cos(lat_rad) * math.sin(lon_rad)
                 z = r * math.sin(lat_rad)
@@ -837,7 +841,7 @@ class STKVisibilityCalculator(VisibilityCalculator):
             orbit = getattr(satellite, 'orbit', None)
             if orbit is None:
                 return None
-            altitude = self._get_orbit_attr(orbit, 'altitude', 500000.0)
+            altitude = self._get_orbit_attr(orbit, 'altitude', DEFAULT_ORBIT_ALTITUDE_M)
             inclination = self._get_orbit_attr(orbit, 'inclination', 97.4)
             raan = self._get_orbit_attr(orbit, 'raan', 0.0)
             arg_of_perigee = self._get_orbit_attr(orbit, 'arg_of_perigee', 0.0)
@@ -850,7 +854,7 @@ class STKVisibilityCalculator(VisibilityCalculator):
             elif scenario_start_time:
                 ref_time = ensure_utc_datetime(scenario_start_time)
             else:
-                ref_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+                ref_time = REFERENCE_EPOCH
 
             # 确保ref_time是UTC
             if ref_time.tzinfo is None:
