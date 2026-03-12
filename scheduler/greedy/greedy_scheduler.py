@@ -23,7 +23,7 @@ from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskF
 from ..frequency_utils import ObservationTask, create_observation_tasks
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from core.dynamics.slew_calculator import SlewCalculator
-from ..constraints import SlewConstraintChecker, SlewFeasibilityResult, PreciseSlewConstraintChecker
+from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
 from scheduler.common.config import ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask

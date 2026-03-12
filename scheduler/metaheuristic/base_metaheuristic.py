@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
-from scheduler.common import ResourceManager, TaskTimeManager, ConstraintChecker, ConstraintContext
+from scheduler.common import ResourceManager, TaskTimeManager, ConstraintChecker
 from scheduler.common import MetaheuristicConfig, ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 from payload.imaging_time_calculator import ImagingTimeCalculator

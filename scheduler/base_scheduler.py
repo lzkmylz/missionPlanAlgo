@@ -185,6 +185,10 @@ class ScheduleResult:
 class BaseScheduler(ABC):
     """调度器基类 - 即插即用接口"""
 
+    # 性能优化阈值：批量查询的最小候选数
+    # 对于小批量（<1000），逐个查询更快；大批量（>=1000），批量查询更快
+    BATCH_QUERY_THRESHOLD = 1000
+
     def __init__(self, name: str, config: Dict[str, Any] = None):
         self.name = name
         self.config = config or {}
@@ -569,35 +573,6 @@ class BaseScheduler(ABC):
         self._convergence_curve.append(fitness)
         self._iterations += 1
 
-    def _get_slew_result_simple(self, sat_id: str, prev_end_time: datetime, window_start: datetime):
-        """
-        简化的机动可行性检查（用于加速贪心类算法）
-
-        使用固定估计时间代替精确的轨道传播计算，大幅提升性能。
-
-        Args:
-            sat_id: 卫星ID
-            prev_end_time: 上一个任务结束时间
-            window_start: 当前窗口开始时间
-
-        Returns:
-            SlewFeasibilityResult: 简化的可行性结果
-        """
-        from datetime import timedelta
-        from scheduler.constraints import SlewFeasibilityResult
-
-        slew_time = self._slew_time_estimate
-        earliest_start = prev_end_time + timedelta(seconds=slew_time)
-        actual_start = max(window_start, earliest_start)
-
-        return SlewFeasibilityResult(
-            feasible=True,
-            slew_angle=0.0,
-            slew_time=slew_time,
-            actual_start=actual_start,
-            reason=None
-        )
-
     def _validate_initialization(self) -> None:
         """
         验证调度器是否已正确初始化
@@ -875,9 +850,10 @@ class BaseScheduler(ABC):
             has_batch_query = hasattr(propagator, 'get_states_batch')
 
             # 计算总候选数，决定是否使用批量查询
-            # 对于小批量（<1000），逐个查询更快；大批量（>=1000），批量查询更快
+            # 对于小批量（<BATCH_QUERY_THRESHOLD），逐个查询更快；
+            # 大批量（>=BATCH_QUERY_THRESHOLD），批量查询更快
             total_entries = sum(len(entries) for entries in sat_time_map.values())
-            use_batch = has_batch_query and total_entries >= 1000
+            use_batch = has_batch_query and total_entries >= self.BATCH_QUERY_THRESHOLD
 
             for sat_id, entries in sat_time_map.items():
                 if use_batch:

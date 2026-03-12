@@ -29,7 +29,7 @@ from ..constraints import (
     UnifiedBatchCandidate,
     UnifiedBatchResult
 )
-from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
+from scheduler.common.constraint_checker import ConstraintChecker
 from scheduler.common.config import ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 from scheduler.constraints.batch_slew_calculator import BatchSlewCandidate
