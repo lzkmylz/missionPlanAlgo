@@ -975,6 +975,9 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                     scheduled_task.pitch_angle = attitude.pitch
                     scheduled_task.yaw_angle = attitude.yaw
 
+            # 填充聚类信息到 ScheduledTask
+            self._populate_cluster_info(scheduled_task, task)
+
             scheduled_tasks.append(scheduled_task)
 
             # 更新资源状态

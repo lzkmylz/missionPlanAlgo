@@ -122,6 +122,12 @@ class ScheduledTask:
     # 任务优先级和复位时间
     priority: Optional[int] = None        # 任务优先级
     reset_time: Optional[float] = None    # 姿态复位时间（秒）
+    # 聚类任务相关字段
+    is_cluster_task: bool = False              # 是否为聚类任务
+    cluster_id: Optional[str] = None           # 聚类ID
+    primary_target_id: Optional[str] = None    # 主目标ID
+    covered_target_ids: List[str] = field(default_factory=list)  # 覆盖的所有目标ID列表
+    covered_target_count: int = 0              # 覆盖目标数量
 
     def to_dict(self) -> Dict[str, Any]:
         # Calculate imaging_duration if not explicitly set
@@ -160,6 +166,12 @@ class ScheduledTask:
             'attitude_coordinate_system': self.attitude_coordinate_system,
             'priority': self.priority,
             'reset_time': self.reset_time,
+            # 聚类任务相关字段
+            'is_cluster_task': self.is_cluster_task,
+            'cluster_id': self.cluster_id,
+            'primary_target_id': self.primary_target_id,
+            'covered_target_ids': self.covered_target_ids,
+            'covered_target_count': self.covered_target_count,
         }
 
 

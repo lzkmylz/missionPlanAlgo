@@ -346,3 +346,56 @@ class ClusteringMixin:
             'min_cluster_size': self.min_cluster_size,
             'altitude_km': self.altitude_km,
         }
+
+    def _populate_cluster_info(self, scheduled_task, task) -> None:
+        """填充聚类信息到 ScheduledTask
+
+        如果源任务是 ClusterTask，则填充聚类相关字段。
+
+        Args:
+            scheduled_task: ScheduledTask 实例
+            task: 源任务对象（可能是 ClusterTask 或普通 Target）
+        """
+        if isinstance(task, ClusterTask):
+            scheduled_task.is_cluster_task = task.is_cluster
+            scheduled_task.cluster_id = task.cluster_id
+            scheduled_task.covered_target_ids = [t.id for t in task.targets]
+            scheduled_task.covered_target_count = len(task.targets)
+
+            # 主目标ID：聚类任务取第一个目标，单个目标取自身
+            if task.targets:
+                scheduled_task.primary_target_id = task.targets[0].id
+            else:
+                scheduled_task.primary_target_id = None
+        else:
+            # 普通目标，不是聚类任务
+            scheduled_task.is_cluster_task = False
+            scheduled_task.cluster_id = None
+            scheduled_task.primary_target_id = getattr(task, 'id', None)
+            scheduled_task.covered_target_ids = [getattr(task, 'id', None)] if getattr(task, 'id', None) else []
+            scheduled_task.covered_target_count = 1
+
+    def get_cluster_schedule_summary(self) -> Dict[str, Any]:
+        """获取聚类调度摘要
+
+        Returns:
+            聚类调度统计信息
+        """
+        if not self.enable_clustering or not self._cluster_schedules:
+            return {
+                'clustering_enabled': self.enable_clustering,
+                'total_cluster_tasks': 0,
+                'total_covered_targets': 0,
+                'avg_targets_per_cluster': 0.0,
+            }
+
+        total_tasks = len(self._cluster_schedules)
+        total_covered = sum(len(cs.targets) for cs in self._cluster_schedules)
+
+        return {
+            'clustering_enabled': True,
+            'total_cluster_tasks': total_tasks,
+            'total_covered_targets': total_covered,
+            'avg_targets_per_cluster': total_covered / total_tasks if total_tasks > 0 else 0.0,
+            'cluster_task_ids': [cs.task_id for cs in self._cluster_schedules],
+        }

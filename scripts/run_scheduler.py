@@ -254,6 +254,13 @@ def run_single_algorithm(
     metrics_calc = MetricsCalculator(mission)
     metrics = metrics_calc.calculate_all(result.imaging_result)
 
+    # 获取聚类统计信息（如果调度器支持聚类）
+    clustering_summary = {}
+    if hasattr(scheduler, 'get_cluster_schedule_summary'):
+        clustering_summary = scheduler.get_cluster_schedule_summary()
+    elif hasattr(scheduler, 'get_clustering_metrics'):
+        clustering_summary = scheduler.get_clustering_metrics()
+
     # 序列化任务列表（包含姿态角等详细信息）
     scheduled_tasks = []
     for task in result.imaging_result.scheduled_tasks:
@@ -281,6 +288,12 @@ def run_single_algorithm(
             'energy_consumption_j': getattr(task, 'energy_consumption', None),
             'battery_soc_before_pct': getattr(task, 'battery_soc_before', None),
             'battery_soc_after_pct': getattr(task, 'battery_soc_after', None),
+            # 聚类任务相关字段
+            'is_cluster_task': getattr(task, 'is_cluster_task', False),
+            'cluster_id': getattr(task, 'cluster_id', None),
+            'primary_target_id': getattr(task, 'primary_target_id', None),
+            'covered_target_ids': getattr(task, 'covered_target_ids', []),
+            'covered_target_count': getattr(task, 'covered_target_count', 0),
         }
         scheduled_tasks.append(task_dict)
 
@@ -296,6 +309,7 @@ def run_single_algorithm(
         'computation_time': computation_time,
         'downlink_count': len(result.downlink_result.downlink_tasks) if result.downlink_result else 0,
         'frequency_satisfaction': result.target_observations if enable_frequency else None,
+        'clustering_summary': clustering_summary,
         'scheduled_tasks': scheduled_tasks,
     }
 

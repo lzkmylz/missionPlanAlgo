@@ -754,6 +754,9 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             battery_soc_after=battery_soc_after,
         )
 
+        # 填充聚类信息到 ScheduledTask
+        self._populate_cluster_info(scheduled_task, task)
+
         return scheduled_task
 
     def _update_resource_usage(
