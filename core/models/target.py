@@ -58,7 +58,7 @@ class Target:
         longitude: 经度（点目标）
         latitude: 纬度（点目标）
         area_vertices: 区域顶点列表（区域目标）
-        priority: 优先级（1-10）
+        priority: 优先级（1-100，数字越小优先级越高）
         required_observations: 需要观测次数
         time_window_start: 时间窗口开始
         time_window_end: 时间窗口结束

@@ -76,8 +76,10 @@ class EDDScheduler(HeuristicScheduler):
 
         排序规则：
         1. 按time_window_end升序（越早的截止越优先）
-        2. 截止时间相同的，按priority降序（优先级高的优先）
-        3. 都没有截止时间的，按priority降序
+        2. 截止时间相同的，按priority升序（优先级高的优先，数字越小越优先）
+        3. 都没有截止时间的，按priority升序
+
+        优先级范围1-100，数字越小优先级越高。
 
         Args:
             tasks: 任务列表
@@ -93,10 +95,10 @@ class EDDScheduler(HeuristicScheduler):
             else:
                 due_date_timestamp = due_date.timestamp() if isinstance(due_date, datetime) else float('inf')
 
-            # 优先级作为次键（越高越好，所以取负）
-            priority = getattr(task, 'priority', 5)
+            # 优先级作为次键（数字越小优先级越高，所以直接使用priority值）
+            priority = getattr(task, 'priority', 50)
 
-            return (due_date_timestamp, -priority)
+            return (due_date_timestamp, priority)
 
         return sorted(tasks, key=edd_key)
 

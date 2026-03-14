@@ -824,10 +824,39 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             balance_reward = max(0, 10 - variance)
             score += balance_reward
 
+        # Add priority bonus (lower priority value = higher priority = higher bonus)
+        priority_bonus = self._calculate_priority_bonus(state)
+        score += priority_bonus
+
         # Add frequency satisfaction reward
         score = self._calculate_frequency_fitness(state.target_obs_count, score)
 
         return score
+
+    def _calculate_priority_bonus(self, state: EvaluationState) -> float:
+        """Calculate priority bonus for scheduled tasks.
+
+        优先级范围1-100，数字越小优先级越高。
+        优先级1的任务获得最高奖励，优先级100的任务获得最低奖励。
+
+        Args:
+            state: Current evaluation state with scheduled tasks
+
+        Returns:
+            Priority bonus score
+        """
+        bonus = 0.0
+        for task_idx, count in enumerate([len(tasks) for tasks in state.sat_task_times.values()]):
+            if count > 0 and task_idx < len(self.tasks):
+                task = self.tasks[task_idx]
+                # Get priority (default to 50 if not specified)
+                priority = getattr(task, 'priority', 50)
+                # Clamp to valid range
+                priority = max(1, min(100, priority))
+                # Lower priority value = higher priority, so use (101 - priority) for bonus
+                # Priority 1 -> 100 bonus points, Priority 100 -> 1 bonus point
+                bonus += (101 - priority) * 0.5  # Scale factor to balance with other rewards
+        return bonus
 
     def _decode_solution(
         self, solution: Solution

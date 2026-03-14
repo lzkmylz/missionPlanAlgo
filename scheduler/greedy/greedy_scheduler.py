@@ -489,18 +489,21 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
 
     def _sort_tasks_by_priority(self, tasks: List[Any]) -> List[Any]:
         """
-        Sort tasks by priority (highest first)
+        Sort tasks by priority (lower value = higher priority)
+
+        优先级范围1-100，数字越小优先级越高。
+        例如：priority=1 比 priority=100 优先级更高。
 
         Args:
             tasks: List of tasks
 
         Returns:
-            Sorted list (highest priority first)
+            Sorted list (highest priority first, i.e., lowest value first)
         """
         def priority_key(task):
-            # Higher priority value = higher priority
-            priority = getattr(task, 'priority', 5) or 5
-            return -priority  # Negative for descending order
+            # Lower priority value = higher priority (1 is highest, 100 is lowest)
+            priority = getattr(task, 'priority', 50) or 50
+            return priority  # Ascending order: lower value = higher priority
 
         return sorted(tasks, key=priority_key)
 
