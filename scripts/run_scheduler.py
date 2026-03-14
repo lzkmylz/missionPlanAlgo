@@ -273,6 +273,14 @@ def run_single_algorithm(
             'priority': getattr(task, 'priority', None),
             'storage_before': getattr(task, 'storage_before', None),
             'storage_after': getattr(task, 'storage_after', None),
+            # 详细能源变化字段
+            'power_before_wh': getattr(task, 'power_before', None),
+            'power_after_wh': getattr(task, 'power_after', None),
+            'power_consumed_wh': getattr(task, 'power_consumed', None),
+            'power_generated_wh': getattr(task, 'power_generated', None),
+            'energy_consumption_j': getattr(task, 'energy_consumption', None),
+            'battery_soc_before_pct': getattr(task, 'battery_soc_before', None),
+            'battery_soc_after_pct': getattr(task, 'battery_soc_after', None),
         }
         scheduled_tasks.append(task_dict)
 
@@ -375,6 +383,24 @@ def print_single_result(result: Dict[str, Any]) -> None:
         satisfied = sum(1 for info in result['frequency_satisfaction'].values() if info.get('satisfied'))
         total = len(result['frequency_satisfaction'])
         print(f"频次满足: {satisfied}/{total} ({satisfied/total:.1%})")
+
+    # 打印能源统计摘要
+    scheduled_tasks = result.get('scheduled_tasks', [])
+    if scheduled_tasks:
+        total_power_consumed = sum(t.get('power_consumed_wh', 0) or 0 for t in scheduled_tasks)
+        total_power_generated = sum(t.get('power_generated_wh', 0) or 0 for t in scheduled_tasks)
+        total_energy_consumption = sum(t.get('energy_consumption_j', 0) or 0 for t in scheduled_tasks)
+        avg_soc_before = sum(t.get('battery_soc_before_pct', 0) or 0 for t in scheduled_tasks) / len(scheduled_tasks) if scheduled_tasks else 0
+        avg_soc_after = sum(t.get('battery_soc_after_pct', 0) or 0 for t in scheduled_tasks) / len(scheduled_tasks) if scheduled_tasks else 0
+
+        print("\n" + "-"*70)
+        print("能源统计摘要")
+        print("-"*70)
+        print(f"总电量消耗: {total_power_consumed:.2f} Wh")
+        print(f"总发电量: {total_power_generated:.2f} Wh")
+        print(f"总机动能量消耗: {total_energy_consumption:.2f} J")
+        print(f"平均电池SOC变化: {avg_soc_before:.1f}% → {avg_soc_after:.1f}%")
+        print("-"*70)
 
     print("="*70)
 

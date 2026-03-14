@@ -720,6 +720,32 @@ class MetaheuristicConstraintChecker:
         # 更新资源使用
         usage = self.update_resource_usage(sat_id, target, imaging_mode, actual_start, actual_end)
 
+        # 计算机动能量消耗
+        energy_consumption = getattr(slew_result, 'energy_consumption', 0.0)
+
+        # 计算电池SOC百分比
+        sat = self.mission.get_satellite_by_id(sat_id)
+        battery_soc_before = 0.0
+        battery_soc_after = 0.0
+        power_consumed = power_before - usage.get('power', power_before)
+        if sat and hasattr(sat.capabilities, 'power_capacity') and sat.capabilities.power_capacity > 0:
+            battery_soc_before = (power_before / sat.capabilities.power_capacity) * 100.0
+            battery_soc_after = (usage.get('power', power_before) / sat.capabilities.power_capacity) * 100.0
+
+        # 计算任务期间发电量（简化计算）
+        power_generated = 0.0
+        if self._enable_power_generation_calc and hasattr(self, '_calculate_power_generation'):
+            try:
+                power_generated = self._calculate_power_generation(
+                    sat_id=sat_id,
+                    start_time=actual_start,
+                    end_time=actual_end,
+                    roll_angle=0.0,
+                    pitch_angle=0.0
+                )
+            except Exception:
+                pass  # 如果计算失败，使用默认值0.0
+
         # 创建任务对象
         scheduled_task = ScheduledTask(
             task_id=task_id,
@@ -734,6 +760,12 @@ class MetaheuristicConstraintChecker:
             storage_after=usage.get('storage', storage_before),
             power_before=power_before,
             power_after=usage.get('power', power_before),
+            # 详细能源变化字段
+            power_consumed=power_consumed,
+            power_generated=power_generated,  # 使用计算的发电量
+            energy_consumption=energy_consumption,
+            battery_soc_before=battery_soc_before,
+            battery_soc_after=battery_soc_after,
         )
 
         # 计算姿态角（如果启用）- 与简化模式解耦，只要启用就计算

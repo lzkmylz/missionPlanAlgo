@@ -32,6 +32,8 @@ from .constraints import (
     BatchSAAConstraintChecker
 )
 from core.dynamics.attitude_mode import AttitudeMode
+from core.dynamics.sun_position_calculator import SunPositionCalculator
+from core.dynamics.power_generation_calculator import PowerGenerationCalculator, PowerConfig
 
 
 class TaskFailureReason(Enum):
@@ -100,6 +102,12 @@ class ScheduledTask:
     storage_after: float = 0.0
     power_before: float = 0.0
     power_after: float = 0.0
+    # 详细能源变化字段 - 新增
+    power_consumed: float = 0.0          # 任务期间电量消耗(Wh)
+    power_generated: float = 0.0         # 任务期间发电量(Wh)
+    energy_consumption: float = 0.0      # 机动能量消耗(J)
+    battery_soc_before: float = 0.0      # 任务前电池SOC(%)
+    battery_soc_after: float = 0.0       # 任务后电池SOC(%)
     # 地面站数传相关字段
     ground_station_id: Optional[str] = None
     antenna_id: Optional[str] = None  # 具体使用的天线
@@ -135,6 +143,12 @@ class ScheduledTask:
             'storage_after': self.storage_after,
             'power_before': self.power_before,
             'power_after': self.power_after,
+            # 详细能源变化字段
+            'power_consumed_wh': self.power_consumed,
+            'power_generated_wh': self.power_generated,
+            'energy_consumption_j': self.energy_consumption,
+            'battery_soc_before': self.battery_soc_before,
+            'battery_soc_after': self.battery_soc_after,
             'ground_station_id': self.ground_station_id,
             'antenna_id': self.antenna_id,
             'downlink_start': self.downlink_start.isoformat() if self.downlink_start else None,
@@ -219,6 +233,11 @@ class BaseScheduler(ABC):
         # 初始化位置缓存（用于预计算位置）
         self._position_cache = None
 
+        # 初始化太阳位置计算器和发电量计算器
+        self._sun_calculator: Optional[SunPositionCalculator] = None
+        self._power_calculator: Optional[PowerGenerationCalculator] = None
+        self._enable_power_generation_calc = self.config.get('enable_power_generation_calc', True)
+
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
         import os
@@ -233,6 +252,21 @@ class BaseScheduler(ABC):
         os.environ['DISABLE_REALTIME_PROPAGATION'] = '1'
         logger.info("已禁用实时轨道传播，将使用预计算轨道数据")
 
+        # 初始化太阳位置计算器和发电量计算器
+        if self._enable_power_generation_calc:
+            try:
+                self._sun_calculator = SunPositionCalculator(use_orekit=False)  # 使用简化模型避免JVM依赖
+                power_config = PowerConfig(max_power=1000.0, eclipse_power=0.0)
+                self._power_calculator = PowerGenerationCalculator(
+                    sun_calculator=self._sun_calculator,
+                    config=power_config
+                )
+                logger.info("发电量计算器初始化完成")
+            except Exception as e:
+                logger.warning(f"发电量计算器初始化失败: {e}")
+                self._sun_calculator = None
+                self._power_calculator = None
+
     def set_slew_checker(self, slew_checker) -> None:
         """设置外部传入的机动约束检查器
 
@@ -242,6 +276,93 @@ class BaseScheduler(ABC):
             slew_checker: SlewConstraintChecker 或 PreciseSlewConstraintChecker 实例
         """
         self._slew_checker = slew_checker
+
+    def _calculate_power_generation(
+        self,
+        sat_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        roll_angle: float = 0.0,
+        pitch_angle: float = 0.0,
+        num_samples: int = 5
+    ) -> float:
+        """计算任务期间的发电量
+
+        通过在任务时间段内采样计算平均发电功率并积分得到总发电量。
+
+        Args:
+            sat_id: 卫星ID
+            start_time: 任务开始时间
+            end_time: 任务结束时间
+            roll_angle: 滚转角（度）
+            pitch_angle: 俯仰角（度）
+            num_samples: 采样点数（默认5个）
+
+        Returns:
+            float: 发电量（Wh）
+        """
+        if self._power_calculator is None or self._attitude_calculator is None:
+            return 0.0
+
+        try:
+            # 获取卫星对象
+            sat = self.mission.get_satellite_by_id(sat_id) if self.mission else None
+            if not sat:
+                return 0.0
+
+            # 获取卫星最大功率（从capabilities）
+            max_power = getattr(sat.capabilities, 'power_capacity', 1000.0)
+
+            # 更新配置
+            self._power_calculator.config.max_power = max_power
+
+            # 计算采样间隔
+            duration_seconds = (end_time - start_time).total_seconds()
+            if duration_seconds <= 0:
+                return 0.0
+
+            # 在时间段内采样计算发电功率
+            total_power = 0.0
+            sample_count = 0
+
+            for i in range(num_samples):
+                # 计算采样时间点
+                fraction = i / (num_samples - 1) if num_samples > 1 else 0.5
+                sample_time = start_time + timedelta(seconds=duration_seconds * fraction)
+
+                # 获取卫星位置
+                try:
+                    position, velocity = self._attitude_calculator._get_satellite_state(sat, sample_time)
+                    if position is None:
+                        continue
+
+                    # 计算发电功率
+                    power = self._power_calculator.calculate_power(
+                        attitude_mode=AttitudeMode.IMAGING,
+                        satellite_position=position,
+                        timestamp=sample_time,
+                        roll_angle=roll_angle,
+                        pitch_angle=pitch_angle
+                    )
+                    total_power += power
+                    sample_count += 1
+                except Exception as e:
+                    logger.debug(f"计算采样点 {i} 的发电功率失败: {e}")
+                    continue
+
+            if sample_count == 0:
+                return 0.0
+
+            # 计算平均功率并转换为电量（Wh）
+            avg_power = total_power / sample_count  # 平均功率（W）
+            duration_hours = duration_seconds / 3600.0
+            power_generated = avg_power * duration_hours  # 电量（Wh）
+
+            return max(0.0, power_generated)
+
+        except Exception as e:
+            logger.debug(f"计算发电量失败: {e}")
+            return 0.0
 
     def _initialize_slew_checker(self) -> None:
         """初始化机动约束检查器

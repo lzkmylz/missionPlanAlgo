@@ -924,6 +924,27 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                 )
             current_storage = state.sat_resources.get(sat_idx, {}).get('storage', 0)
 
+            # 计算发电量（如果启用）
+            power_generated = 0.0
+            if self._enable_power_generation_calc and hasattr(self, '_calculate_power_generation'):
+                try:
+                    roll_angle = 0.0
+                    pitch_angle = 0.0
+                    if self._enable_attitude_calculation:
+                        attitude = self._calculate_attitude_angles(sat, task, actual_start)
+                        if attitude:
+                            roll_angle = attitude.roll
+                            pitch_angle = attitude.pitch
+                    power_generated = self._calculate_power_generation(
+                        sat_id=sat.id,
+                        start_time=actual_start,
+                        end_time=actual_end,
+                        roll_angle=roll_angle,
+                        pitch_angle=pitch_angle
+                    )
+                except Exception:
+                    pass
+
             # Create scheduled task
             scheduled_task = ScheduledTask(
                 task_id=getattr(task, 'id', str(task_idx)),
@@ -936,6 +957,14 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                 slew_time=slew_time,
                 storage_before=current_storage,
                 storage_after=current_storage + storage_used,
+                # 能源字段 - 默认值（元启发式调度器资源跟踪简化）
+                power_before=0.0,
+                power_after=0.0,
+                power_consumed=0.0,
+                power_generated=power_generated,  # 使用计算的发电量
+                energy_consumption=0.0,
+                battery_soc_before=0.0,
+                battery_soc_after=0.0,
             )
 
             # 计算姿态角（如果启用）

@@ -710,6 +710,29 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         task_id = task.task_id if isinstance(task, ObservationTask) else task.id
         target_id = task.target_id if isinstance(task, ObservationTask) else task.id
 
+        # 计算机动能量消耗（从slew_result获取，如果可用）
+        energy_consumption = 0.0
+        if slew_result:
+            energy_consumption = getattr(slew_result, 'energy_consumption', 0.0)
+
+        # 计算电池SOC百分比
+        battery_soc_before = 0.0
+        battery_soc_after = 0.0
+        if sat and hasattr(sat.capabilities, 'power_capacity') and sat.capabilities.power_capacity > 0:
+            battery_soc_before = (power_before / sat.capabilities.power_capacity) * 100.0
+            battery_soc_after = ((power_before - power_consumed) / sat.capabilities.power_capacity) * 100.0
+
+        # 计算任务期间发电量（简化计算，使用0度姿态角）
+        power_generated = 0.0
+        if self._enable_power_generation_calc:
+            power_generated = self._calculate_power_generation(
+                sat_id=sat_id,
+                start_time=actual_start,
+                end_time=actual_end,
+                roll_angle=0.0,  # 简化计算
+                pitch_angle=0.0
+            )
+
         scheduled_task = ScheduledTask(
             task_id=task_id,
             satellite_id=sat_id,
@@ -723,6 +746,12 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             storage_after=storage_before + storage_used,
             power_before=power_before,
             power_after=power_before - power_consumed,
+            # 详细能源变化字段
+            power_consumed=power_consumed,
+            power_generated=power_generated,  # 使用计算的发电量
+            energy_consumption=energy_consumption,
+            battery_soc_before=battery_soc_before,
+            battery_soc_after=battery_soc_after,
         )
 
         return scheduled_task

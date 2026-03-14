@@ -1283,6 +1283,38 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         # 获取任务优先级
         task_priority = getattr(task, 'priority', None)
 
+        # 计算机动能量消耗（从slew_result获取，如果可用）
+        energy_consumption = 0.0
+        if slew_result:
+            energy_consumption = getattr(slew_result, 'energy_consumption', 0.0)
+
+        # 计算电池SOC百分比
+        battery_soc_before = 0.0
+        battery_soc_after = 0.0
+        if sat and hasattr(sat.capabilities, 'power_capacity') and sat.capabilities.power_capacity > 0:
+            battery_soc_before = (power_before / sat.capabilities.power_capacity) * 100.0
+            battery_soc_after = ((power_before - power_consumed) / sat.capabilities.power_capacity) * 100.0
+
+        # 计算姿态角（用于发电量计算）
+        roll_angle = 0.0
+        pitch_angle = 0.0
+        if self._enable_attitude_calculation and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+            attitude = self._calculate_attitude_angles(sat, task, actual_start)
+            if attitude:
+                roll_angle = attitude.roll
+                pitch_angle = attitude.pitch
+
+        # 计算任务期间发电量
+        power_generated = 0.0
+        if self._enable_power_generation_calc:
+            power_generated = self._calculate_power_generation(
+                sat_id=sat_id,
+                start_time=actual_start,
+                end_time=actual_end,
+                roll_angle=roll_angle,
+                pitch_angle=pitch_angle
+            )
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
@@ -1297,14 +1329,22 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             storage_after=storage_before + storage_used,
             power_before=power_before,
             power_after=power_before - power_consumed,
+            # 详细能源变化字段
+            power_consumed=power_consumed,
+            power_generated=power_generated,  # 使用计算的发电量
+            energy_consumption=energy_consumption,
+            battery_soc_before=battery_soc_before,
+            battery_soc_after=battery_soc_after,
             priority=task_priority,
             reset_time=reset_time
         )
 
-        # 计算并应用姿态角（在姿态角计算启用时始终计算）
-        if self._enable_attitude_calculation and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+        # 应用姿态角（已在前面计算用于发电量计算）
+        if (roll_angle != 0.0 or pitch_angle != 0.0) and sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
+            # 重新计算姿态角以应用完整信息
             attitude = self._calculate_attitude_angles(sat, task, actual_start)
-            self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
+            if attitude:
+                self._apply_attitude_to_scheduled_task(scheduled_task, attitude)
 
         # 如果是聚类任务，记录聚类调度信息
         if isinstance(task, ClusterTask) and self.enable_clustering:

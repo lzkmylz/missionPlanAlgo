@@ -698,6 +698,7 @@ pip3 install -r requirements.txt
 2. **时间阈值3天**: 历元距场景>3天必须用解析方法外推，禁止HPOP长期传播
 3. **J4外推精度**: Eckstein-Hechler传播器，6x6引力场，考虑J2/J3/J4项
 4. **并行计算**: 60颗卫星同时处理，使用parallelStream
+5. **地面站可见窗口计算强制使用Java后端**: 卫星-地面站可见窗口计算**必须**使用Java Orekit后端（`OptimizedVisibilityCalculator.computeAllVisibilityWindows()`），严禁使用Python简化模型。统一通过 `BatchVisibilityCalculator` → `OrekitJavaBridge` → Java后端流程计算，确保地面站窗口使用与目标窗口相同的高精度HPOP轨道数据。
 
 ---
 
@@ -738,6 +739,17 @@ GIT_SSH_COMMAND="ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=30" git pu
 - 地面站窗口现在使用与目标窗口相同的高精度HPOP轨道数据
 - 无需额外的Python后处理步骤
 - 输出文件直接可用于数传规划
+
+### 2026-03-15: 删除简化模型代码，统一使用Java Orekit计算
+**问题**: `examples/compute_gs_visibility.py` 使用伪随机数据生成地面站窗口，与高精度要求不符
+**解决**:
+- 删除 `examples/compute_gs_visibility.py` 简化模型文件
+- 统一使用 `BatchVisibilityCalculator` → `OrekitJavaBridge` → Java后端流程
+- 所有地面站窗口现在通过HPOP高精度轨道传播计算
+**验证**:
+- 调度器通过 `load_window_cache_from_json()` 正确加载地面站窗口
+- `unified_scheduler._get_ground_station_windows()` 正确使用 `GS:` 前缀键
+- 数传规划使用高精度计算的地面站窗口
 
 ### 2026-03-06: 智能轨道初始化器
 **问题**: 历元(J2000)距场景时间(2024)24年，HPOP传播耗时226+分钟

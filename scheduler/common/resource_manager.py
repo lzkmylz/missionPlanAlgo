@@ -19,6 +19,11 @@ class ResourceAllocation:
     storage_after: float = 0.0
     power_consumed: float = 0.0
     storage_used: float = 0.0
+    # 详细能源变化字段 - 新增
+    power_generated: float = 0.0       # 发电量(Wh)
+    energy_consumption: float = 0.0    # 机动能量消耗(J)
+    battery_soc_before: float = 0.0    # 任务前SOC(%)
+    battery_soc_after: float = 0.0     # 任务后SOC(%)
 
 
 @dataclass
