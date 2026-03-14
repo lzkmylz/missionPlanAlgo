@@ -107,25 +107,26 @@ class MetaheuristicConfig(AlgorithmConfig):
     mutation_rate: float = 0.2  # 从0.1提高，增强探索能力
     elitism_count: int = 5  # 从2提高，保留更多优秀解
 
-    # SA-specific settings
+    # SA-specific settings - 平衡模式优化
     initial_temperature: float = 100.0
-    cooling_rate: float = 0.95
+    cooling_rate: float = 0.95  # 更快的冷却
     min_temperature: float = 0.01
+    iterations_per_temp: int = 10  # 降低评估次数
 
-    # ACO-specific settings
-    num_ants: int = 20
+    # ACO-specific settings - 平衡模式优化
+    num_ants: int = 25  # 从20增加，平衡搜索
     pheromone_evaporation: float = 0.1
     pheromone_initial: float = 1.0
 
-    # PSO-specific settings
-    num_particles: int = 30
-    inertia_weight: float = 0.7
-    cognitive_coeff: float = 1.5
-    social_coeff: float = 1.5
+    # PSO-specific settings - 平衡模式优化
+    num_particles: int = 25  # 平衡搜索能力和计算时间
+    inertia_weight: float = 0.9
+    cognitive_coeff: float = 2.0
+    social_coeff: float = 2.0
 
-    # Tabu-specific settings
-    tabu_list_size: int = 50
-    neighborhood_size: int = 10
+    # Tabu-specific settings - 平衡模式优化
+    tabu_list_size: int = 10
+    neighborhood_size: int = 15  # 平衡搜索深度
 
     # Convergence settings - 优化早停策略
     convergence_threshold: float = 0.5  # 从0.001提高，更易触发早停

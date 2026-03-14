@@ -31,16 +31,16 @@ class PSOScheduler(MetaheuristicScheduler):
                 - social_coeff: Social coefficient (default 1.5)
                 - random_seed: Random seed (optional)
         """
-        # Set PSO-specific defaults before calling parent init
+        # Set PSO-specific defaults before calling parent init - 平衡模式
         config = config or {}
         if 'max_iterations' not in config and 'generations' not in config:
-            config['max_iterations'] = 100
+            config['max_iterations'] = 50  # 从100降低
 
         super().__init__("PSO", config)
 
-        # PSO-specific parameters (matching test expectations)
+        # PSO-specific parameters - 平衡模式优化
         self.num_particles = self._validate_positive_int(
-            config.get('num_particles', 30), 'num_particles'
+            config.get('num_particles', 25), 'num_particles'  # 从30降低
         )
         self.inertia_weight = config.get('inertia_weight', 0.9)
         self.cognitive_coeff = config.get('cognitive_coeff', 2.0)

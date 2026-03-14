@@ -34,14 +34,15 @@ class ACOScheduler(MetaheuristicScheduler):
                 - random_seed: Random seed (optional)
         """
         config = config or {}
+        # 平衡模式: 默认50代
         if 'max_iterations' not in config and 'generations' not in config:
-            config['max_iterations'] = 100
+            config['max_iterations'] = 50
 
         super().__init__("ACO", config)
 
-        # ACO-specific parameters
+        # ACO-specific parameters - 平衡模式优化
         self.num_ants = self._validate_positive_int(
-            config.get('num_ants', 30), 'num_ants'
+            config.get('num_ants', 25), 'num_ants'  # 从30降低
         )
         self.alpha = config.get('alpha', 1.0)
         self.beta = config.get('beta', 2.0)

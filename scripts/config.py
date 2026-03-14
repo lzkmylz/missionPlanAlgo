@@ -82,18 +82,21 @@ ALGORITHM_CONFIG_TEMPLATES = {
         'imaging_algorithm': 'sa',
         'imaging_config': {
             **DEFAULT_IMAGING_CONFIG,
+            # 平衡模式 - SA参数优化，减少评估次数
             'initial_temperature': 100.0,
-            'cooling_rate': 0.98,
-            'max_iterations': 1000,
-            'min_temperature': 0.001,
+            'cooling_rate': 0.95,  # 更快的冷却
+            'max_iterations': 100,  # 从1000降低
+            'min_temperature': 0.01,
+            'iterations_per_temp': 10,  # 从100大幅降低
         },
     },
     'aco': {
         'imaging_algorithm': 'aco',
         'imaging_config': {
             **DEFAULT_IMAGING_CONFIG,
-            'num_ants': 30,
-            'max_iterations': 100,
+            # 平衡模式 - ACO参数优化
+            'num_ants': 25,  # 从30降低
+            'max_iterations': 50,  # 从100降低
             'alpha': 1.0,
             'beta': 2.0,
             'evaporation_rate': 0.1,
@@ -103,8 +106,9 @@ ALGORITHM_CONFIG_TEMPLATES = {
         'imaging_algorithm': 'pso',
         'imaging_config': {
             **DEFAULT_IMAGING_CONFIG,
-            'num_particles': 30,
-            'max_iterations': 100,
+            # 平衡模式 - PSO参数优化
+            'num_particles': 25,  # 从30降低
+            'max_iterations': 50,  # 从100降低
             'inertia_weight': 0.9,
             'cognitive_coeff': 2.0,
             'social_coeff': 2.0,
@@ -114,9 +118,10 @@ ALGORITHM_CONFIG_TEMPLATES = {
         'imaging_algorithm': 'tabu',
         'imaging_config': {
             **DEFAULT_IMAGING_CONFIG,
+            # 平衡模式 - Tabu参数优化
             'tabu_tenure': 10,
-            'max_iterations': 100,
-            'neighborhood_size': 20,
+            'max_iterations': 50,  # 从100降低
+            'neighborhood_size': 15,  # 从20降低
             'aspiration_threshold': 0.05,
         },
     },

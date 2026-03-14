@@ -20,29 +20,39 @@ class SAScheduler(MetaheuristicScheduler):
     Uses temperature-based probabilistic acceptance to escape local optima.
     """
 
+    # 平衡模式默认参数 - 经性能分析优化
+    DEFAULT_INITIAL_TEMP = 100.0
+    DEFAULT_COOLING_RATE = 0.95  # 更快的冷却，从0.98降低
+    DEFAULT_MIN_TEMP = 0.01
+    DEFAULT_ITERATIONS_PER_TEMP = 10  # 从100大幅降低，减少评估次数
+
     def __init__(self, config: Dict[str, Any] = None):
         """Initialize SA scheduler.
 
         Args:
             config: Configuration parameters
                 - initial_temperature: Starting temperature (default 100.0)
-                - cooling_rate: Temperature cooling rate (default 0.95)
+                - cooling_rate: Temperature cooling rate (default 0.95, 平衡模式)
                 - min_temperature: Stopping temperature (default 0.01)
-                - iterations_per_temp: Iterations at each temperature (default 100)
+                - iterations_per_temp: Iterations at each temperature (default 10, 平衡模式)
                 - random_seed: Random seed (optional)
         """
         super().__init__("SA", config)
         config = config or {}
 
-        # SA-specific parameters (matching test expectations)
+        # SA-specific parameters - 平衡模式优化
         self.initial_temperature = self._validate_positive_float(
-            config.get('initial_temperature', 100.0), 'initial_temperature'
+            config.get('initial_temperature', self.DEFAULT_INITIAL_TEMP), 'initial_temperature'
         )
         self.cooling_rate = self._validate_probability(
-            config.get('cooling_rate', 0.98), 'cooling_rate'
+            config.get('cooling_rate', self.DEFAULT_COOLING_RATE), 'cooling_rate'
         )
-        self.min_temperature = config.get('min_temperature', 0.001)
-        self.iterations_per_temp = config.get('iterations_per_temp', 100)
+        self.min_temperature = config.get('min_temperature', self.DEFAULT_MIN_TEMP)
+        # 限制iterations_per_temp避免过长时间
+        self.iterations_per_temp = min(
+            config.get('iterations_per_temp', self.DEFAULT_ITERATIONS_PER_TEMP),
+            50  # 硬性上限
+        )
 
         # Set random seed
         self.random_seed = config.get('random_seed')

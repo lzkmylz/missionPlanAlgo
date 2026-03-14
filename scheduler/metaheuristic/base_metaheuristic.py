@@ -153,16 +153,31 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         # 平衡模式: 默认50代 (经收敛分析验证，超过50代边际收益极低)
         max_iter = config.get('max_iterations') or config.get('generations', 50)
 
+        # 平衡模式 - 所有元启发式算法统一优化配置
         return MetaheuristicConfig(
             max_iterations=max_iter,
-            population_size=config.get('population_size', 80),  # 平衡模式: 80
+            # GA参数
+            population_size=config.get('population_size', 80),  # GA: 80
             crossover_rate=config.get('crossover_rate', 0.8),
-            mutation_rate=config.get('mutation_rate', 0.2),  # 平衡模式: 0.2增强探索
-            elitism_count=config.get('elitism', 5),  # 平衡模式: 保留更多优秀解
+            mutation_rate=config.get('mutation_rate', 0.2),
+            elitism_count=config.get('elitism', 5),
+            # SA参数 - 平衡模式优化
             initial_temperature=config.get('initial_temperature', 100.0),
             cooling_rate=config.get('cooling_rate', 0.95),
-            num_ants=config.get('num_ants', 20),
-            num_particles=config.get('num_particles', 30),
+            min_temperature=config.get('min_temperature', 0.01),
+            iterations_per_temp=config.get('iterations_per_temp', 10),
+            # ACO参数 - 平衡模式优化
+            num_ants=config.get('num_ants', 25),
+            pheromone_evaporation=config.get('evaporation_rate', 0.1),
+            pheromone_initial=config.get('initial_pheromone', 1.0),
+            # PSO参数 - 平衡模式优化
+            num_particles=config.get('num_particles', 25),
+            inertia_weight=config.get('inertia_weight', 0.9),
+            cognitive_coeff=config.get('cognitive_coeff', 2.0),
+            social_coeff=config.get('social_coeff', 2.0),
+            # Tabu参数 - 平衡模式优化
+            tabu_list_size=config.get('tabu_tenure', 10),
+            neighborhood_size=config.get('neighborhood_size', 15),
             constraints=constraints,
         )
 
