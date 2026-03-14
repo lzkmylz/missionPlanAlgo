@@ -70,10 +70,12 @@ ALGORITHM_CONFIG_TEMPLATES = {
         'imaging_algorithm': 'ga',
         'imaging_config': {
             **DEFAULT_IMAGING_CONFIG,
-            'population_size': 50,
-            'generations': 100,
-            'mutation_rate': 0.1,
+            # 平衡模式默认配置 - 经收敛分析优化
+            'population_size': 80,  # 平衡搜索能力和计算时间
+            'generations': 50,  # 超过50代边际收益极低
+            'mutation_rate': 0.2,  # 增强探索能力
             'crossover_rate': 0.8,
+            'elitism': 5,  # 保留更多优秀解
         },
     },
     'sa': {

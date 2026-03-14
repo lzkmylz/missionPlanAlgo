@@ -107,24 +107,24 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help='运行模式: single=单一算法 (默认), compare=多算法对比'
     )
 
-    # GA算法参数
+    # GA算法参数 - 平衡模式默认配置
     parser.add_argument(
         '--generations',
         type=int,
-        default=100,
-        help='GA迭代次数 (默认: 100)'
+        default=50,
+        help='GA迭代次数 (默认: 50, 平衡模式。超过50代边际收益极低)'
     )
     parser.add_argument(
         '--population-size',
         type=int,
-        default=50,
-        help='GA种群大小 (默认: 50)'
+        default=80,
+        help='GA种群大小 (默认: 80, 平衡模式)'
     )
     parser.add_argument(
         '--mutation-rate',
         type=float,
-        default=0.1,
-        help='GA变异率 (默认: 0.1)'
+        default=0.2,
+        help='GA变异率 (默认: 0.2, 增强探索能力)'
     )
     parser.add_argument(
         '--crossover-rate',

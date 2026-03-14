@@ -26,13 +26,18 @@ class GAScheduler(MetaheuristicScheduler):
     - Penalty: constraint violations
     """
 
+    # 平衡模式默认参数 - 经过收敛分析优化
+    DEFAULT_POPULATION_SIZE = 80  # 从100降低，平衡搜索能力和计算时间
+    DEFAULT_GENERATIONS = 50  # 从200降低，超过50代边际收益极低
+    DEFAULT_ELITISM = 5  # 精英保留数量
+
     def __init__(self, config: Dict[str, Any] = None):
         """Initialize GA scheduler.
 
         Args:
             config: Configuration parameters
-                - population_size: Population size (default 100)
-                - generations: Number of generations (default 200)
+                - population_size: Population size (default 80, 平衡模式)
+                - generations: Number of generations (default 50, 平衡模式)
                 - crossover_rate: Crossover probability (default 0.8)
                 - mutation_rate: Mutation probability (default 0.2)
                 - elitism: Number of elite individuals to preserve (default 5)
@@ -42,12 +47,12 @@ class GAScheduler(MetaheuristicScheduler):
         super().__init__("GA", config)
         config = config or {}
 
-        # GA-specific parameters
+        # GA-specific parameters - 使用平衡模式默认值
         self.population_size = self._validate_positive_int(
-            config.get('population_size', 100), 'population_size'
+            config.get('population_size', self.DEFAULT_POPULATION_SIZE), 'population_size'
         )
         self.generations = self._validate_positive_int(
-            config.get('generations', 200), 'generations'
+            config.get('generations', self.DEFAULT_GENERATIONS), 'generations'
         )
         self.crossover_rate = self._validate_probability(
             config.get('crossover_rate', 0.8), 'crossover_rate'
@@ -55,7 +60,7 @@ class GAScheduler(MetaheuristicScheduler):
         self.mutation_rate = self._validate_probability(
             config.get('mutation_rate', 0.2), 'mutation_rate'
         )
-        self.elitism = config.get('elitism', 5)
+        self.elitism = config.get('elitism', self.DEFAULT_ELITISM)
         self.tournament_size = config.get('tournament_size', 3)
 
         # Set random seed

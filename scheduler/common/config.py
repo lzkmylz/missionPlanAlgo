@@ -98,14 +98,14 @@ class MetaheuristicConfig(AlgorithmConfig):
     constraints: ConstraintConfig = field(default_factory=ConstraintConfig)
     resources: ResourceConfig = field(default_factory=ResourceConfig)
 
-    # Population/iteration settings
-    max_iterations: int = 1000
-    population_size: int = 50
+    # Population/iteration settings - 平衡模式优化
+    max_iterations: int = 100  # 从1000降低，避免过长运行
+    population_size: int = 80  # 从50提高，增加搜索多样性
 
     # GA-specific settings
     crossover_rate: float = 0.8
-    mutation_rate: float = 0.1
-    elitism_count: int = 2
+    mutation_rate: float = 0.2  # 从0.1提高，增强探索能力
+    elitism_count: int = 5  # 从2提高，保留更多优秀解
 
     # SA-specific settings
     initial_temperature: float = 100.0
@@ -127,9 +127,9 @@ class MetaheuristicConfig(AlgorithmConfig):
     tabu_list_size: int = 50
     neighborhood_size: int = 10
 
-    # Convergence settings
-    convergence_threshold: float = 0.001
-    max_no_improvement: int = 50
+    # Convergence settings - 优化早停策略
+    convergence_threshold: float = 0.5  # 从0.001提高，更易触发早停
+    max_no_improvement: int = 15  # 从50降低，更快收敛
 
     def __post_init__(self):
         """Validate metaheuristic configuration."""

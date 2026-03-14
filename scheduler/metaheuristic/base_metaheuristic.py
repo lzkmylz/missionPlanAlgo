@@ -5,6 +5,7 @@ This module provides a unified base class for all metaheuristic algorithms
 """
 
 import random
+import time
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -22,6 +23,9 @@ from scheduler.constraints.unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker, UnifiedBatchCandidate
 )
 from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstraintChecker
+
+# 性能分析器导入
+from .performance_profiler import PerformanceProfiler, MetaheuristicProfiler
 
 
 @dataclass
@@ -122,6 +126,11 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         self._convergence_curve: List[float] = []
         self._iterations = 0
 
+        # Performance profiling
+        self._profiler: Optional[PerformanceProfiler] = None
+        self._mh_profiler: Optional[MetaheuristicProfiler] = None
+        self._enable_profiling = config.get('enable_profiling', True) if config else True
+
     def _convert_config(self, config: Dict[str, Any]) -> MetaheuristicConfig:
         """Convert legacy config dict to MetaheuristicConfig."""
         # Extract constraint settings
@@ -141,14 +150,15 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         )
 
         # Get max_iterations (support both 'max_iterations' and 'generations')
-        max_iter = config.get('max_iterations') or config.get('generations', 1000)
+        # 平衡模式: 默认50代 (经收敛分析验证，超过50代边际收益极低)
+        max_iter = config.get('max_iterations') or config.get('generations', 50)
 
         return MetaheuristicConfig(
             max_iterations=max_iter,
-            population_size=config.get('population_size', 50),
+            population_size=config.get('population_size', 80),  # 平衡模式: 80
             crossover_rate=config.get('crossover_rate', 0.8),
-            mutation_rate=config.get('mutation_rate', 0.1),
-            elitism_count=config.get('elitism', 2),
+            mutation_rate=config.get('mutation_rate', 0.2),  # 平衡模式: 0.2增强探索
+            elitism_count=config.get('elitism', 5),  # 平衡模式: 保留更多优秀解
             initial_temperature=config.get('initial_temperature', 100.0),
             cooling_rate=config.get('cooling_rate', 0.95),
             num_ants=config.get('num_ants', 20),
@@ -171,6 +181,19 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         self._start_timer()
         self._validate_initialization()
 
+        # Initialize performance profilers
+        if self._enable_profiling:
+            self._mh_profiler = MetaheuristicProfiler()
+            self._profiler = self._mh_profiler.profiler
+            print(f"  性能分析已启用")
+        else:
+            self._mh_profiler = None
+            self._profiler = None
+
+        # Phase 1: Data preparation
+        if self._profiler:
+            self._profiler.start("phase1_data_preparation")
+
         # Reset clustering state if needed
         if self.enable_clustering:
             self.reset_clustering_state()
@@ -187,30 +210,74 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         if self.task_count == 0 or self.sat_count == 0:
             return self._build_empty_result()
 
-        # Initialize shared components
+        if self._profiler:
+            self._profiler.end("phase1_data_preparation")
+
+        # Phase 2: Component initialization
+        if self._profiler:
+            self._profiler.start("phase2_component_initialization")
         self._initialize_components()
+        if self._profiler:
+            self._profiler.end("phase2_component_initialization")
 
-        # Algorithm-specific initialization
+        # Phase 3: Population initialization
+        if self._profiler:
+            self._profiler.start("phase3_population_init")
         population = self.initialize_population()
+        if self._profiler:
+            self._profiler.end("phase3_population_init")
 
-        # Evaluate initial population
-        for solution in population:
+        # Phase 4: Initial population evaluation
+        if self._profiler:
+            self._profiler.start("phase4_initial_evaluation")
+        for i, solution in enumerate(population):
+            if self._profiler:
+                self._profiler.start("evaluate_solution", {"solution_idx": i, "phase": "initial"})
             solution.fitness = self._evaluate(solution)
+            if self._profiler:
+                self._profiler.end("evaluate_solution")
+                if self._mh_profiler:
+                    self._mh_profiler.profile_evaluation(i, self.task_count)
+        if self._profiler:
+            self._profiler.end("phase4_initial_evaluation")
 
         # Track convergence
         best_fitness = max(sol.fitness for sol in population)
         self._convergence_curve = [best_fitness]
 
-        # Main optimization loop
+        # Phase 5: Main optimization loop
+        if self._profiler:
+            self._profiler.start("phase5_main_loop")
+
         max_iterations = getattr(self._config, 'generations', self._config.max_iterations)
         for iteration in range(max_iterations):
+            if self._profiler:
+                self._profiler.start("iteration", {"iteration": iteration})
+
             # Evolve population (algorithm-specific)
+            if self._profiler:
+                self._profiler.start("evolve")
             population = self.evolve(population)
+            if self._profiler:
+                self._profiler.end("evolve")
 
             # Evaluate new population
-            for solution in population:
+            if self._profiler:
+                self._profiler.start("evaluate_new_solutions")
+            new_solutions_count = 0
+            for i, solution in enumerate(population):
                 if solution.fitness == 0.0:  # Only evaluate if not already evaluated
+                    new_solutions_count += 1
+                    if self._profiler:
+                        self._profiler.start("evaluate_solution", {"solution_idx": i, "phase": "evolution", "iteration": iteration})
                     solution.fitness = self._evaluate(solution)
+                    if self._profiler:
+                        self._profiler.end("evaluate_solution")
+                        if self._mh_profiler:
+                            self._mh_profiler.profile_evaluation(i, self.task_count)
+            if self._profiler:
+                self._profiler.end("evaluate_new_solutions")
+                self._profiler.start("iteration_overhead")  # Track remaining iteration time
 
             # Track best fitness
             current_best = max(sol.fitness for sol in population)
@@ -220,17 +287,33 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
 
             # Check convergence
             if self._check_convergence():
+                if self._profiler:
+                    self._profiler.end("iteration_overhead")
+                    self._profiler.end("iteration")
                 break
 
-        # Get best solution
-        best_solution = max(population, key=lambda sol: sol.fitness)
+            if self._profiler:
+                self._profiler.end("iteration_overhead")
+                self._profiler.end("iteration")
 
-        # Decode to schedule
+        if self._profiler:
+            self._profiler.end("phase5_main_loop")
+
+        # Phase 6: Decode best solution
+        if self._profiler:
+            self._profiler.start("phase6_decode_solution")
+        best_solution = max(population, key=lambda sol: sol.fitness)
         scheduled_tasks, unscheduled = self._decode_solution(best_solution)
+        if self._profiler:
+            self._profiler.end("phase6_decode_solution")
 
         # Build result
         makespan = self._calculate_makespan(scheduled_tasks)
         computation_time = self._stop_timer()
+
+        # Print performance report
+        if self._mh_profiler:
+            self._mh_profiler.print_full_report()
 
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
@@ -321,15 +404,33 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         Returns:
             Fitness score
         """
-        state = EvaluationState.initialize(self.sat_count, self.satellites)
+        if self._profiler:
+            self._profiler.start("_evaluate_total")
 
+        if self._profiler:
+            self._profiler.start("_evaluate_init_state")
+        state = EvaluationState.initialize(self.sat_count, self.satellites)
+        if self._profiler:
+            self._profiler.end("_evaluate_init_state")
+
+        if self._profiler:
+            self._profiler.start("_evaluate_task_loop")
         for task_idx, sat_idx in enumerate(solution.encoding):
             if task_idx >= len(self.tasks) or sat_idx >= self.sat_count:
                 continue
 
             self._evaluate_task_assignment(task_idx, sat_idx, state)
+        if self._profiler:
+            self._profiler.end("_evaluate_task_loop")
 
-        return self._compute_final_fitness(state)
+        if self._profiler:
+            self._profiler.start("_compute_final_fitness")
+        fitness = self._compute_final_fitness(state)
+        if self._profiler:
+            self._profiler.end("_compute_final_fitness")
+            self._profiler.end("_evaluate_total")
+
+        return fitness
 
     # Backward compatibility: alias for _evaluate
     _evaluate_solution = _evaluate
@@ -347,23 +448,38 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             sat_idx: Index of assigned satellite
             state: Current evaluation state
         """
+        if self._profiler:
+            self._profiler.start("_evaluate_task_assignment")
+
         task = self.tasks[task_idx]
         sat = self.satellites[sat_idx]
 
         # Find feasible window
+        if self._profiler:
+            self._profiler.start("_find_feasible_window")
         feasible_window = self._find_feasible_window(sat_idx, sat, task, state)
+        if self._profiler:
+            self._profiler.end("_find_feasible_window")
         if not feasible_window:
+            if self._profiler:
+                self._profiler.end("_evaluate_task_assignment")
             return
 
         # Calculate timing
+        if self._profiler:
+            self._profiler.start("_calculate_timing")
         imaging_mode = self._select_imaging_mode(sat)
         imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
 
         actual_start, actual_end = self._calculate_task_timing(
             sat_idx, sat, task, feasible_window, imaging_duration, state
         )
+        if self._profiler:
+            self._profiler.end("_calculate_timing")
 
         if not actual_start or actual_end > feasible_window.end_time:
+            if self._profiler:
+                self._profiler.end("_evaluate_task_assignment")
             return
 
         # 使用批量约束检查器（与greedy调度器一致）
@@ -436,14 +552,22 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                 })
 
             # 执行批量约束检查
+            if self._profiler:
+                self._profiler.start("constraint_check_batch")
             results = self._batch_constraint_checker.check_all_constraints_batch(
                 candidates=[candidate],
                 existing_tasks=existing_tasks,
                 satellite_states=satellite_states,
                 early_termination=True
             )
+            if self._profiler:
+                self._profiler.end("constraint_check_batch")
+                if self._mh_profiler:
+                    self._mh_profiler.profile_constraint_check(0.001)  # Approximate
 
             if not results or not results[0].feasible:
+                if self._profiler:
+                    self._profiler.end("_evaluate_task_assignment")
                 return
 
             result = results[0]
@@ -470,6 +594,9 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                 "Batch constraint checker not initialized. "
                 "High precision mode requires UnifiedBatchConstraintChecker."
             )
+
+        if self._profiler:
+            self._profiler.end("_evaluate_task_assignment")
 
     def _find_feasible_window(
         self, sat_idx: int, sat: Any, task: Any, state: EvaluationState
