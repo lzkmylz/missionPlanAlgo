@@ -246,16 +246,37 @@ class CapabilityChecker:
         # Check resolution requirement
         required_resolution = getattr(target, 'resolution_required', None)
         if required_resolution is not None:
-            sat_resolution = getattr(satellite.capabilities, 'resolution', None)
-            try:
-                if sat_resolution is not None and sat_resolution > required_resolution:
+            # 使用多模式分辨率检查
+            if imaging_mode is not None:
+                # 指定了成像模式：检查该特定模式的分辨率
+                mode_resolution = satellite.capabilities.get_mode_resolution(imaging_mode)
+                if mode_resolution is not None:
+                    # 使用指定模式的分辨率
+                    if mode_resolution > required_resolution:
+                        result.add_violation(
+                            ConstraintType.CAPABILITY,
+                            f"Resolution insufficient: mode {imaging_mode} has {mode_resolution}m "
+                            f"> {required_resolution}m required"
+                        )
+                        return result
+                else:
+                    # 未找到模式特定分辨率，使用默认分辨率
+                    sat_resolution = getattr(satellite.capabilities, 'resolution', None)
+                    if sat_resolution is not None and sat_resolution > required_resolution:
+                        result.add_violation(
+                            ConstraintType.CAPABILITY,
+                            f"Resolution insufficient: {sat_resolution}m > {required_resolution}m required"
+                        )
+                        return result
+            else:
+                # 未指定成像模式：检查卫星是否有任何模式能满足要求
+                if not satellite.capabilities.can_satisfy_resolution(required_resolution):
+                    best_res = satellite.capabilities.get_best_resolution()
                     result.add_violation(
                         ConstraintType.CAPABILITY,
-                        f"Resolution insufficient: {sat_resolution}m > {required_resolution}m required"
+                        f"Resolution insufficient: best available {best_res}m > {required_resolution}m required"
                     )
                     return result
-            except TypeError:
-                pass
 
         # Check imaging mode compatibility
         if imaging_mode is not None:

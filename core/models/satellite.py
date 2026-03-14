@@ -340,6 +340,77 @@ class SatelliteCapabilities:
 
         return True
 
+    def get_mode_resolution(self, mode: Any) -> Optional[float]:
+        """
+        获取指定成像模式的分辨率
+
+        Args:
+            mode: 成像模式（ImagingMode枚举或字符串）
+
+        Returns:
+            分辨率（米），如果模式不存在则返回None
+        """
+        # 将mode转换为字符串进行比较
+        mode_value = None
+        if isinstance(mode, ImagingMode):
+            mode_value = mode.value
+        elif isinstance(mode, str):
+            mode_value = mode
+        else:
+            return None
+
+        # 在imaging_mode_details中查找对应模式的分辨率
+        for detail in self.imaging_mode_details:
+            detail_mode_id = detail.get('mode_id')
+            if detail_mode_id == mode_value:
+                return float(detail.get('resolution', self.resolution))
+
+        return None
+
+    def get_best_resolution(self) -> float:
+        """
+        获取卫星的最佳（最高）分辨率
+
+        Returns:
+            最高分辨率（米）
+        """
+        resolutions = [self.resolution]  # 默认分辨率
+
+        # 收集所有成像模式的分辨率
+        for detail in self.imaging_mode_details:
+            res = detail.get('resolution')
+            if res is not None:
+                resolutions.append(float(res))
+
+        return min(resolutions) if resolutions else self.resolution
+
+    def can_satisfy_resolution(self, required_resolution: float) -> bool:
+        """
+        检查卫星是否能满足指定的分辨率要求
+
+        逻辑：卫星有任意成像模式的分辨率优于或等于要求（数值更小或相等）
+
+        Args:
+            required_resolution: 所需分辨率（米）
+
+        Returns:
+            True if satellite can satisfy the resolution requirement
+        """
+        if required_resolution is None:
+            return True
+
+        # 检查所有可用的分辨率
+        available_resolutions = [self.resolution]
+
+        # 添加所有成像模式的分辨率
+        for detail in self.imaging_mode_details:
+            res = detail.get('resolution')
+            if res is not None:
+                available_resolutions.append(float(res))
+
+        # 检查是否有分辨率优于或等于要求（数值更小或相等）
+        return any(r <= required_resolution for r in available_resolutions)
+
 
 @dataclass
 class Satellite:
@@ -725,6 +796,8 @@ class Satellite:
             storage_capacity=cap_data.get('storage_capacity', DEFAULT_STORAGE_CAPACITY_GB),
             power_capacity=cap_data.get('power_capacity', DEFAULT_POWER_CAPACITY_WH),
             data_rate=cap_data.get('data_rate', DEFAULT_DATA_RATE_MBPS),
+            resolution=cap_data.get('resolution', DEFAULT_RESOLUTION_M),
+            swath_width=cap_data.get('swath_width', DEFAULT_SWATH_WIDTH_M),
             imager=imager_data,
             imaging_mode_details=imaging_mode_details,
             imaging_mode_constraints=imaging_mode_constraints,

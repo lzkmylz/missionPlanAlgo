@@ -166,8 +166,23 @@ class UnifiedBatchConstraintChecker:
 
         results = [UnifiedBatchResult(feasible=True) for _ in candidates]
 
+        # 阶段0: 分辨率约束检查（最快速，优先执行）
+        for i, candidate in enumerate(candidates):
+            if not self._check_resolution_constraint(candidate):
+                results[i].feasible = False
+                results[i].reason = "Resolution constraint: insufficient resolution for target"
+
+        # 早期终止检查
+        if early_termination:
+            active_indices = [i for i, r in enumerate(results) if r.feasible]
+            if not active_indices:
+                return results
+        else:
+            active_indices = list(range(len(candidates)))
+
         # 阶段1: 姿态机动约束检查（通常最耗时，但已批量优化）
-        slew_candidates = self._convert_to_slew_candidates(candidates)
+        active_candidates = [candidates[i] for i in active_indices]
+        slew_candidates = self._convert_to_slew_candidates(active_candidates)
         slew_results = self._slew_checker.check_slew_feasibility_batch(
             slew_candidates, current_attitudes
         )
@@ -272,9 +287,15 @@ class UnifiedBatchConstraintChecker:
 
         results = [UnifiedBatchResult(feasible=True) for _ in candidates]
 
+        # 阶段0: 分辨率约束检查（最快速，优先执行）
+        for i, candidate in enumerate(candidates):
+            if not self._check_resolution_constraint(candidate):
+                results[i].feasible = False
+                results[i].reason = "Resolution constraint: insufficient resolution for target"
+
         # 注意：姿态检查已在GreedyScheduler中完成，这里跳过
         # 检查SAA、时间冲突约束
-        active_indices = list(range(len(candidates)))
+        active_indices = [i for i in range(len(candidates)) if results[i].feasible]
 
         # SAA检查
         logger.debug(f"[UnifiedBatch] Converting {len(active_indices)} candidates to SAA format...")
@@ -425,3 +446,26 @@ class UnifiedBatchConstraintChecker:
         self._saa_checker.reset_batch_stats()
         self._time_checker.reset_batch_stats()
         self._resource_checker.reset_batch_stats()
+
+    def _check_resolution_constraint(self, candidate: UnifiedBatchCandidate) -> bool:
+        """
+        检查分辨率约束
+
+        检查卫星是否有成像模式能满足目标的分辨率要求。
+
+        Args:
+            candidate: 统一候选对象
+
+        Returns:
+            True if resolution constraint is satisfied, False otherwise
+        """
+        target = candidate.target
+        satellite = candidate.satellite
+
+        # 获取目标分辨率需求
+        required_resolution = getattr(target, 'resolution_required', None)
+        if required_resolution is None:
+            return True  # 无分辨率要求，直接通过
+
+        # 使用卫星能力的can_satisfy_resolution方法检查
+        return satellite.capabilities.can_satisfy_resolution(required_resolution)
