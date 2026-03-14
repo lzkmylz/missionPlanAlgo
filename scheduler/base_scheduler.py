@@ -390,10 +390,11 @@ class BaseScheduler(ABC):
             return
 
         # 强制使用批量姿态约束检查器（向量化优化）
-        # 高精度要求：禁止简化模式
+        # 高精度要求：使用刚体动力学查找表（高精度+高性能）
         self._slew_checker = BatchSlewConstraintChecker(
             self.mission,
-            use_precise_model=True
+            use_precise_model=True,
+            use_lookup_table=True  # 默认启用刚体动力学查表
         )
 
         # 设置状态跟踪器（如果可用）

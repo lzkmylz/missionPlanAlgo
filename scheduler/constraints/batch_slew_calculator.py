@@ -419,19 +419,36 @@ if HAS_NUMBA:
 class BatchSlewCalculator:
     """批量姿态机动计算器
 
-    将Python对象转换为NumPy数组，调用Numba加速计算，再转回Python对象
+    将Python对象转换为NumPy数组，调用Numba加速计算，再转回Python对象。
+    支持两种模式：
+    1. Bang-Bang快速计算（默认）
+    2. 刚体动力学查表计算（高精度，use_lookup_table=True）
     """
 
-    def __init__(self):
+    def __init__(self, use_lookup_table: bool = True):
+        """初始化批量计算器
+
+        Args:
+            use_lookup_table: 是否使用刚体动力学预计算查找表
+                            True: 使用查表（高精度，性能与Bang-Bang相同）
+                            False: 使用Bang-Bang简化计算
+        """
         self.use_numba = HAS_NUMBA
-        if not self.use_numba:
+        self.use_lookup_table = use_lookup_table
+
+        if use_lookup_table:
+            # 使用刚体动力学查表
+            from core.dynamics.precise import SlewLookupTable
+            self._lookup_table = SlewLookupTable.get_instance()
+            logger.info("BatchSlewCalculator initialized with rigid body dynamics lookup table")
+        elif not self.use_numba:
             # 高精度要求：Numba是必需的
             raise RuntimeError(
                 "Numba is required for high-precision batch calculations. "
                 "Please install: pip install numba"
             )
         else:
-            # 预热Numba JIT编译器，避免第一次调用时的编译开销
+            # 预热Numba JIT编译器
             self._warmup_numba()
 
     def _warmup_numba(self):
@@ -562,9 +579,13 @@ class BatchSlewCalculator:
         Returns:
             批量计算结果列表
         """
+        if self.use_lookup_table:
+            # 使用刚体动力学查表（高精度）
+            return self._compute_batch_lookup(data)
+
         if self.use_numba:
             try:
-                # 调用Numba加速版本
+                # 调用Numba加速版本（Bang-Bang简化计算）
                 batch_compute_slew_feasibility_numba(
                     data.prev_quaternions,
                     data.target_quaternions,
@@ -618,6 +639,153 @@ class BatchSlewCalculator:
             ))
 
         return results
+
+    def _compute_batch_lookup(self, data: BatchSlewData) -> List[BatchSlewResult]:
+        """使用刚体动力学查找表进行批量计算
+
+        通过查表获取预计算的刚体动力学结果，实现O(1)查询时间。
+        对于角度在预计算点之间的查询，使用线性插值。
+
+        Args:
+            data: 批量数据容器
+
+        Returns:
+            批量计算结果列表
+        """
+        import math
+
+        results = []
+
+        for i in range(data.n):
+            # 获取候选信息
+            if i < len(data.candidates):
+                cand = data.candidates[i]
+                satellite = cand.satellite
+            else:
+                # 测试模式
+                satellite = None
+
+            # 计算机动角度
+            sat_pos = data.sat_positions[i]
+            target_pos = data.target_positions[i]
+
+            # 计算从卫星到目标的视线角度
+            sat_norm = np.linalg.norm(sat_pos)
+            target_norm = np.linalg.norm(target_pos)
+
+            if sat_norm < 1e-10 or target_norm < 1e-10:
+                # 无效位置，返回不可行
+                results.append(BatchSlewResult(
+                    feasible=False,
+                    slew_angle=0.0,
+                    slew_time=0.0,
+                    reset_time=0.0,
+                    actual_start=datetime.now(),
+                    energy_consumption=0.0,
+                    momentum_margin=0.0,
+                    reason="Invalid satellite or target position"
+                ))
+                continue
+
+            # 计算地心角
+            nadir_vec = -np.array(sat_pos) / sat_norm
+            los_vec = (np.array(target_pos) - np.array(sat_pos))
+            los_norm = np.linalg.norm(los_vec)
+
+            if los_norm < 1e-10:
+                slew_angle = 0.0
+            else:
+                los_vec = los_vec / los_norm
+                dot = np.clip(np.dot(nadir_vec, los_vec), -1.0, 1.0)
+                slew_angle = math.degrees(math.acos(dot))
+
+            # 检查时间间隔决定是否包含复位时间
+            time_interval = data.time_intervals[i]
+            include_reset = time_interval < 300.0  # 小于5分钟需要复位
+
+            # 通过查找表获取刚体动力学结果
+            if satellite is not None:
+                lookup_result = self._lookup_table.query(satellite, slew_angle)
+
+                # 基础机动时间
+                slew_time = lookup_result.time
+                energy = lookup_result.energy
+                momentum_margin = lookup_result.momentum_margin
+                feasible = lookup_result.feasible
+
+                # 如果需要复位，加上复位时间（从当前姿态回到对地定向）
+                reset_time = 0.0
+                if include_reset:
+                    # 计算前一姿态到对地定向的角度
+                    prev_q = data.prev_quaternions[i]
+                    # 简化：假设复位角度为平均姿态偏离（约10度）
+                    # 更精确的做法是计算前一姿态四元数到单位四元数的角度
+                    reset_angle = self._estimate_reset_angle(prev_q)
+                    reset_result = self._lookup_table.query(satellite, reset_angle)
+                    reset_time = reset_result.time
+
+                total_slew_time = slew_time + reset_time
+            else:
+                # 测试模式：使用Bang-Bang估算
+                max_angular_velocity = data.max_angular_velocity[i]
+                settling_time = data.settling_time[i]
+                slew_time = slew_angle / max_angular_velocity + settling_time
+                reset_time = settling_time if include_reset else 0.0
+                total_slew_time = slew_time + reset_time
+                energy = slew_time * 10.0
+                momentum_margin = max(0, 100.0 - slew_angle)
+                feasible = slew_angle <= 45.0
+
+            # 检查窗口约束
+            window_duration = data.window_durations[i]
+            feasible = feasible and (total_slew_time <= window_duration)
+
+            # 计算actual_start
+            if i < len(data.candidates):
+                window_start = data.candidates[i].window_start
+            else:
+                window_start = datetime.now()
+
+            actual_start = window_start + timedelta(seconds=total_slew_time)
+
+            results.append(BatchSlewResult(
+                feasible=feasible,
+                slew_angle=slew_angle,
+                slew_time=total_slew_time,
+                reset_time=reset_time,
+                actual_start=actual_start,
+                energy_consumption=energy,
+                momentum_margin=momentum_margin,
+                reason=None if feasible else "Slew time exceeds window or angle not feasible"
+            ))
+
+        return results
+
+    def _estimate_reset_angle(self, prev_q: np.ndarray) -> float:
+        """估算从当前姿态复位到对地定向所需角度
+
+        Args:
+            prev_q: 前一姿态四元数 [w, x, y, z]
+
+        Returns:
+            复位角度（度）
+        """
+        # 对地定向 = 单位四元数
+        # 两四元数夹角 = 2 * acos(|dot(q1, q2)|)
+        w = prev_q[0]
+        # 取绝对值确保得到最小旋转角度
+        w_abs = abs(w)
+        if w_abs > 1.0:
+            w_abs = 1.0
+
+        # 旋转角度 = 2 * acos(|w|)
+        angle_rad = 2.0 * np.arccos(w_abs)
+        angle_deg = np.degrees(angle_rad)
+
+        # 如果角度很小，返回最小值
+        if angle_deg < 0.1:
+            return 0.0
+        return float(angle_deg)
 
     def _compute_batch_python(self, data: BatchSlewData):
         """Python回退版本（当Numba不可用时）"""

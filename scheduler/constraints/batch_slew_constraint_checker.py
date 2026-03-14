@@ -50,7 +50,8 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
         mission: Mission,
         use_precise_model: bool = True,
         precise_calculators: Optional[Dict[str, PreciseSlewCalculator]] = None,
-        skip_reset_calculation: bool = False
+        skip_reset_calculation: bool = False,
+        use_lookup_table: bool = True
     ):
         """初始化批量约束检查器
 
@@ -59,6 +60,9 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
             use_precise_model: 是否使用精确模型（批量版本始终使用优化计算）
             precise_calculators: 预计算的精确计算器字典
             skip_reset_calculation: 是否跳过姿态复位计算
+            use_lookup_table: 是否使用刚体动力学查找表（默认启用）
+                            True: 使用查表（刚体动力学精度，Bang-Bang性能）
+                            False: 使用Bang-Bang简化计算
         """
         # 调用父类初始化
         super().__init__(
@@ -68,8 +72,9 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
             skip_reset_calculation=skip_reset_calculation
         )
 
-        # 创建批量计算器
-        self._batch_calculator = BatchSlewCalculator()
+        # 创建批量计算器（默认使用刚体动力学查找表）
+        self._batch_calculator = BatchSlewCalculator(use_lookup_table=use_lookup_table)
+        self._use_lookup_table = use_lookup_table
 
         # 性能统计
         self._batch_stats = {
@@ -78,7 +83,11 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
             'avg_batch_size': 0.0
         }
 
-        logger.info("BatchSlewConstraintChecker initialized with batch optimization")
+        # 预计算所有卫星的查找表
+        if use_lookup_table:
+            self._precompute_lookup_tables()
+
+        logger.info(f"BatchSlewConstraintChecker initialized (lookup_table={use_lookup_table})")
 
     def check_slew_feasibility_batch(
         self,
@@ -325,10 +334,17 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
         Returns:
             统计字典
         """
-        return {
+        stats = {
             **self._batch_stats,
-            'use_numba': self._batch_calculator.use_numba
+            'use_numba': self._batch_calculator.use_numba,
+            'use_lookup_table': self._use_lookup_table
         }
+
+        # 添加查找表统计
+        if self._use_lookup_table:
+            stats['lookup_table'] = self.get_lookup_table_stats()
+
+        return stats
 
     def reset_batch_stats(self):
         """重置批量计算统计"""
@@ -337,3 +353,43 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
             'total_candidates': 0,
             'avg_batch_size': 0.0
         }
+
+    def _precompute_lookup_tables(self):
+        """为任务中所有卫星预计算查找表"""
+        try:
+            from core.dynamics.precise import SlewLookupTable
+
+            lookup_table = SlewLookupTable.get_instance()
+
+            logger.info(f"Precomputing lookup tables for {len(self.mission.satellites)} satellites...")
+
+            for sat in self.mission.satellites:
+                sat_class = lookup_table.build_table_for_satellite(sat)
+                logger.debug(f"Built lookup table for {sat.id}: class={sat_class}")
+
+            stats = lookup_table.get_stats()
+            logger.info(f"Lookup table precomputation complete: "
+                       f"{stats['num_classes']} classes, "
+                       f"{stats['total_entries']} entries")
+
+        except Exception as e:
+            logger.warning(f"Failed to precompute lookup tables: {e}")
+
+    def get_lookup_table_stats(self) -> Dict[str, Any]:
+        """获取查找表统计信息
+
+        Returns:
+            查找表统计字典
+        """
+        if not self._use_lookup_table:
+            return {'enabled': False}
+
+        try:
+            from core.dynamics.precise import SlewLookupTable
+            stats = SlewLookupTable.get_instance().get_stats()
+            return {
+                'enabled': True,
+                **stats
+            }
+        except Exception as e:
+            return {'enabled': True, 'error': str(e)}

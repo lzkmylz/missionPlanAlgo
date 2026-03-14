@@ -158,7 +158,8 @@ class UnifiedScheduler:
 
         self.slew_checker = BatchSlewConstraintChecker(
             mission=self.mission,
-            use_precise_model=True
+            use_precise_model=True,
+            use_lookup_table=True  # 默认启用刚体动力学查表
         )
 
         # 设置状态跟踪器（如果可用）

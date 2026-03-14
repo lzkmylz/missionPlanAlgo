@@ -11,8 +11,6 @@ from enum import Enum
 import math
 
 from core.models import Mission, Satellite, Target
-from core.dynamics.slew_calculator import SlewCalculator
-from core.dynamics.attitude_calculator import AttitudeCalculator, PropagatorType
 from scheduler.common.config import ConstraintConfig
 
 
@@ -84,19 +82,22 @@ class ConstraintContext:
 
 
 class SlewChecker:
-    """Slew constraint checking component."""
+    """Slew constraint checking component.
+
+    注意: 此类已更新为使用简化计算逻辑。推荐使用 BatchSlewConstraintChecker 进行批量约束检查。
+    """
 
     def __init__(self):
-        self._calculators: Dict[str, SlewCalculator] = {}
+        self._satellite_configs: Dict[str, Dict[str, float]] = {}
 
     def initialize_satellite(self, satellite: Satellite) -> None:
-        """Initialize slew calculator for a satellite."""
+        """Initialize slew configuration for a satellite."""
         agility = getattr(satellite.capabilities, 'agility', {}) or {}
-        self._calculators[satellite.id] = SlewCalculator(
-            max_slew_rate=agility.get('max_slew_rate', 3.0),
-            max_slew_angle=satellite.capabilities.max_off_nadir,
-            settling_time=agility.get('settling_time', 5.0)
-        )
+        self._satellite_configs[satellite.id] = {
+            'max_slew_rate': agility.get('max_slew_rate', 3.0),
+            'max_slew_angle': satellite.capabilities.max_off_nadir,
+            'settling_time': agility.get('settling_time', 5.0)
+        }
 
     def check_slew(
         self,
@@ -121,17 +122,21 @@ class SlewChecker:
             ConstraintResult with slew information
         """
         result = ConstraintResult()
-        calculator = self._calculators.get(sat_id)
+        config = self._satellite_configs.get(sat_id)
 
-        if not calculator:
-            result.add_violation(ConstraintType.SLEW, "No slew calculator available")
+        if not config:
+            result.add_violation(ConstraintType.SLEW, "No slew configuration available")
             return result
+
+        max_slew_rate = config['max_slew_rate']
+        max_slew_angle = config['max_slew_angle']
+        settling_time = config['settling_time']
 
         if prev_target is None:
             # First task for this satellite: calculate from nadir to target
             slew_angle = self._calculate_slew_angle(None, current_target)
             result.slew_angle = slew_angle
-            slew_time = calculator.calculate_slew_time(slew_angle)
+            slew_time = self._calculate_slew_time(slew_angle, max_slew_rate, settling_time)
             result.slew_time = slew_time
             result.actual_start = window_start + timedelta(seconds=result.slew_time)
             return result
@@ -140,15 +145,15 @@ class SlewChecker:
         slew_angle = self._calculate_slew_angle(prev_target, current_target)
         result.slew_angle = slew_angle
 
-        if slew_angle > calculator.max_slew_angle:
+        if slew_angle > max_slew_angle:
             result.add_violation(
                 ConstraintType.SLEW,
-                f"Slew angle {slew_angle:.1f}° exceeds max {calculator.max_slew_angle:.1f}°"
+                f"Slew angle {slew_angle:.1f}° exceeds max {max_slew_angle:.1f}°"
             )
             return result
 
         # Calculate slew time
-        slew_time = calculator.calculate_slew_time(slew_angle)
+        slew_time = self._calculate_slew_time(slew_angle, max_slew_rate, settling_time)
         result.slew_time = slew_time
 
         # Calculate actual start time
@@ -168,6 +173,22 @@ class SlewChecker:
 
         result.actual_start = actual_start
         return result
+
+    @staticmethod
+    def _calculate_slew_time(slew_angle: float, max_slew_rate: float, settling_time: float) -> float:
+        """Calculate slew time.
+
+        Args:
+            slew_angle: Slew angle in degrees
+            max_slew_rate: Maximum slew rate in deg/s
+            settling_time: Settling time in seconds
+
+        Returns:
+            Total slew time in seconds
+        """
+        if slew_angle <= 0:
+            return settling_time
+        return slew_angle / max_slew_rate + settling_time
 
     def _calculate_slew_angle(
         self,

@@ -13,7 +13,6 @@ import math
 from core.models.satellite import Satellite
 from core.models.target import Target
 from core.models.mission import Mission
-from core.dynamics.slew_calculator import SlewCalculator
 from core.dynamics.attitude_calculator import AttitudeCalculator, PropagatorType
 
 
@@ -43,10 +42,13 @@ class SlewConstraintChecker:
     将姿态机动约束作为调度器的核心约束条件。
     使用 ECEF 坐标系正确计算机动角度。
 
+    注意: 此类已移除对旧版 SlewCalculator 的依赖，改用直接计算。
+    推荐使用 PreciseSlewConstraintChecker 进行高精度约束检查。
+
     Attributes:
         mission: 任务对象
         _attitude_calc: 姿态计算器
-        _slew_calculators: 每个卫星的 SlewCalculator
+        _satellite_configs: 每个卫星的机动配置
         _satellite_cache: 卫星位置缓存
     """
 
@@ -68,7 +70,7 @@ class SlewConstraintChecker:
         self._attitude_calc = attitude_calculator or AttitudeCalculator(
             propagator_type=PropagatorType.SGP4
         )
-        self._slew_calculators: Dict[str, SlewCalculator] = {}
+        self._satellite_configs: Dict[str, Dict[str, float]] = {}
         self._satellite_cache: Dict[str, Dict[datetime, Tuple[Tuple[float, float, float], Tuple[float, float, float]]]] = {}
         self._position_cache = None  # 预计算位置缓存
 
@@ -77,21 +79,39 @@ class SlewConstraintChecker:
         self._position_cache = cache
 
     def initialize_satellite(self, satellite: Satellite) -> None:
-        """初始化卫星的 SlewCalculator
+        """初始化卫星的机动配置
 
         Args:
             satellite: 卫星对象
         """
         agility = getattr(satellite.capabilities, 'agility', {}) or {}
 
-        self._slew_calculators[satellite.id] = SlewCalculator(
-            max_slew_rate=agility.get('max_slew_rate', 3.0),
-            max_slew_angle=satellite.capabilities.max_off_nadir,
-            settling_time=agility.get('settling_time', 5.0)
-        )
+        self._satellite_configs[satellite.id] = {
+            'max_slew_rate': agility.get('max_slew_rate', 3.0),
+            'max_slew_angle': satellite.capabilities.max_off_nadir,
+            'settling_time': agility.get('settling_time', 5.0)
+        }
 
         # 初始化缓存
         self._satellite_cache[satellite.id] = {}
+
+    def _calculate_slew_time(self, slew_angle: float, sat_id: str) -> float:
+        """计算机动时间
+
+        Args:
+            slew_angle: 机动角度（度）
+            sat_id: 卫星ID
+
+        Returns:
+            机动时间（秒）
+        """
+        config = self._satellite_configs.get(sat_id, {})
+        max_slew_rate = config.get('max_slew_rate', 3.0)
+        settling_time = config.get('settling_time', 5.0)
+
+        if slew_angle <= 0:
+            return settling_time
+        return slew_angle / max_slew_rate + settling_time
 
     def check_slew_feasibility(
         self,
@@ -128,16 +148,18 @@ class SlewConstraintChecker:
                 reason=f"Satellite {satellite_id} not found"
             )
 
-        # 获取 SlewCalculator
-        slew_calc = self._slew_calculators.get(satellite_id)
-        if not slew_calc:
+        # 获取卫星配置
+        sat_config = self._satellite_configs.get(satellite_id)
+        if not sat_config:
             return SlewFeasibilityResult(
                 feasible=False,
                 slew_angle=0.0,
                 slew_time=0.0,
                 actual_start=window_start,
-                reason=f"SlewCalculator not initialized for {satellite_id}"
+                reason=f"Satellite configuration not initialized for {satellite_id}"
             )
+
+        max_slew_angle = sat_config['max_slew_angle']
 
         # 如果没有上一个目标，计算从对地定向到第一个目标的机动
         if prev_target is None:
@@ -146,8 +168,8 @@ class SlewConstraintChecker:
             target_lon = getattr(current_target, 'longitude', 0)
             # 使用目标经纬度估算典型机动角度（卫星通常以20-45度离轴角观测）
             slew_angle = math.sqrt(target_lat**2 + target_lon**2) * 0.5
-            slew_angle = min(slew_angle, slew_calc.max_slew_angle)
-            slew_time = slew_calc.calculate_slew_time(slew_angle)
+            slew_angle = min(slew_angle, max_slew_angle)
+            slew_time = self._calculate_slew_time(slew_angle, satellite_id)
             return SlewFeasibilityResult(
                 feasible=True,
                 slew_angle=slew_angle,
@@ -190,20 +212,20 @@ class SlewConstraintChecker:
         )
 
         # 检查机动角度是否超过限制（使用原始角度）
-        if slew_angle > slew_calc.max_slew_angle:
+        if slew_angle > max_slew_angle:
             return SlewFeasibilityResult(
                 feasible=False,
                 slew_angle=slew_angle,
                 slew_time=0.0,
                 actual_start=window_start,
-                reason=f"Slew angle {slew_angle:.2f}° exceeds max {slew_calc.max_slew_angle}°"
+                reason=f"Slew angle {slew_angle:.2f}° exceeds max {max_slew_angle}°"
             )
 
         # 限制在最大侧摆角内（仅用于后续计算）
-        slew_angle = min(slew_angle, slew_calc.max_slew_angle)
+        slew_angle = min(slew_angle, max_slew_angle)
 
         # 计算机动时间
-        slew_time = slew_calc.calculate_slew_time(slew_angle)
+        slew_time = self._calculate_slew_time(slew_angle, satellite_id)
 
         # 计算实际开始时间
         earliest_start = prev_end_time + timedelta(seconds=slew_time)

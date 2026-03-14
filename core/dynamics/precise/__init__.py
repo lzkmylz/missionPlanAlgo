@@ -33,6 +33,9 @@ from .attitude_types import (
     AttitudeState, Quaternion, AngularVelocity,
     ControlTorque, MomentumState
 )
+from .lookup_table import (
+    SlewLookupTable, SlewLookupEntry, SlewLookupResult
+)
 
 __all__ = [
     # 刚体动力学
@@ -56,6 +59,11 @@ __all__ = [
     # 主接口
     'PreciseSlewCalculator',
     'SatelliteDynamicsConfig',
+
+    # 查找表（高性能）
+    'SlewLookupTable',
+    'SlewLookupEntry',
+    'SlewLookupResult',
 
     # 类型定义
     'AttitudeState',

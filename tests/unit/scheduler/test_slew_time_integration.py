@@ -37,7 +37,7 @@ from scheduler.metaheuristic.aco_scheduler import ACOScheduler
 from scheduler.metaheuristic.pso_scheduler import PSOScheduler
 from scheduler.metaheuristic.tabu_scheduler import TabuScheduler
 from scheduler.base_scheduler import ScheduleResult, TaskFailureReason, ScheduledTask
-from core.dynamics.slew_calculator import SlewCalculator
+from scheduler.constraints import BatchSlewConstraintChecker, BatchSlewCandidate
 
 
 # =============================================================================
@@ -266,10 +266,10 @@ class TestGreedySchedulerSlewTime:
             assert hasattr(task, 'slew_angle')
             assert task.slew_angle >= 0.0
 
-    def test_greedy_scheduler_initializes_slew_calculators(
+    def test_greedy_scheduler_initializes_slew_checker(
         self, sample_mission, mock_window_cache, sample_satellite_default_agility
     ):
-        """Test GreedyScheduler initializes SlewCalculator for each satellite"""
+        """Test GreedyScheduler initializes BatchSlewConstraintChecker"""
         scheduler = GreedyScheduler()
         scheduler.initialize(sample_mission)
         scheduler.set_window_cache(mock_window_cache)
@@ -277,14 +277,10 @@ class TestGreedySchedulerSlewTime:
         # Schedule to trigger initialization
         scheduler.schedule()
 
-        # Check that slew calculators are initialized
-        assert hasattr(scheduler, '_slew_calculators')
-        assert sample_satellite_default_agility.id in scheduler._slew_calculators
-
-        slew_calc = scheduler._slew_calculators[sample_satellite_default_agility.id]
-        assert isinstance(slew_calc, SlewCalculator)
-        assert slew_calc.max_slew_rate == 2.0
-        assert slew_calc.settling_time == 5.0
+        # Check that slew checker is initialized (via base class)
+        assert hasattr(scheduler, '_slew_checker')
+        assert scheduler._slew_checker is not None
+        assert isinstance(scheduler._slew_checker, BatchSlewConstraintChecker)
 
 
 # =============================================================================

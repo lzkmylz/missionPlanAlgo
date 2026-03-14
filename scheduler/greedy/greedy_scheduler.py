@@ -22,7 +22,6 @@ from collections import defaultdict
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from ..frequency_utils import ObservationTask, create_observation_tasks
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
-from core.dynamics.slew_calculator import SlewCalculator
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
 from scheduler.common.config import ConstraintConfig
@@ -104,9 +103,6 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
 
         # Track satellite resource usage during scheduling
         self._sat_resource_usage: Dict[str, Dict[str, Any]] = {}
-
-        # Slew calculators per satellite (initialized in initialize())
-        self._slew_calculators: Dict[str, SlewCalculator] = {}
 
         # 统一批量约束检查器（延迟初始化，只创建一次）
         self._unified_checker = None
@@ -279,16 +275,6 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         if self.config.get('precompute_positions', True):
             print("    Precomputing satellite positions...")
             self._precompute_satellite_positions(time_step_seconds=self.config.get('precompute_step_seconds', 1.0))
-
-        # Keep _slew_calculators for backward compatibility
-        self._slew_calculators = {}
-        for sat in self.mission.satellites:
-            agility = sat.capabilities.agility
-            self._slew_calculators[sat.id] = SlewCalculator(
-                max_slew_rate=agility.get('max_slew_rate', 3.0),
-                max_slew_angle=sat.capabilities.max_off_nadir,
-                settling_time=agility.get('settling_time', 5.0)
-            )
 
         # ========== 空间换时间：姿态预计算缓存 ==========
         # 预加载轨道数据并预计算所有可见窗口的姿态角
@@ -1255,20 +1241,23 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                         actual_start = max(window_start, earliest_start)
                         actual_end = actual_start + timedelta(seconds=imaging_duration)
         else:
-            # 计算动态机动时间和角度（回退逻辑）
+            # 计算动态机动时间和角度（回退逻辑 - 简化估算）
             slew_angle = 0.0
             slew_time_seconds = self.DEFAULT_SLEW_TIME.total_seconds()
 
             if sat and hasattr(task, 'latitude') and hasattr(task, 'longitude'):
                 prev_target = self._get_previous_task_target(sat_id)
                 if prev_target and hasattr(prev_target, 'latitude') and hasattr(prev_target, 'longitude'):
-                    slew_calculator = self._slew_calculators.get(sat_id)
-                    if slew_calculator:
-                        lon_diff = task.longitude - prev_target.longitude
-                        lat_diff = task.latitude - prev_target.latitude
-                        slew_angle = math.sqrt(lon_diff**2 + lat_diff**2)
-                        slew_angle = min(slew_angle, sat.capabilities.max_off_nadir)
-                        slew_time_seconds = slew_calculator.calculate_slew_time(slew_angle)
+                    # 简化估算：使用经纬度差估算机动角度
+                    lon_diff = task.longitude - prev_target.longitude
+                    lat_diff = task.latitude - prev_target.latitude
+                    slew_angle = math.sqrt(lon_diff**2 + lat_diff**2)
+                    slew_angle = min(slew_angle, sat.capabilities.max_off_nadir)
+                    # 简化时间计算：角度 / 最大角速度 + 稳定时间
+                    agility = getattr(sat.capabilities, 'agility', {}) or {}
+                    max_slew_rate = agility.get('max_slew_rate', 3.0)
+                    settling_time = agility.get('settling_time', 5.0)
+                    slew_time_seconds = slew_angle / max_slew_rate + settling_time
 
             # 计算实际开始时间
             usage = self._sat_resource_usage.get(sat_id, {})
