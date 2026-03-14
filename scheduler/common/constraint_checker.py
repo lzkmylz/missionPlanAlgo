@@ -12,6 +12,7 @@ import math
 
 from core.models import Mission, Satellite, Target
 from scheduler.common.config import ConstraintConfig
+from core.dynamics.attitude_calculator import AttitudeCalculator, PropagatorType
 
 
 class ConstraintType(Enum):
