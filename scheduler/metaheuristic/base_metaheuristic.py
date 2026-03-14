@@ -6,6 +6,7 @@ This module provides a unified base class for all metaheuristic algorithms
 
 import random
 import time
+import logging
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -26,6 +27,11 @@ from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstra
 
 # 性能分析器导入
 from .performance_profiler import PerformanceProfiler, MetaheuristicProfiler
+
+# Feasibility matrix imports for accelerated evaluation
+from .feasibility_precompute import FeasibilityMatrices, FeasibilityPrecomputer
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -131,6 +137,10 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         self._mh_profiler: Optional[MetaheuristicProfiler] = None
         self._enable_profiling = config.get('enable_profiling', True) if config else True
 
+        # Feasibility matrices for accelerated evaluation
+        self._feasibility_matrices: Optional[FeasibilityMatrices] = None
+        self._use_fast_evaluation = config.get('use_fast_evaluation', True) if config else True
+
     def _convert_config(self, config: Dict[str, Any]) -> MetaheuristicConfig:
         """Convert legacy config dict to MetaheuristicConfig."""
         # Extract constraint settings
@@ -234,6 +244,14 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         self._initialize_components()
         if self._profiler:
             self._profiler.end("phase2_component_initialization")
+
+        # Phase 2.5: Load or compute feasibility matrices for fast evaluation
+        if self._use_fast_evaluation:
+            if self._profiler:
+                self._profiler.start("phase2_5_feasibility_matrices")
+            self._load_or_compute_feasibility_matrices()
+            if self._profiler:
+                self._profiler.end("phase2_5_feasibility_matrices")
 
         # Phase 3: Population initialization
         if self._profiler:
@@ -380,6 +398,49 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             step_seconds = self.config.get('precompute_step_seconds', 1.0) if self.config else 1.0
             self._precompute_satellite_positions(time_step_seconds=step_seconds)
 
+    def _load_or_compute_feasibility_matrices(self) -> None:
+        """Load or compute feasibility matrices for fast evaluation.
+
+        This method attempts to load precomputed matrices from file,
+        or computes them if not available.
+        """
+        if not self._use_fast_evaluation:
+            return
+
+        # Check for precomputed matrices file
+        matrices_path = self.config.get('feasibility_matrices_path') if self.config else None
+
+        if matrices_path:
+            try:
+                logger.info(f"Loading feasibility matrices from {matrices_path}")
+                self._feasibility_matrices = FeasibilityPrecomputer.load(matrices_path)
+                logger.info("Successfully loaded precomputed feasibility matrices")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to load feasibility matrices: {e}. Will compute on-the-fly.")
+
+        # Compute matrices if loading failed or no path provided
+        logger.info("Computing feasibility matrices...")
+        try:
+            precomputer = FeasibilityPrecomputer(self.mission, self.window_cache)
+            self._feasibility_matrices = precomputer.precompute_all(
+                self.tasks,
+                enable_parallel=True
+            )
+            logger.info("Successfully computed feasibility matrices")
+
+            # Optionally save for future use
+            if matrices_path:
+                try:
+                    FeasibilityPrecomputer.save(self._feasibility_matrices, matrices_path)
+                    logger.info(f"Saved feasibility matrices to {matrices_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to save feasibility matrices: {e}")
+        except Exception as e:
+            logger.error(f"Failed to compute feasibility matrices: {e}")
+            logger.warning("Falling back to standard evaluation")
+            self._feasibility_matrices = None
+
     @abstractmethod
     def initialize_population(self) -> List[Solution]:
         """Initialize population of solutions.
@@ -413,12 +474,20 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         This unified evaluation method replaces the duplicate evaluation
         logic in individual scheduler implementations.
 
+        Uses fast O(1) lookup when feasibility matrices are available,
+        otherwise falls back to standard constraint checking.
+
         Args:
             solution: Solution to evaluate
 
         Returns:
             Fitness score
         """
+        # Use fast evaluation if feasibility matrices are available
+        if self._feasibility_matrices is not None and self._use_fast_evaluation:
+            return self._evaluate_fast(solution)
+
+        # Fall back to standard evaluation
         if self._profiler:
             self._profiler.start("_evaluate_total")
 
@@ -449,6 +518,75 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
 
     # Backward compatibility: alias for _evaluate
     _evaluate_solution = _evaluate
+
+    def _evaluate_fast(self, solution: Solution) -> float:
+        """Fast evaluation using precomputed feasibility matrices.
+
+        This method uses O(1) lookups from precomputed matrices instead of
+        performing expensive constraint checking for each task assignment.
+
+        Complexity: O(n) where n = number of tasks (vs O(n*m) for standard eval)
+
+        Args:
+            solution: Solution to evaluate
+
+        Returns:
+            Fitness score based on feasibility matrix lookups
+        """
+        if self._profiler:
+            self._profiler.start("_evaluate_fast_total")
+
+        state = EvaluationState.initialize(self.sat_count, self.satellites)
+        matrices = self._feasibility_matrices
+
+        # Track satellite last task for transition checking
+        sat_last_task_idx: Dict[int, int] = {}
+
+        # Iterate through solution encoding
+        for task_idx, sat_idx in enumerate(solution.encoding):
+            if task_idx >= len(self.tasks) or sat_idx >= self.sat_count:
+                continue
+
+            # Check 1: Single-window feasibility (O(1) lookup)
+            if not matrices.single_window_feasible[task_idx, sat_idx]:
+                continue
+
+            # Check 2: Transition feasibility (time-based check)
+            if sat_idx in sat_last_task_idx:
+                prev_task_idx = sat_last_task_idx[sat_idx]
+                # Get timing for both tasks
+                prev_timing = matrices.get_task_timing(prev_task_idx, sat_idx)
+                curr_timing = matrices.get_task_timing(task_idx, sat_idx)
+                if prev_timing and curr_timing:
+                    # Check if current task starts after previous task ends (with 60s gap)
+                    min_gap = 60.0  # seconds
+                    if (curr_timing[0] - prev_timing[1]).total_seconds() < min_gap:
+                        continue
+
+            # Get timing from precomputed matrix
+            timing = matrices.get_task_timing(task_idx, sat_idx)
+            if timing is None:
+                continue
+
+            start_time, end_time = timing
+            duration = matrices.task_durations[task_idx, sat_idx]
+
+            # Update state (simplified - assumes resources are sufficient)
+            state.scheduled_count += 1
+            state.score += 10.0  # Base score per scheduled task
+
+            # Update satellite tracking
+            sat_last_task_idx[sat_idx] = task_idx
+            state.sat_last_end_time[sat_idx] = end_time
+            state.sat_task_times[sat_idx].append((start_time, end_time))
+
+        # Compute final fitness
+        fitness = self._compute_final_fitness(state)
+
+        if self._profiler:
+            self._profiler.end("_evaluate_fast_total")
+
+        return fitness
 
     def _evaluate_task_assignment(
         self, task_idx: int, sat_idx: int, state: EvaluationState
