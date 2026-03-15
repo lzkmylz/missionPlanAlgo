@@ -79,17 +79,67 @@ class TrajectoryPlannerConfig:
     # 控制约束
     max_control_torque: float = 0.5  # 最大控制力矩 (Nm)
 
-    # 速度约束
+    # 速度约束（标量，向后兼容）
     max_angular_velocity: float = 3.0  # 最大角速度 (deg/s)
 
-    # 加速度约束
+    # 加速度约束（标量，向后兼容）
     max_angular_acceleration: float = 0.5  # 最大角加速度 (deg/s²)
+
+    # 分轴角速度限制（新增）
+    max_roll_rate: Optional[float] = None  # 滚转轴最大角速度 (deg/s)
+    max_pitch_rate: Optional[float] = None  # 俯仰轴最大角速度 (deg/s)
+
+    # 分轴角加速度限制（新增）
+    max_roll_acceleration: Optional[float] = None  # 滚转轴最大角加速度 (deg/s²)
+    max_pitch_acceleration: Optional[float] = None  # 俯仰轴最大角加速度 (deg/s²)
 
     # 稳定时间
     settling_time: float = 5.0  # 姿态稳定时间 (秒)
 
     # 数值精度
     angle_tolerance: float = 1e-6  # 角度容差 (度)
+
+    def __post_init__(self):
+        """初始化后确保分轴限制存在（向后兼容）"""
+        # 如果分轴限制未设置，从标量限制派生
+        if self.max_roll_rate is None:
+            self.max_roll_rate = self.max_angular_velocity
+        if self.max_pitch_rate is None:
+            # 俯仰通常比滚转慢（默认使用标量的2/3）
+            self.max_pitch_rate = self.max_angular_velocity * 0.67
+        if self.max_roll_acceleration is None:
+            self.max_roll_acceleration = self.max_angular_acceleration
+        if self.max_pitch_acceleration is None:
+            # 俯仰通常比滚转慢（默认使用标量的2/3）
+            self.max_pitch_acceleration = self.max_angular_acceleration * 0.67
+
+    def get_effective_limits(self, rotation_axis: Optional[np.ndarray] = None) -> Tuple[float, float]:
+        """
+        根据旋转轴计算有效的角速度和加速度限制
+
+        使用保守估计法：根据旋转轴主要方向选择对应轴的限制
+
+        Args:
+            rotation_axis: 旋转轴方向向量 (x, y, z)，单位向量或None
+
+        Returns:
+            (effective_velocity, effective_acceleration) 单位: (deg/s, deg/s²)
+        """
+        if rotation_axis is None:
+            # 如果没有提供旋转轴，使用标量限制
+            return self.max_angular_velocity, self.max_angular_acceleration
+
+        # 计算旋转轴在滚转(X)和俯仰(Y)方向上的投影
+        roll_component = abs(rotation_axis[0])
+        pitch_component = abs(rotation_axis[1])
+
+        # 根据主要旋转方向选择对应轴的限制
+        if roll_component > pitch_component:
+            # 主要滚转运动
+            return self.max_roll_rate, self.max_roll_acceleration
+        else:
+            # 主要俯仰运动
+            return self.max_pitch_rate, self.max_pitch_acceleration
 
     def compute_max_acceleration(self, inertia: float) -> float:
         """根据力矩和惯性计算最大角加速度
@@ -148,10 +198,15 @@ class TimeOptimalTrajectoryPlanner:
         alpha_max = self.config.compute_max_acceleration(effective_inertia)
         alpha_max_deg = np.degrees(alpha_max)  # 转为度/s²
 
-        # 4. bang-bang控制参数计算
+        # 4. 根据旋转轴获取有效的角速度和加速度限制（分轴限制支持）
+        effective_velocity, effective_acceleration = self.config.get_effective_limits(
+            rotation_axis
+        )
+
+        # 5. bang-bang控制参数计算
         trajectory_params = self._compute_bang_bang_parameters(
             rotation_angle=rotation_angle,
-            max_angular_velocity=self.config.max_angular_velocity,
+            max_angular_velocity=effective_velocity,
             max_acceleration=alpha_max_deg
         )
 

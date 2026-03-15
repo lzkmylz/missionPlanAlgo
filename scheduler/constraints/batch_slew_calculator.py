@@ -83,6 +83,7 @@ class BatchSlewData:
     """批量数据容器 - 将Python对象转换为NumPy数组
 
     使用NumPy structured arrays或plain arrays以兼容Numba
+    支持分轴角速度和角加速度限制（新增）
     """
 
     def __init__(self, n_candidates: int):
@@ -110,11 +111,20 @@ class BatchSlewData:
         self.imaging_durations = np.zeros(n_candidates, dtype=np.float64)
 
         # 动力学参数 [n] (每候选可不同)
+        # 标量限制（向后兼容）
         self.max_control_torque = np.zeros(n_candidates, dtype=np.float64)
         self.max_angular_velocity = np.zeros(n_candidates, dtype=np.float64)
         self.effective_inertia = np.full(n_candidates, 100.0, dtype=np.float64)
         self.settling_time = np.zeros(n_candidates, dtype=np.float64)
         self.motor_efficiency = np.full(n_candidates, 0.85, dtype=np.float64)
+
+        # 分轴角速度限制（新增）[n]
+        self.max_roll_rates = np.full(n_candidates, 3.0, dtype=np.float64)
+        self.max_pitch_rates = np.full(n_candidates, 2.0, dtype=np.float64)
+
+        # 分轴角加速度限制（新增）[n]
+        self.max_roll_accelerations = np.full(n_candidates, 1.5, dtype=np.float64)
+        self.max_pitch_accelerations = np.full(n_candidates, 1.0, dtype=np.float64)
 
         # 窗口约束
         self.window_durations = np.zeros(n_candidates, dtype=np.float64)
@@ -285,6 +295,44 @@ if HAS_NUMBA:
         return t_total
 
     @njit(cache=True)
+    def _get_effective_limits_numba(
+        rotation_axis: np.ndarray,
+        max_roll_rate: float,
+        max_pitch_rate: float,
+        max_roll_accel: float,
+        max_pitch_accel: float
+    ) -> Tuple[float, float]:
+        """根据旋转轴计算有效的角速度和加速度限制（分轴支持）
+
+        Args:
+            rotation_axis: 旋转轴方向向量 [3] (x, y, z)
+            max_roll_rate: 滚转角速度限制 (deg/s)
+            max_pitch_rate: 俯仰角速度限制 (deg/s)
+            max_roll_accel: 滚转角加速度限制 (deg/s²)
+            max_pitch_accel: 俯仰角加速度限制 (deg/s²)
+
+        Returns:
+            (effective_velocity, effective_acceleration)
+        """
+        # 归一化旋转轴
+        norm = np.sqrt(rotation_axis[0]**2 + rotation_axis[1]**2 + rotation_axis[2]**2)
+        if norm < 1e-10:
+            # 零旋转，使用滚转限制作为默认值
+            return max_roll_rate, max_roll_accel
+
+        # 计算旋转轴在滚转(X)和俯仰(Y)方向上的投影
+        roll_component = abs(rotation_axis[0]) / norm
+        pitch_component = abs(rotation_axis[1]) / norm
+
+        # 根据主要旋转方向选择对应轴的限制
+        if roll_component >= pitch_component:
+            # 主要滚转运动
+            return max_roll_rate, max_roll_accel
+        else:
+            # 主要俯仰运动
+            return max_pitch_rate, max_pitch_accel
+
+    @njit(cache=True)
     def _compute_single_slew_feasibility(
         prev_q: np.ndarray,  # [4] (w, x, y, z)
         target_q: np.ndarray,  # [4]
@@ -298,7 +346,7 @@ if HAS_NUMBA:
         settling_time: float,
         motor_efficiency: float
     ) -> Tuple[bool, float, float, float, float, float]:
-        """计算单个候选的机动可行性
+        """计算单个候选的机动可行性（标量限制版本，向后兼容）
 
         返回: (feasible, slew_angle, slew_time, reset_time, energy, momentum_margin)
         """
@@ -363,31 +411,136 @@ if HAS_NUMBA:
         total_slew_time = total_reset_time + total_task_time
 
         # 4. 检查时间约束（分项检查）
-        # time_interval = imaging_begin - prev_end_time (卫星可以完成机动的可用时间)
-        # window_duration = 可见性窗口持续时间
-        #
-        # 约束检查逻辑：
-        # 1. 任务机动+稳定时间必须在 time_interval 内完成
-        #    （确保卫星能在 imaging_begin 前到达目标姿态）
-        # 2. 成像持续时间必须 <= window_duration
-        #    （确保成像能在可见性窗口内完成）
-
-        # 检查1：任务机动+稳定时间
         feasible = total_task_time <= time_interval
 
         # 检查2：成像持续时间是否超过窗口
-        # 注意：这里假设调用者已经验证了 imaging_duration <= window_duration
-        # 如果成像时间超过窗口，任务不可行
         if imaging_duration > window_duration:
             feasible = False
 
         # 5. 估算能量消耗 (简化模型)
-        # E = P * t, 假设平均功率与角速度成正比
-        avg_power = max_angular_velocity * 0.1 * motor_efficiency  # 简化估算
+        avg_power = max_angular_velocity * 0.1 * motor_efficiency
         energy = avg_power * total_slew_time
 
         # 6. 动量裕度 (简化估算)
-        momentum_margin = 100.0 - total_slew_angle * 0.5  # 简化估算
+        momentum_margin = 100.0 - total_slew_angle * 0.5
+        if momentum_margin < 0:
+            momentum_margin = 0.0
+
+        return feasible, total_slew_angle, total_slew_time, total_reset_time, energy, momentum_margin
+
+    @njit(cache=True)
+    def _compute_single_slew_feasibility_axis_limited(
+        prev_q: np.ndarray,  # [4] (w, x, y, z)
+        target_q: np.ndarray,  # [4]
+        sat_pos: np.ndarray,  # [3]
+        target_pos: np.ndarray,  # [3]
+        time_interval: float,
+        imaging_duration: float,
+        window_duration: float,
+        max_roll_rate: float,
+        max_pitch_rate: float,
+        max_torque_roll: float,
+        max_torque_pitch: float,
+        settling_time: float,
+        motor_efficiency: float
+    ) -> Tuple[bool, float, float, float, float, float]:
+        """计算单个候选的机动可行性（分轴限制版本）
+
+        根据旋转轴方向选择对应的角速度和加速度限制。
+
+        返回: (feasible, slew_angle, slew_time, reset_time, energy, momentum_margin)
+        """
+        # 1. 计算从对地定向到目标姿态的旋转角度
+        # 对地定向 = 单位四元数 (1, 0, 0, 0)
+        nadir_q = np.array([1.0, 0.0, 0.0, 0.0])
+
+        # 计算目标姿态（从卫星位置到目标位置）
+        # 对地指向向量
+        sat_norm = np.sqrt(sat_pos[0]**2 + sat_pos[1]**2 + sat_pos[2]**2)
+        if sat_norm < 1e-10:
+            return False, 0.0, 0.0, 0.0, 0.0, 0.0
+
+        nadir_vec = -sat_pos / sat_norm
+
+        # 视线向量
+        los_vec = target_pos - sat_pos
+        los_norm = np.sqrt(los_vec[0]**2 + los_vec[1]**2 + los_vec[2]**2)
+        if los_norm < 1e-10:
+            return False, 0.0, 0.0, 0.0, 0.0, 0.0
+
+        los_vec = los_vec / los_norm
+
+        # 计算目标四元数（包含旋转轴信息）
+        target_q_computed = _compute_rotation_between_vectors_numba(nadir_vec, los_vec)
+
+        # 任务机动角度（从对地定向到目标）
+        task_angle = _quaternion_rotation_angle_numba(
+            nadir_q[0], nadir_q[1], nadir_q[2], nadir_q[3],
+            target_q_computed[0], target_q_computed[1], target_q_computed[2], target_q_computed[3]
+        )
+
+        # 提取旋转轴（从四元数）
+        # 四元数 q = [cos(θ/2), sin(θ/2) * axis]
+        sin_half = np.sqrt(target_q_computed[1]**2 + target_q_computed[2]**2 + target_q_computed[3]**2)
+        if sin_half > 1e-10:
+            rotation_axis = np.array([
+                target_q_computed[1] / sin_half,
+                target_q_computed[2] / sin_half,
+                target_q_computed[3] / sin_half
+            ])
+        else:
+            # 零旋转，默认X轴
+            rotation_axis = np.array([1.0, 0.0, 0.0])
+
+        # 根据旋转轴获取有效限制
+        effective_rate, effective_accel = _get_effective_limits_numba(
+            rotation_axis, max_roll_rate, max_pitch_rate, max_torque_roll * 2.0, max_torque_pitch * 2.0
+        )
+
+        # 2. 检查时间间隔决定是否需要姿态复位
+        assume_nadir = time_interval > 300.0  # 5分钟阈值
+
+        total_reset_time = 0.0
+        total_slew_angle = task_angle
+
+        if not assume_nadir:
+            # 需要计算姿态复位：从前一姿态到对地定向
+            reset_angle = _quaternion_rotation_angle_numba(
+                prev_q[0], prev_q[1], prev_q[2], prev_q[3],
+                nadir_q[0], nadir_q[1], nadir_q[2], nadir_q[3]
+            )
+
+            # 复位机动时间（复位通常需要更大的机动，使用滚转限制作为保守估计）
+            if reset_angle > 0.1:
+                reset_time = _compute_bang_bang_time_numba(
+                    reset_angle, max_roll_rate, max_torque_roll * 2.0
+                )
+                total_reset_time = reset_time + settling_time
+
+        # 3. 计算任务机动时间（使用分轴有效限制）
+        if task_angle > 0.1:
+            task_time = _compute_bang_bang_time_numba(
+                task_angle, effective_rate, effective_accel
+            )
+            total_task_time = task_time + settling_time
+        else:
+            total_task_time = settling_time
+
+        total_slew_time = total_reset_time + total_task_time
+
+        # 4. 检查时间约束（分项检查）
+        feasible = total_task_time <= time_interval
+
+        # 检查2：成像持续时间是否超过窗口
+        if imaging_duration > window_duration:
+            feasible = False
+
+        # 5. 估算能量消耗 (使用有效角速度)
+        avg_power = effective_rate * 0.1 * motor_efficiency
+        energy = avg_power * total_slew_time
+
+        # 6. 动量裕度 (简化估算)
+        momentum_margin = 100.0 - total_slew_angle * 0.5
         if momentum_margin < 0:
             momentum_margin = 0.0
 
@@ -416,7 +569,7 @@ if HAS_NUMBA:
         out_energy: np.ndarray,
         out_momentum_margin: np.ndarray
     ):
-        """批量计算机动可行性 - Numba并行版本"""
+        """批量计算机动可行性 - Numba并行版本（标量限制，向后兼容）"""
         n = len(prev_quaternions)
 
         for i in prange(n):
@@ -435,6 +588,64 @@ if HAS_NUMBA:
                     window_durations[i],
                     max_angular_velocities[i],
                     max_torques[i],
+                    settling_times[i],
+                    motor_efficiencies[i]
+                )
+
+            # 写入输出
+            out_feasible[i] = feasible
+            out_slew_angle[i] = slew_angle
+            out_slew_time[i] = slew_time
+            out_reset_time[i] = reset_time
+            out_energy[i] = energy
+            out_momentum_margin[i] = margin
+
+    @njit(parallel=True, cache=True)
+    def batch_compute_slew_feasibility_numba_axis_limited(
+        # 输入数组
+        prev_quaternions: np.ndarray,  # [n x 4]
+        target_quaternions: np.ndarray,  # [n x 4]
+        sat_positions: np.ndarray,  # [n x 3]
+        target_positions: np.ndarray,  # [n x 3]
+        time_intervals: np.ndarray,  # [n]
+        imaging_durations: np.ndarray,  # [n]
+        window_durations: np.ndarray,  # [n]
+        max_roll_rates: np.ndarray,  # [n] - 滚转角速度限制
+        max_pitch_rates: np.ndarray,  # [n] - 俯仰角速度限制
+        max_torque_roll: np.ndarray,  # [n] - 滚转力矩（用于计算加速度）
+        max_torque_pitch: np.ndarray,  # [n] - 俯仰力矩
+        settling_times: np.ndarray,  # [n]
+        motor_efficiencies: np.ndarray,  # [n]
+
+        # 输出数组 (预分配)
+        out_feasible: np.ndarray,
+        out_slew_angle: np.ndarray,
+        out_slew_time: np.ndarray,
+        out_reset_time: np.ndarray,
+        out_energy: np.ndarray,
+        out_momentum_margin: np.ndarray
+    ):
+        """批量计算机动可行性 - Numba并行版本（分轴限制）"""
+        n = len(prev_quaternions)
+
+        for i in prange(n):
+            # 提取单个候选的数据
+            prev_q = prev_quaternions[i]
+            target_q = target_quaternions[i]
+            sat_pos = sat_positions[i]
+            target_pos = target_positions[i]
+
+            # 计算单个候选的可行性（使用分轴限制）
+            feasible, slew_angle, slew_time, reset_time, energy, margin = \
+                _compute_single_slew_feasibility_axis_limited(
+                    prev_q, target_q, sat_pos, target_pos,
+                    time_intervals[i],
+                    imaging_durations[i],
+                    window_durations[i],
+                    max_roll_rates[i],
+                    max_pitch_rates[i],
+                    max_torque_roll[i],
+                    max_torque_pitch[i],
                     settling_times[i],
                     motor_efficiencies[i]
                 )
@@ -605,46 +816,83 @@ class BatchSlewCalculator:
             data.max_control_torque[i] = agility.get('max_torque', 0.5)
             data.settling_time[i] = agility.get('settling_time', 5.0)
 
+            # 分轴角速度限制（新增）
+            # 如果agility中有分轴限制则使用，否则从标量限制派生
+            max_slew = agility.get('max_slew_rate', 3.0)
+            max_accel = agility.get('slew_acceleration', 1.5)
+            data.max_roll_rates[i] = agility.get('max_roll_rate', max_slew)
+            data.max_pitch_rates[i] = agility.get('max_pitch_rate', max_slew * 0.67)
+
+            # 分轴角加速度限制（新增）
+            data.max_roll_accelerations[i] = agility.get('max_roll_acceleration', max_accel)
+            data.max_pitch_accelerations[i] = agility.get('max_pitch_acceleration', max_accel * 0.67)
+
         return data
 
     def compute_batch(
         self,
-        data: BatchSlewData
+        data: BatchSlewData,
+        use_axis_limits: bool = True
     ) -> List[BatchSlewResult]:
         """执行批量计算
 
         Args:
             data: 批量数据容器
+            use_axis_limits: 是否使用分轴限制（默认True）
 
         Returns:
             批量计算结果列表
         """
         if self.use_lookup_table:
             # 使用刚体动力学查表（高精度）
-            return self._compute_batch_lookup(data)
+            return self._compute_batch_lookup(data, use_axis_limits=use_axis_limits)
 
         if self.use_numba:
             try:
-                # 调用Numba加速版本（Bang-Bang简化计算）
-                batch_compute_slew_feasibility_numba(
-                    data.prev_quaternions,
-                    data.target_quaternions,
-                    data.sat_positions,
-                    data.target_positions,
-                    data.time_intervals,
-                    data.imaging_durations,
-                    data.window_durations,
-                    data.max_angular_velocity,
-                    data.max_control_torque,
-                    data.settling_time,
-                    data.motor_efficiency,
-                    data.out_feasible,
-                    data.out_slew_angle,
-                    data.out_slew_time,
-                    data.out_reset_time,
-                    data.out_energy,
-                    data.out_momentum_margin
-                )
+                if use_axis_limits:
+                    # 调用Numba加速版本（分轴限制）
+                    batch_compute_slew_feasibility_numba_axis_limited(
+                        data.prev_quaternions,
+                        data.target_quaternions,
+                        data.sat_positions,
+                        data.target_positions,
+                        data.time_intervals,
+                        data.imaging_durations,
+                        data.window_durations,
+                        data.max_roll_rates,
+                        data.max_pitch_rates,
+                        data.max_roll_accelerations,
+                        data.max_pitch_accelerations,
+                        data.settling_time,
+                        data.motor_efficiency,
+                        data.out_feasible,
+                        data.out_slew_angle,
+                        data.out_slew_time,
+                        data.out_reset_time,
+                        data.out_energy,
+                        data.out_momentum_margin
+                    )
+                else:
+                    # 调用Numba加速版本（标量限制，向后兼容）
+                    batch_compute_slew_feasibility_numba(
+                        data.prev_quaternions,
+                        data.target_quaternions,
+                        data.sat_positions,
+                        data.target_positions,
+                        data.time_intervals,
+                        data.imaging_durations,
+                        data.window_durations,
+                        data.max_angular_velocity,
+                        data.max_control_torque,
+                        data.settling_time,
+                        data.motor_efficiency,
+                        data.out_feasible,
+                        data.out_slew_angle,
+                        data.out_slew_time,
+                        data.out_reset_time,
+                        data.out_energy,
+                        data.out_momentum_margin
+                    )
             except Exception as e:
                 # 高精度要求：Numba批量计算失败应抛出错误
                 raise RuntimeError(f"批量机动计算失败: {e}") from e
@@ -680,14 +928,16 @@ class BatchSlewCalculator:
 
         return results
 
-    def _compute_batch_lookup(self, data: BatchSlewData) -> List[BatchSlewResult]:
+    def _compute_batch_lookup(self, data: BatchSlewData, use_axis_limits: bool = True) -> List[BatchSlewResult]:
         """使用刚体动力学查找表进行批量计算
 
         通过查表获取预计算的刚体动力学结果，实现O(1)查询时间。
         对于角度在预计算点之间的查询，使用线性插值。
+        支持分轴角速度和角加速度限制。
 
         Args:
             data: 批量数据容器
+            use_axis_limits: 是否使用分轴限制
 
         Returns:
             批量计算结果列表

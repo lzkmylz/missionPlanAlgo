@@ -174,14 +174,46 @@ SAR_2_STRIPMAP_MAX_DURATION_S = 56.0
 # 姿态机动默认值
 # =============================================================================
 
-# 默认最大角速度 (度/秒)
+# 默认最大角速度 (度/秒) - 标量限制（向后兼容）
 DEFAULT_MAX_SLEW_RATE_DEG_S = 3.0
 
-# 默认角加速度 (度/秒²)
+# 默认角加速度 (度/秒²) - 标量限制（向后兼容）
 DEFAULT_SLEW_ACCELERATION_DEG_S2 = 1.5
 
 # 默认稳定时间 (秒)
 DEFAULT_SETTLING_TIME_S = 5.0
+
+# =============================================================================
+# 分轴姿态机动默认值（新增）
+# =============================================================================
+
+# 光学卫星滚转角速度限制 (度/秒)
+OPTICAL_MAX_ROLL_RATE_DEG_S = 3.0
+# 光学卫星俯仰角速度限制 (度/秒)
+OPTICAL_MAX_PITCH_RATE_DEG_S = 2.0
+
+# SAR卫星滚转角速度限制 (度/秒)
+SAR_MAX_ROLL_RATE_DEG_S = 4.0
+# SAR卫星俯仰角速度限制 (度/秒)
+SAR_MAX_PITCH_RATE_DEG_S = 3.0
+
+# 光学卫星滚转角加速度限制 (度/秒²)
+OPTICAL_MAX_ROLL_ACCEL_DEG_S2 = 1.5
+# 光学卫星俯仰角加速度限制 (度/秒²)
+OPTICAL_MAX_PITCH_ACCEL_DEG_S2 = 1.0
+
+# SAR卫星滚转角加速度限制 (度/秒²)
+SAR_MAX_ROLL_ACCEL_DEG_S2 = 2.0
+# SAR卫星俯仰角加速度限制 (度/秒²)
+SAR_MAX_PITCH_ACCEL_DEG_S2 = 1.5
+
+# 默认分轴角速度限制 (度/秒)
+DEFAULT_MAX_ROLL_RATE_DEG_S = 3.0
+DEFAULT_MAX_PITCH_RATE_DEG_S = 2.0
+
+# 默认分轴角加速度限制 (度/秒²)
+DEFAULT_MAX_ROLL_ACCEL_DEG_S2 = 1.5
+DEFAULT_MAX_PITCH_ACCEL_DEG_S2 = 1.0
 
 # =============================================================================
 # 网络通信默认值

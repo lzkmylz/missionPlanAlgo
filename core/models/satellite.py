@@ -63,6 +63,19 @@ from core.constants import (
     GMST_CONSTANT_2,
     METERS_TO_KM,
     KM_TO_METERS,
+    # 分轴角速度/加速度限制
+    DEFAULT_MAX_ROLL_RATE_DEG_S,
+    DEFAULT_MAX_PITCH_RATE_DEG_S,
+    DEFAULT_MAX_ROLL_ACCEL_DEG_S2,
+    DEFAULT_MAX_PITCH_ACCEL_DEG_S2,
+    OPTICAL_MAX_ROLL_RATE_DEG_S,
+    OPTICAL_MAX_PITCH_RATE_DEG_S,
+    OPTICAL_MAX_ROLL_ACCEL_DEG_S2,
+    OPTICAL_MAX_PITCH_ACCEL_DEG_S2,
+    SAR_MAX_ROLL_RATE_DEG_S,
+    SAR_MAX_PITCH_RATE_DEG_S,
+    SAR_MAX_ROLL_ACCEL_DEG_S2,
+    SAR_MAX_PITCH_ACCEL_DEG_S2,
 )
 
 
@@ -267,10 +280,21 @@ class SatelliteCapabilities:
     imaging_modes: List[ImagingMode] = field(default_factory=list)
     max_roll_angle: float = DEFAULT_MAX_ROLL_ANGLE_DEG  # 最大滚转角（度）- 绕X轴侧摆
     max_pitch_angle: float = DEFAULT_MAX_PITCH_ANGLE_DEG  # 最大俯仰角（度）- 绕Y轴前后斜视
+
+    # 机动能力配置（支持标量和分轴限制）
+    # 注意：agility字典包含标量限制（向后兼容）和分轴限制（新增）
+    # 使用 get_effective_limits() 方法获取有效的分轴限制
     agility: Dict[str, float] = field(default_factory=lambda: {
-        'max_slew_rate': 3.0,  # 度/秒
-        'slew_acceleration': 1.5,  # 度/秒²
-        'settling_time': 5.0  # 稳定时间（秒）
+        # 标量限制（向后兼容）
+        'max_slew_rate': DEFAULT_MAX_ROLL_RATE_DEG_S,  # 度/秒
+        'slew_acceleration': DEFAULT_MAX_ROLL_ACCEL_DEG_S2,  # 度/秒²
+        'settling_time': 5.0,  # 稳定时间（秒）
+        # 分轴角速度限制（新增）
+        'max_roll_rate': DEFAULT_MAX_ROLL_RATE_DEG_S,  # 滚转轴最大角速度（度/秒）
+        'max_pitch_rate': DEFAULT_MAX_PITCH_RATE_DEG_S,  # 俯仰轴最大角速度（度/秒）
+        # 分轴角加速度限制（新增）
+        'max_roll_acceleration': DEFAULT_MAX_ROLL_ACCEL_DEG_S2,  # 滚转轴最大角加速度（度/秒²）
+        'max_pitch_acceleration': DEFAULT_MAX_PITCH_ACCEL_DEG_S2,  # 俯仰轴最大角加速度（度/秒²）
     })
 
     # 单圈约束配置（新增）
@@ -297,6 +321,83 @@ class SatelliteCapabilities:
     imaging_mode_constraints: Dict[ImagingMode, Dict[str, float]] = field(
         default_factory=dict
     )
+
+    def __post_init__(self):
+        """初始化后确保分轴限制存在（向后兼容）"""
+        # 如果agility中缺少分轴限制字段，从标量限制派生
+        scalar_rate = self.agility.get('max_slew_rate', DEFAULT_MAX_ROLL_RATE_DEG_S)
+        scalar_accel = self.agility.get('slew_acceleration', DEFAULT_MAX_ROLL_ACCEL_DEG_S2)
+
+        # 确保分轴角速度限制存在
+        if 'max_roll_rate' not in self.agility:
+            self.agility['max_roll_rate'] = scalar_rate
+        if 'max_pitch_rate' not in self.agility:
+            # 俯仰通常比滚转慢（默认使用标量的2/3）
+            self.agility['max_pitch_rate'] = scalar_rate * 0.67
+
+        # 确保分轴角加速度限制存在
+        if 'max_roll_acceleration' not in self.agility:
+            self.agility['max_roll_acceleration'] = scalar_accel
+        if 'max_pitch_acceleration' not in self.agility:
+            # 俯仰通常比滚转慢（默认使用标量的2/3）
+            self.agility['max_pitch_acceleration'] = scalar_accel * 0.67
+
+    def get_effective_limits(self, rotation_axis: Optional[tuple] = None) -> Dict[str, float]:
+        """
+        获取有效的角速度和角加速度限制
+
+        如果提供了旋转轴，根据轴的方向计算投影后的有效限制。
+        如果未提供，返回分轴限制。
+
+        Args:
+            rotation_axis: 旋转轴方向向量 (x, y, z)，单位向量或None
+
+        Returns:
+            包含以下键的字典：
+            - max_roll_rate: 滚转角速度限制 (deg/s)
+            - max_pitch_rate: 俯仰角速度限制 (deg/s)
+            - max_roll_acceleration: 滚转角加速度限制 (deg/s²)
+            - max_pitch_acceleration: 俯仰角加速度限制 (deg/s²)
+            - effective_rate: 根据旋转轴计算的有效角速度 (deg/s)
+            - effective_acceleration: 根据旋转轴计算的有效角加速度 (deg/s²)
+        """
+        # 获取分轴限制（确保存在）
+        max_roll_rate = self.agility.get('max_roll_rate', DEFAULT_MAX_ROLL_RATE_DEG_S)
+        max_pitch_rate = self.agility.get('max_pitch_rate', DEFAULT_MAX_PITCH_RATE_DEG_S)
+        max_roll_accel = self.agility.get('max_roll_acceleration', DEFAULT_MAX_ROLL_ACCEL_DEG_S2)
+        max_pitch_accel = self.agility.get('max_pitch_acceleration', DEFAULT_MAX_PITCH_ACCEL_DEG_S2)
+
+        result = {
+            'max_roll_rate': max_roll_rate,
+            'max_pitch_rate': max_pitch_rate,
+            'max_roll_acceleration': max_roll_accel,
+            'max_pitch_acceleration': max_pitch_accel,
+        }
+
+        # 如果提供了旋转轴，计算有效限制
+        if rotation_axis is not None:
+            x, y, z = rotation_axis
+            # 归一化
+            norm = math.sqrt(x*x + y*y + z*z)
+            if norm > 0:
+                x, y, z = x/norm, y/norm, z/norm
+
+            # 计算旋转轴在滚转(X)和俯仰(Y)方向上的投影
+            roll_component = abs(x)
+            pitch_component = abs(y)
+
+            # 使用保守估计：根据主要旋转方向选择对应轴的限制
+            if roll_component > pitch_component:
+                effective_rate = max_roll_rate
+                effective_accel = max_roll_accel
+            else:
+                effective_rate = max_pitch_rate
+                effective_accel = max_pitch_accel
+
+            result['effective_rate'] = effective_rate
+            result['effective_acceleration'] = effective_accel
+
+        return result
 
     def supports_mode(self, mode: ImagingMode) -> bool:
         """检查是否支持指定成像模式"""
@@ -666,6 +767,20 @@ class Satellite:
             for mode, constraints in self.capabilities.imaging_mode_constraints.items()
         }
 
+        # 准备agility字典（确保包含分轴限制）
+        agility_dict = dict(self.capabilities.agility)
+        # 确保分轴限制字段存在
+        scalar_rate = agility_dict.get('max_slew_rate', DEFAULT_MAX_ROLL_RATE_DEG_S)
+        scalar_accel = agility_dict.get('slew_acceleration', DEFAULT_MAX_ROLL_ACCEL_DEG_S2)
+        if 'max_roll_rate' not in agility_dict:
+            agility_dict['max_roll_rate'] = scalar_rate
+        if 'max_pitch_rate' not in agility_dict:
+            agility_dict['max_pitch_rate'] = scalar_rate * 0.67
+        if 'max_roll_acceleration' not in agility_dict:
+            agility_dict['max_roll_acceleration'] = scalar_accel
+        if 'max_pitch_acceleration' not in agility_dict:
+            agility_dict['max_pitch_acceleration'] = scalar_accel * 0.67
+
         return {
             'id': self.id,
             'name': self.name,
@@ -683,6 +798,7 @@ class Satellite:
                 'imager': self.capabilities.imager,
                 'imaging_mode_details': self.capabilities.imaging_mode_details,
                 'imaging_mode_constraints': constraints_dict,
+                'agility': agility_dict,
             }
         }
 
@@ -811,6 +927,21 @@ class Satellite:
                 # 跳过无效的约束配置
                 continue
 
+        # 解析agility配置
+        raw_agility = cap_data.get('agility', {})
+        agility_dict = {
+            # 标量限制（向后兼容）
+            'max_slew_rate': raw_agility.get('max_slew_rate', DEFAULT_MAX_ROLL_RATE_DEG_S),
+            'slew_acceleration': raw_agility.get('slew_acceleration', DEFAULT_MAX_ROLL_ACCEL_DEG_S2),
+            'settling_time': raw_agility.get('settling_time', 5.0),
+        }
+        # 分轴角速度限制
+        agility_dict['max_roll_rate'] = raw_agility.get('max_roll_rate', agility_dict['max_slew_rate'])
+        agility_dict['max_pitch_rate'] = raw_agility.get('max_pitch_rate', agility_dict['max_slew_rate'] * 0.67)
+        # 分轴角加速度限制
+        agility_dict['max_roll_acceleration'] = raw_agility.get('max_roll_acceleration', agility_dict['slew_acceleration'])
+        agility_dict['max_pitch_acceleration'] = raw_agility.get('max_pitch_acceleration', agility_dict['slew_acceleration'] * 0.67)
+
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
             max_roll_angle=cap_data.get('max_roll_angle', DEFAULT_MAX_ROLL_ANGLE_DEG),
@@ -825,6 +956,7 @@ class Satellite:
             imager=imager_data,
             imaging_mode_details=imaging_mode_details,
             imaging_mode_constraints=imaging_mode_constraints,
+            agility=agility_dict,
         )
 
         # 读取TLE（支持多种格式）

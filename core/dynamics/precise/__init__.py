@@ -25,7 +25,7 @@
 """
 
 from .rigid_body_dynamics import RigidBodyDynamics, InertiaTensor
-from .trajectory_planner import TimeOptimalTrajectoryPlanner, Trajectory, TrajectoryProfile
+from .trajectory_planner import TimeOptimalTrajectoryPlanner, Trajectory, TrajectoryProfile, VelocityProfileType
 from .energy_model import EnergyConsumptionModel, EnergyReport, ReactionWheelConfig
 from .momentum_manager import MomentumManagementSystem, MomentumFeasibilityResult
 from .precise_slew_calculator import PreciseSlewCalculator, SatelliteDynamicsConfig
@@ -46,6 +46,7 @@ __all__ = [
     'TimeOptimalTrajectoryPlanner',
     'Trajectory',
     'TrajectoryProfile',
+    'VelocityProfileType',
 
     # 能量模型
     'EnergyConsumptionModel',

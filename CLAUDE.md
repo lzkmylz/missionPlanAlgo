@@ -322,6 +322,48 @@ def _initialize_constraint_checkers(self) -> None:
 
 ---
 
+### 分轴姿态机动限制（滚转/俯仰区分）
+
+**姿态机动约束现在支持分轴限制**，区分滚转（roll/X轴）和俯仰（pitch/Y轴）的角速度和角加速度：
+
+| 参数 | 滚转轴 (X) | 俯仰轴 (Y) | 说明 |
+|------|-----------|-----------|------|
+| 最大角速度 | `max_roll_rate` | `max_pitch_rate` | 度/秒 |
+| 最大角加速度 | `max_roll_acceleration` | `max_pitch_acceleration` | 度/秒² |
+
+**卫星配置示例** (`data/entity_lib/satellites/optical_1.json`):
+```json
+"agility": {
+    "max_slew_rate": 3.0,
+    "max_pitch_rate": 2.0,
+    "max_roll_acceleration": 1.5,
+    "max_pitch_acceleration": 1.0,
+    "settling_time": 5.0
+}
+```
+
+**实现文件**:
+- `core/models/satellite.py` - `SatelliteCapabilities` 支持分轴限制
+- `core/dynamics/precise/trajectory_planner.py` - 轨迹规划器根据旋转轴选择有效限制
+- `scheduler/constraints/batch_slew_calculator.py` - Numba批量计算支持分轴限制
+
+**限制选择策略**（保守估计法）:
+```python
+# 根据旋转轴主要方向选择对应轴的限制
+if abs(rotation_axis[0]) > abs(rotation_axis[1]):
+    # 主要滚转运动，使用滚转限制
+    effective_rate = max_roll_rate
+else:
+    # 主要俯仰运动，使用俯仰限制
+    effective_rate = max_pitch_rate
+```
+
+**向后兼容**:
+- 未配置分轴限制时，自动从标量限制派生
+- 俯仰默认使用滚转限制的 2/3
+
+---
+
 ### 默认批量姿态约束计算（向量化优化）
 
 **所有调度器默认使用批量姿态约束检查器** (`scheduler/base_scheduler.py`):

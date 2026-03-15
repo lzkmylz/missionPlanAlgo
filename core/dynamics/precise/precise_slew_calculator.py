@@ -46,6 +46,7 @@ class SatelliteDynamicsConfig:
     """卫星动力学配置
 
     包含精确姿态机动计算所需的所有物理参数。
+    支持分轴角速度和角加速度限制。
     """
     # 惯性特性
     inertia_tensor: InertiaTensor = InertiaTensor.diagonal(100.0, 80.0, 60.0)
@@ -53,6 +54,14 @@ class SatelliteDynamicsConfig:
     # 控制约束
     max_control_torque: float = 0.5  # Nm
     max_angular_velocity: float = 3.0  # deg/s
+
+    # 分轴角速度限制（新增）
+    max_roll_rate: Optional[float] = None  # deg/s
+    max_pitch_rate: Optional[float] = None  # deg/s
+
+    # 分轴角加速度限制（新增）
+    max_roll_acceleration: Optional[float] = None  # deg/s²
+    max_pitch_acceleration: Optional[float] = None  # deg/s²
 
     # 飞轮配置
     reaction_wheels: ReactionWheelConfig = ReactionWheelConfig()
@@ -66,6 +75,20 @@ class SatelliteDynamicsConfig:
     max_slew_angle: float = 45.0  # deg
     settling_time: float = 5.0  # s
 
+    def __post_init__(self):
+        """初始化后确保配置一致性"""
+        # 更新轨迹配置以包含分轴限制
+        self._update_trajectory_config()
+
+    def _update_trajectory_config(self):
+        """更新轨迹规划配置以包含分轴限制"""
+        self.trajectory_config.max_angular_velocity = self.max_angular_velocity
+        self.trajectory_config.max_roll_rate = self.max_roll_rate
+        self.trajectory_config.max_pitch_rate = self.max_pitch_rate
+        self.trajectory_config.max_roll_acceleration = self.max_roll_acceleration
+        self.trajectory_config.max_pitch_acceleration = self.max_pitch_acceleration
+        self.trajectory_config.settling_time = self.settling_time
+
     @property
     def effective_inertia(self) -> float:
         """计算有效惯性矩 (简化计算用)"""
@@ -74,6 +97,34 @@ class SatelliteDynamicsConfig:
             self.inertia_tensor.Iyy,
             self.inertia_tensor.Izz
         ])
+
+    @classmethod
+    def from_satellite_capabilities(cls, capabilities) -> 'SatelliteDynamicsConfig':
+        """从卫星能力创建动力学配置
+
+        Args:
+            capabilities: SatelliteCapabilities 对象
+
+        Returns:
+            SatelliteDynamicsConfig 实例
+        """
+        # 从agility字典提取分轴限制
+        agility = capabilities.agility
+
+        max_roll_rate = agility.get('max_roll_rate', agility.get('max_slew_rate', 3.0))
+        max_pitch_rate = agility.get('max_pitch_rate', agility.get('max_slew_rate', 3.0) * 0.67)
+        max_roll_acceleration = agility.get('max_roll_acceleration', agility.get('slew_acceleration', 1.5))
+        max_pitch_acceleration = agility.get('max_pitch_acceleration', agility.get('slew_acceleration', 1.5) * 0.67)
+
+        return cls(
+            max_angular_velocity=agility.get('max_slew_rate', 3.0),
+            max_roll_rate=max_roll_rate,
+            max_pitch_rate=max_pitch_rate,
+            max_roll_acceleration=max_roll_acceleration,
+            max_pitch_acceleration=max_pitch_acceleration,
+            max_slew_rate=agility.get('max_slew_rate', 3.0),
+            settling_time=agility.get('settling_time', 5.0)
+        )
 
 
 @dataclass
@@ -132,6 +183,9 @@ class PreciseSlewCalculator:
         self.use_precise = use_precise
 
         if use_precise:
+            # 确保轨迹配置已更新
+            config._update_trajectory_config()
+
             # 初始化精确模型组件
             self.dynamics = RigidBodyDynamics(
                 inertia_tensor=config.inertia_tensor,

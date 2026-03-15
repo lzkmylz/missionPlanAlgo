@@ -106,6 +106,8 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
     def _extract_dynamics_config(self, satellite: Satellite) -> SatelliteDynamicsConfig:
         """从卫星对象提取动力学配置
 
+        支持分轴角速度和角加速度限制。
+
         Args:
             satellite: 卫星对象
 
@@ -128,11 +130,25 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
 
         from core.dynamics.precise import InertiaTensor
 
+        # 获取标量限制（向后兼容）
+        max_slew_rate = agility.get('max_slew_rate', 3.0)
+        max_acceleration = agility.get('slew_acceleration', 1.5)
+
+        # 获取分轴限制（如果不存在则从标量派生）
+        max_roll_rate = agility.get('max_roll_rate', max_slew_rate)
+        max_pitch_rate = agility.get('max_pitch_rate', max_slew_rate * 0.67)
+        max_roll_acceleration = agility.get('max_roll_acceleration', max_acceleration)
+        max_pitch_acceleration = agility.get('max_pitch_acceleration', max_acceleration * 0.67)
+
         return SatelliteDynamicsConfig(
             inertia_tensor=InertiaTensor.diagonal(Ixx, Iyy, Izz),
             max_control_torque=agility.get('max_torque', 0.5),
-            max_angular_velocity=agility.get('max_slew_rate', 3.0),
-            max_slew_rate=agility.get('max_slew_rate', 3.0),
+            max_angular_velocity=max_slew_rate,
+            max_roll_rate=max_roll_rate,
+            max_pitch_rate=max_pitch_rate,
+            max_roll_acceleration=max_roll_acceleration,
+            max_pitch_acceleration=max_pitch_acceleration,
+            max_slew_rate=max_slew_rate,
             max_slew_angle=satellite.capabilities.max_roll_angle,
             settling_time=agility.get('settling_time', 5.0)
         )
