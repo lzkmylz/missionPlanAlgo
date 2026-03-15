@@ -5,10 +5,17 @@ SAR成像器
 设计文档第3章 - 载荷模块设计
 """
 
+import math
 from typing import List, Tuple, Dict, Any, Optional
 from enum import Enum
 
 from .base import Imager, ImagingMode
+from core.constants import (
+    DEFAULT_SAR_RANGE_HALF_ANGLE_DEG,
+    DEFAULT_SAR_AZIMUTH_HALF_ANGLE_DEG,
+    DEFAULT_SAR_AZIMUTH_EXCLUSION_ANGLE_DEG,
+    EARTH_RADIUS_KM
+)
 
 
 class SARImagingMode(Enum):
@@ -37,7 +44,11 @@ class SARImager(Imager):
         polarization: str = "VV",
         min_look_angle: float = 20.0,
         max_look_angle: float = 50.0,
-        supported_modes: Optional[List[SARImagingMode]] = None
+        supported_modes: Optional[List[SARImagingMode]] = None,
+        # FOV配置参数（新增）
+        range_half_angle: Optional[float] = None,
+        azimuth_half_angle: Optional[float] = None,
+        azimuth_exclusion_angle: Optional[float] = None
     ):
         """
         初始化SAR成像器
@@ -45,12 +56,15 @@ class SARImager(Imager):
         Args:
             imager_id: 成像器唯一标识
             resolution: 分辨率（米）
-            swath_width: 幅宽（千米）
+            swath_width: 幅宽（千米）- 如提供FOV配置，将基于FOV计算
             band: 频段（X, C, L等）
             polarization: 极化方式（VV, VH, HH, HV等）
             min_look_angle: 最小视角（度）
             max_look_angle: 最大视角（度）
             supported_modes: 支持的成像模式列表，默认全部三种
+            range_half_angle: 距离向视场半角（度）- cross-track方向，控制幅宽
+            azimuth_half_angle: 方位向视场半角（度）- along-track方向，控制场景长度
+            azimuth_exclusion_angle: 方位向排除角（度）- 沿飞行方向的观测盲区
 
         Raises:
             ValueError: 如果视角参数无效
@@ -89,6 +103,11 @@ class SARImager(Imager):
         self.polarization = polarization
         self.min_look_angle = min_look_angle
         self.max_look_angle = max_look_angle
+
+        # FOV配置参数
+        self.range_half_angle = range_half_angle
+        self.azimuth_half_angle = azimuth_half_angle
+        self.azimuth_exclusion_angle = azimuth_exclusion_angle
 
         # 模式特定的参数
         self._mode_params = {
@@ -243,7 +262,7 @@ class SARImager(Imager):
         Returns:
             Dict[str, Any]: 规格字典
         """
-        return {
+        specs = {
             'imager_id': self.imager_id,
             'imager_type': 'sar',
             'resolution': self.resolution,
@@ -254,6 +273,16 @@ class SARImager(Imager):
             'max_look_angle': self.max_look_angle,
             'supported_modes': [m.value for m in self.supported_modes]
         }
+
+        # 添加FOV配置
+        if self.range_half_angle is not None:
+            specs['range_half_angle'] = self.range_half_angle
+        if self.azimuth_half_angle is not None:
+            specs['azimuth_half_angle'] = self.azimuth_half_angle
+        if self.azimuth_exclusion_angle is not None:
+            specs['azimuth_exclusion_angle'] = self.azimuth_exclusion_angle
+
+        return specs
 
     def calculate_ground_range_resolution(self, look_angle: float) -> float:
         """
@@ -280,3 +309,95 @@ class SARImager(Imager):
             bool: 是否有效
         """
         return self.min_look_angle <= look_angle <= self.max_look_angle
+
+    def calculate_swath_from_fov(
+        self,
+        altitude_km: float,
+        look_angle_deg: float = 0.0
+    ) -> Tuple[float, float]:
+        """
+        基于FOV配置计算幅宽和场景长度
+
+        SAR FOV几何关系：
+        - 距离向（Range/cross-track）：垂直于飞行方向，由range_half_angle控制幅宽
+        - 方位向（Azimuth/along-track）：沿飞行方向，由azimuth_half_angle控制场景长度
+
+        Args:
+            altitude_km: 轨道高度（千米）
+            look_angle_deg: 观测视角（度），0表示天底点
+
+        Returns:
+            Tuple[float, float]: (距离向幅宽, 方位向场景长度) 单位：千米
+        """
+        h = altitude_km
+
+        # 距离向幅宽计算（cross-track）
+        if self.range_half_angle is not None:
+            range_angle = math.radians(self.range_half_angle)
+            # 考虑观测角度的影响：幅宽 = 2 * h * tan(range_half_angle) / cos(look_angle)
+            look_rad = math.radians(look_angle_deg)
+            swath_range = 2 * h * math.tan(range_angle) / math.cos(look_rad)
+        else:
+            # 使用直接配置的幅宽
+            swath_range = self.swath_width
+
+        # 方位向场景长度计算（along-track）
+        if self.azimuth_half_angle is not None:
+            azimuth_angle = math.radians(self.azimuth_half_angle)
+            # 场景长度 = 2 * h * tan(azimuth_half_angle)
+            scene_length = 2 * h * math.tan(azimuth_angle)
+        else:
+            # 默认使用幅宽作为场景长度
+            scene_length = swath_range
+
+        return (swath_range, scene_length)
+
+    def get_effective_swath(
+        self,
+        altitude_km: float = 500.0,
+        look_angle_deg: float = 0.0
+    ) -> float:
+        """
+        获取有效幅宽
+
+        如果配置了range_half_angle，则基于FOV计算；
+        否则返回直接配置的swath_width。
+
+        Args:
+            altitude_km: 轨道高度（千米），默认500km
+            look_angle_deg: 观测视角（度），默认0度
+
+        Returns:
+            float: 有效幅宽（千米）
+        """
+        if self.range_half_angle is not None:
+            swath_range, _ = self.calculate_swath_from_fov(altitude_km, look_angle_deg)
+            return swath_range
+        return self.swath_width
+
+    def get_fov_config(self) -> Dict[str, Any]:
+        """
+        获取FOV配置
+
+        Returns:
+            Dict[str, Any]: FOV配置字典
+        """
+        return {
+            'fov_type': 'sar',
+            'range_half_angle': self.range_half_angle,
+            'azimuth_half_angle': self.azimuth_half_angle,
+            'azimuth_exclusion_angle': self.azimuth_exclusion_angle
+        }
+
+    def is_fov_configured(self) -> bool:
+        """
+        检查是否配置了FOV参数
+
+        Returns:
+            bool: 如果配置了任一FOV参数则返回True
+        """
+        return (
+            self.range_half_angle is not None or
+            self.azimuth_half_angle is not None or
+            self.azimuth_exclusion_angle is not None
+        )

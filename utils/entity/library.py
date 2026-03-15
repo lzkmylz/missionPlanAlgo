@@ -225,7 +225,21 @@ class EntityLibrary:
                     'max_roll_angle': 35.0,
                     "storage_capacity": 1000,
                     "power_capacity": 3000,
-                    "data_rate": 300
+                    "data_rate": 300,
+                    "imager": {
+                        "imager_type": "sar",
+                        "resolution": 3.0,
+                        "swath_width": 30.0,
+                        "band": "X",
+                        "polarization": "VV",
+                        "min_look_angle": 20.0,
+                        "max_look_angle": 50.0,
+                        "fov_config": {
+                            "range_half_angle": 1.36,
+                            "azimuth_half_angle": 0.91,
+                            "azimuth_exclusion_angle": 0.3
+                        }
+                    }
                 }
             },
             {
@@ -242,7 +256,21 @@ class EntityLibrary:
                     'max_roll_angle': 45.0,
                     "storage_capacity": 1500,
                     "power_capacity": 4000,
-                    "data_rate": 500
+                    "data_rate": 500,
+                    "imager": {
+                        "imager_type": "sar",
+                        "resolution": 1.0,
+                        "swath_width": 20.0,
+                        "band": "X",
+                        "polarization": "VV+VH",
+                        "min_look_angle": 15.0,
+                        "max_look_angle": 60.0,
+                        "fov_config": {
+                            "range_half_angle": 0.91,
+                            "azimuth_half_angle": 0.68,
+                            "azimuth_exclusion_angle": 0.25
+                        }
+                    }
                 }
             }
         ]

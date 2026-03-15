@@ -62,6 +62,15 @@
       "min_look_angle_comment": "最小观测视角 15度",
       "max_look_angle": 60.0,
       "max_look_angle_comment": "最大观测视角 60度 - 更大的视角范围",
+      "fov_config": {
+        "_comment": "视场配置 - 基于距离向和方位向视场半角定义",
+        "range_half_angle": 0.91,
+        "range_half_angle_comment": "距离向视场半角 0.91度 - cross-track方向，在631km高度对应约20km幅宽",
+        "azimuth_half_angle": 0.68,
+        "azimuth_half_angle_comment": "方位向视场半角 0.68度 - along-track方向，在631km高度对应约15km场景长度",
+        "azimuth_exclusion_angle": 0.25,
+        "azimuth_exclusion_angle_comment": "方位向排除角 0.25度 - 沿飞行方向的观测盲区"
+      },
       "prf_min": 800,
       "prf_min_comment": "最小脉冲重复频率 800Hz",
       "prf_max": 8000,

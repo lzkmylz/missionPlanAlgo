@@ -123,6 +123,22 @@ DEFAULT_FOV_HALF_ANGLE_DEG = 0.5
 DEFAULT_FOV_HALF_ANGLE_X_DEG = 0.5  # X方向（沿轨迹）
 DEFAULT_FOV_HALF_ANGLE_Y_DEG = 0.35  # Y方向（垂直轨迹）
 
+# =============================================================================
+# SAR FOV (视场) 默认值
+# =============================================================================
+
+# SAR默认距离向视场半角 (度) - cross-track方向，控制幅宽
+# 典型SAR卫星在500km高度，2.5度半角对应约30km幅宽
+DEFAULT_SAR_RANGE_HALF_ANGLE_DEG = 2.5
+
+# SAR默认方位向视场半角 (度) - along-track方向，控制场景长度
+# 典型值约1.0度
+DEFAULT_SAR_AZIMUTH_HALF_ANGLE_DEG = 1.0
+
+# SAR方位向排除角 (度) - 沿飞行方向的观测盲区
+# 由于天线波束形状限制，沿轨迹方向存在一定的盲区
+DEFAULT_SAR_AZIMUTH_EXCLUSION_ANGLE_DEG = 0.5
+
 # 默认最大滚转角 (度) - 绕X轴旋转，控制侧摆
 DEFAULT_MAX_ROLL_ANGLE_DEG = 30.0
 

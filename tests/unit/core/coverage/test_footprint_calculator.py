@@ -617,3 +617,171 @@ class TestRealisticScenarios:
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
         return R * c
+
+
+class TestSARFOVConfiguration:
+    """Test SAR FOV configuration in footprint calculator"""
+
+    def test_sar_fov_footprint_calculation(self):
+        """Test footprint calculation with SAR FOV configuration"""
+        from core.coverage.footprint_calculator import FootprintCalculator
+
+        calc = FootprintCalculator(satellite_altitude_km=631.0)
+
+        # SAR satellite at 631km altitude
+        satellite_position = (6371000.0 + 631000.0, 0.0, 0.0)
+        nadir_position = (0.0, 0.0)
+
+        # SAR FOV configuration
+        sar_fov_config = {
+            'fov_type': 'sar',
+            'range_half_angle': 1.36,  # ~30km swath at 631km
+            'azimuth_half_angle': 0.91,  # ~20km length at 631km
+            'azimuth_exclusion_angle': 0.3
+        }
+
+        footprint = calc.calculate_footprint_from_fov(
+            satellite_position=satellite_position,
+            nadir_position=nadir_position,
+            look_angle=0.0,
+            look_direction=0.0,
+            fov_config=sar_fov_config,
+            imaging_mode=ImagingMode.STRIPMAP
+        )
+
+        # Verify dimensions
+        expected_swath = 2 * 631.0 * math.tan(math.radians(1.36))
+        expected_length = 2 * 631.0 * math.tan(math.radians(0.91))
+
+        # With 0.3° exclusion angle, effective length is reduced
+        exclusion_factor = max(0.0, 1.0 - 0.3 / 0.91)
+        expected_effective_length = expected_length * exclusion_factor
+
+        assert abs(footprint.width_km - expected_swath) < 0.1
+        assert abs(footprint.length_km - expected_effective_length) < 0.1
+        assert footprint.fov_config == sar_fov_config
+
+    def test_sar_fov_vs_cone_fov(self):
+        """Test that SAR FOV produces different results than cone FOV"""
+        from core.coverage.footprint_calculator import FootprintCalculator
+
+        calc = FootprintCalculator(satellite_altitude_km=631.0)
+        satellite_position = (6371000.0 + 631000.0, 0.0, 0.0)
+        nadir_position = (0.0, 0.0)
+
+        # SAR FOV
+        sar_fov = {
+            'fov_type': 'sar',
+            'range_half_angle': 1.36,
+            'azimuth_half_angle': 0.91
+        }
+
+        # Cone FOV with similar swath
+        cone_fov = {
+            'fov_type': 'cone',
+            'half_angle': 1.36
+        }
+
+        sar_footprint = calc.calculate_footprint_from_fov(
+            satellite_position, nadir_position, 0.0, 0.0, sar_fov, ImagingMode.STRIPMAP
+        )
+
+        cone_footprint = calc.calculate_footprint_from_fov(
+            satellite_position, nadir_position, 0.0, 0.0, cone_fov, ImagingMode.STRIPMAP
+        )
+
+        # Widths should be similar (same range angle)
+        assert abs(sar_footprint.width_km - cone_footprint.width_km) < 0.1
+
+        # But lengths should differ (SAR has specific azimuth angle)
+        assert abs(sar_footprint.length_km - cone_footprint.length_km) > 1.0
+
+    def test_sar_fov_default_values(self):
+        """Test SAR FOV with default values"""
+        from core.coverage.footprint_calculator import FootprintCalculator
+
+        calc = FootprintCalculator(satellite_altitude_km=500.0)
+        satellite_position = (6371000.0 + 500000.0, 0.0, 0.0)
+        nadir_position = (0.0, 0.0)
+
+        # SAR FOV with minimal configuration
+        sar_fov = {'fov_type': 'sar'}
+
+        footprint = calc.calculate_footprint_from_fov(
+            satellite_position, nadir_position, 0.0, 0.0, sar_fov, ImagingMode.STRIPMAP
+        )
+
+        # Should use default values (2.5° range, 1.0° azimuth)
+        expected_swath = 2 * 500.0 * math.tan(math.radians(2.5))
+        expected_length = 2 * 500.0 * math.tan(math.radians(1.0))
+
+        assert abs(footprint.width_km - expected_swath) < 0.5
+        assert abs(footprint.length_km - expected_length) < 0.5
+
+    def test_sar_fov_exclusion_angle_impact(self):
+        """Test that azimuth exclusion angle reduces effective length"""
+        from core.coverage.footprint_calculator import FootprintCalculator
+
+        calc = FootprintCalculator(satellite_altitude_km=631.0)
+        satellite_position = (6371000.0 + 631000.0, 0.0, 0.0)
+        nadir_position = (0.0, 0.0)
+
+        # Without exclusion
+        sar_fov_no_excl = {
+            'fov_type': 'sar',
+            'range_half_angle': 1.36,
+            'azimuth_half_angle': 1.0,
+            'azimuth_exclusion_angle': 0.0
+        }
+
+        # With exclusion
+        sar_fov_with_excl = {
+            'fov_type': 'sar',
+            'range_half_angle': 1.36,
+            'azimuth_half_angle': 1.0,
+            'azimuth_exclusion_angle': 0.5
+        }
+
+        footprint_no_excl = calc.calculate_footprint_from_fov(
+            satellite_position, nadir_position, 0.0, 0.0, sar_fov_no_excl, ImagingMode.STRIPMAP
+        )
+
+        footprint_with_excl = calc.calculate_footprint_from_fov(
+            satellite_position, nadir_position, 0.0, 0.0, sar_fov_with_excl, ImagingMode.STRIPMAP
+        )
+
+        # Width should be same
+        assert abs(footprint_no_excl.width_km - footprint_with_excl.width_km) < 0.01
+
+        # Length should be reduced with exclusion angle
+        assert footprint_with_excl.length_km < footprint_no_excl.length_km
+
+    def test_sar_fov_at_different_altitudes(self):
+        """Test SAR FOV at different orbital altitudes"""
+        from core.coverage.footprint_calculator import FootprintCalculator
+
+        sar_fov = {
+            'fov_type': 'sar',
+            'range_half_angle': 1.36,
+            'azimuth_half_angle': 0.91
+        }
+
+        # Test at different altitudes
+        altitudes = [400.0, 500.0, 631.0, 800.0]
+        footprints = []
+
+        for alt in altitudes:
+            calc = FootprintCalculator(satellite_altitude_km=alt)
+            sat_pos = (6371000.0 + alt * 1000, 0.0, 0.0)
+
+            footprint = calc.calculate_footprint_from_fov(
+                sat_pos, (0.0, 0.0), 0.0, 0.0, sar_fov, ImagingMode.STRIPMAP
+            )
+            footprints.append((alt, footprint))
+
+        # Higher altitude should give larger footprint
+        for i in range(len(footprints) - 1):
+            alt1, fp1 = footprints[i]
+            alt2, fp2 = footprints[i + 1]
+            assert fp1.width_km < fp2.width_km
+            assert fp1.length_km < fp2.length_km

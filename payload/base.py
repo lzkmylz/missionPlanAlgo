@@ -38,10 +38,14 @@ class ImagerSpecs:
     min_look_angle: Optional[float] = None  # 最小视角（度）- SAR
     max_look_angle: Optional[float] = None  # 最大视角（度）- SAR
     # FOV配置（新增）
-    fov_type: Optional[str] = None  # 'cone' 或 'rectangular'
+    fov_type: Optional[str] = None  # 'cone' 或 'rectangular' 或 'sar'
     fov_half_angle: Optional[float] = None  # 圆锥视场半角（度）
     fov_half_angle_x: Optional[float] = None  # 矩形视场X方向半角（度）
     fov_half_angle_y: Optional[float] = None  # 矩形视场Y方向半角（度）
+    # SAR FOV配置
+    range_half_angle: Optional[float] = None  # 距离向视场半角（度）- cross-track
+    azimuth_half_angle: Optional[float] = None  # 方位向视场半角（度）- along-track
+    azimuth_exclusion_angle: Optional[float] = None  # 方位向排除角（度）
 
 
 class Imager(ABC):

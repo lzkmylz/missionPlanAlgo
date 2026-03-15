@@ -86,6 +86,20 @@ class FootprintCalculator:
             # 矩形视场：沿轨迹方向（X）和垂直轨迹方向（Y）
             swath_width_km = 2 * altitude_km * math.tan(half_angle_y)
             length_km = 2 * altitude_km * math.tan(half_angle_x)
+        elif fov_type == 'sar':
+            # SAR FOV配置：距离向（cross-track）和方位向（along-track）
+            range_half_angle = math.radians(fov_config.get('range_half_angle', 2.5))
+            azimuth_half_angle = math.radians(fov_config.get('azimuth_half_angle', 1.0))
+            # 距离向幅宽（cross-track）
+            swath_width_km = 2 * altitude_km * math.tan(range_half_angle)
+            # 方位向长度（along-track）
+            length_km = 2 * altitude_km * math.tan(azimuth_half_angle)
+            # 方位向排除角影响实际可用长度（可选处理）
+            azimuth_exclusion = math.radians(fov_config.get('azimuth_exclusion_angle', 0.0))
+            if azimuth_exclusion > 0:
+                # 排除角会减少有效观测范围
+                exclusion_factor = max(0.0, 1.0 - azimuth_exclusion / azimuth_half_angle)
+                length_km *= exclusion_factor
         else:
             # 回退到配置的swath_width
             swath_width_km = fov_config.get('swath_width_km', 10.0)
