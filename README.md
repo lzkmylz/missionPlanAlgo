@@ -15,6 +15,9 @@
 - **算法即插即用**：统一接口支持贪心、EDD、SPT、GA、SA、ACO、PSO、禁忌搜索等
 - **双后端可见性计算**：STK HPOP（高精度）+ Orekit（自主可控，Java实现）
 - **智能轨道初始化**：自动处理历元与场景时间差距（SGP4/J4/HPOP自适应选择）
+- **姿态预计算缓存**：调度前预计算所有窗口姿态角，O(1)查询，1227倍加速
+- **批量约束检查**：Numba向量化优化，约束检查性能提升5-10倍
+- **精确姿态机动模型**：基于刚体动力学的时间最优轨迹规划
 - **星载边缘计算支持**：在轨数据预处理，减少下传压力
 - **完整实验流程**：场景配置 → 可见性计算 → 算法执行 → 结果验证 → 性能评估 → 批量对比
 
@@ -40,6 +43,9 @@ missionPlanAlgo/
 │   ├── models/             # 实体模型（卫星、目标、地面站、任务）
 │   ├── orbit/              # 轨道模块（传播器、可见性计算）
 │   │   └── visibility/     # Orekit可见性计算Python接口
+│   ├── dynamics/           # 动力学模块（姿态预计算、刚体动力学）
+│   │   ├── attitude_precache.py       # 姿态预计算缓存管理
+│   │   └── precise/        # 精确姿态机动模型
 │   ├── resources/          # 资源管理（卫星池、地面站池）
 │   ├── decomposer/         # 目标分解（条带、网格）
 │   ├── processing/         # 在轨处理管理
@@ -58,7 +64,8 @@ missionPlanAlgo/
 ├── payload/                # 载荷模块（光学/SAR成像器、成像模式）
 ├── scheduler/              # 调度算法
 │   ├── greedy/            # 启发式算法（Greedy、EDD、SPT）
-│   └── metaheuristic/     # 元启发式算法（GA、SA、ACO、PSO、Tabu）
+│   ├── metaheuristic/     # 元启发式算法（GA、SA、ACO、PSO、Tabu）
+│   └── constraints/       # 批量约束检查器（Numba向量化优化）
 ├── simulator/             # 离散事件仿真引擎
 ├── evaluation/            # 性能指标与结果分析
 ├── experiments/           # 实验管理与基准测试
@@ -120,7 +127,7 @@ OptimizedVisibilityCalculator
 
 ### 关键技术创新
 
-**智能轨道初始化器 (SmartOrbitInitializer)**
+**1. 智能轨道初始化器 (SmartOrbitInitializer)**
 
 解决历元时间与场景时间差距大的问题（如历元2000年，场景2024年）：
 
@@ -132,15 +139,148 @@ OptimizedVisibilityCalculator
 
 **性能提升**：从226分钟 → 80秒（提升170倍）
 
+**2. 姿态预计算缓存系统 (AttitudePrecacheManager)**
+
+调度前预计算所有可见窗口的姿态角，实现O(1)查询：
+
+| 指标 | 优化前 | 优化后 | 加速比 |
+|------|--------|--------|--------|
+| Phase2/3耗时 | 1386秒 | 1.1秒 | **1227x** |
+| 总调度时间 | 1708秒 | 332秒 | **5.1x** |
+| 单次查询耗时 | ~10-20ms | ~0.001ms | **10000x** |
+
+**3. 批量约束检查（Numba向量化优化）**
+
+所有约束检查器使用Numba JIT并行计算：
+
+| 约束类型 | 逐个检查 | 批量检查(200批次) | 加速比 |
+|---------|---------|------------------|--------|
+| 姿态约束 | 3.6ms | 0.3ms | **10.7x** |
+| SAA约束 | ~100ms | ~15ms | **6.7x** |
+| 时间冲突 | ~40ms | ~3ms | **13x** |
+| 资源约束 | ~20ms | ~1.5ms | **13x** |
+
+**4. 精确姿态机动模型**
+
+基于刚体动力学的时间最优轨迹规划：
+- 飞轮动量管理
+- 能量消耗精确建模
+- 时间最优轨迹规划
+- 统一使用精确模型（简化模式已移除）
+
 ---
 
 ## 性能基准
 
+### 可见性计算
+
 | 场景 | 耗时 | 窗口数 | 每对耗时 |
 |------|------|--------|----------|
-| 60卫星×1000目标×24h | **80秒** | 318,312 | 1.34 ms |
+| 60卫星×1000目标×24h | **80秒** | 188,241 | 1.34 ms |
+| 卫星-目标窗口 | - | 184,357 | - |
+| 卫星-地面站窗口 | - | 3,884 | - |
 
 测试环境：Intel i7, 16GB RAM, Java 17, EGM2008 90x90
+
+### 调度性能（60卫星×1000目标×24h）
+
+| 检查环节 | 调用次数 | 总耗时 | 平均耗时 |
+|---------|---------|--------|---------|
+| 批量姿态检查 | 2,638 | 35.75s | **13.55ms** |
+| 批量约束检查 | 2,638 | 15.69s | **5.95ms** |
+| 姿态预计算 | 1次 | 15s | 一次性 |
+
+### 姿态预计算缓存效果
+
+| 模式 | 调度时间 | 适用场景 |
+|-----|---------|---------|
+| 无预计算 | 1708秒 | 内存受限 |
+| 预计算缓存 | **332秒** | 内存充足（推荐）|
+
+测试场景：60卫星×1000目标，调度任务数2,638个，频次满足率100%
+
+---
+
+## 技术亮点详解
+
+### 1. 批量约束检查器（Numba向量化优化）
+
+所有调度器默认使用批量约束检查器，通过Numba JIT并行计算实现C级性能：
+
+```python
+from scheduler.constraints import (
+    BatchSlewConstraintChecker,    # 批量姿态约束
+    BatchSAAConstraintChecker,     # 批量SAA约束
+    BatchTimeConflictChecker,      # 批量时间冲突
+    BatchResourceChecker,          # 批量资源约束
+    UnifiedBatchConstraintChecker  # 统一批量检查入口
+)
+
+# 统一检查所有约束
+checker = UnifiedBatchConstraintChecker(mission)
+results = checker.check_all_constraints_batch(
+    candidates=candidates,
+    existing_tasks=scheduled_tasks,
+    satellite_states=satellite_states
+)
+```
+
+**优化特点**：
+- **Numba JIT并行计算**：`@njit(parallel=True)` + `prange` 实现C级并行
+- **向量化数据布局**：Python对象 → NumPy数组 → Numba加速计算
+- **早期终止**：阶段式检查，失败即跳过后续检查
+
+### 2. 姿态预计算缓存
+
+调度前预计算所有可见窗口的姿态角，调度时O(1)查询：
+
+```python
+from core.dynamics.attitude_precache import AttitudePrecacheManager
+
+# 初始化预计算管理器
+precache = AttitudePrecacheManager(
+    orbit_json_path='java/output/frequency_scenario/orbits.json.gz'
+)
+
+# 预计算所有窗口姿态角（一次性，约15秒）
+precache.precompute_attitudes_for_windows(visibility_windows)
+
+# 调度时O(1)查询
+roll, pitch = precache.get_attitude(sat_id, window_start)
+```
+
+**内存成本**：约475MB（姿态缓存30MB + 轨道数据445MB）
+
+### 3. 精确姿态机动模型
+
+基于刚体动力学的时间最优轨迹规划：
+
+```python
+from scheduler.constraints import PreciseSlewConstraintChecker
+
+# 所有调度器默认使用精确模型
+checker = PreciseSlewConstraintChecker(
+    mission=mission,
+    use_precise_model=True  # 强制精确计算
+)
+```
+
+**模型组成**：
+- `core/dynamics/precise/rigid_body_dynamics.py` - 刚体动力学
+- `core/dynamics/precise/trajectory_planner.py` - 时间最优轨迹
+- `core/dynamics/precise/energy_model.py` - 能量消耗建模
+- `core/dynamics/precise/momentum_manager.py` - 飞轮动量管理
+
+### 4. 姿态角术语统一
+
+统一使用滚转角（Roll）和俯仰角（Pitch）：
+
+| 卫星类型 | 最大滚转角 | 最大俯仰角 |
+|----------|-----------|-----------|
+| 光学卫星 | ±35° | ±20° |
+| SAR卫星 | ±45° | ±30° |
+
+**约束检查**：分别检查滚转角和俯仰角（替代原来的合成角度检查）
 
 ---
 
@@ -299,12 +439,23 @@ python main.py --help
 from core.models import Mission
 from scheduler.greedy import GreedyScheduler
 from evaluation.metrics import MetricsCalculator
+from core.dynamics.attitude_precache import AttitudePrecacheManager
 
 # 加载任务场景
 mission = Mission.load("scenarios/point_group_50sats.json")
 
+# 配置调度器（启用姿态预计算缓存）
+config = {
+    'name': 'Greedy-EDD',
+    'enable_attitude_precache': True,      # 启用姿态预计算
+    'orbit_json_path': 'java/output/frequency_scenario/orbits.json.gz',
+    'use_batch_constraints': True,          # 使用批量约束检查
+    'consider_frequency': True,             # 考虑频次约束
+    'enable_downlink': True,                # 启用数传规划
+}
+
 # 选择调度算法
-scheduler = GreedyScheduler({"name": "Greedy-EDD"})
+scheduler = GreedyScheduler(config)
 scheduler.initialize(mission)
 
 # 运行调度
@@ -321,6 +472,7 @@ metrics = metrics_calc.calculate_all(result)
 print(f"需求满足率: {metrics.demand_satisfaction_rate:.2%}")
 print(f"完工时间: {metrics.makespan/3600:.2f} 小时")
 print(f"求解时间: {metrics.computation_time:.2f} 秒")
+print(f"频次满足率: {result.frequency_satisfaction:.2%}")
 ```
 
 ---
@@ -338,12 +490,33 @@ cd java/
 # 编译所有Java类
 make build
 
-# 运行大规模场景测试
+# 运行大规模场景测试（使用默认配置）
 java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest
+
+# 指定场景文件和输出目录
+java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest \
+    --scenario ../scenarios/my_scenario.json \
+    --output output/my_results \
+    --orbit-output output/my_results/orbits.json.gz
+
+# 自定义扫描步长
+cd java && java -cp "classes:lib/*" orekit.visibility.LargeScaleFrequencyTest \
+    --coarse-step 10.0 \
+    --fine-step 2.0
 
 # 运行快速测试
 java -cp "classes:lib/*" orekit.visibility.QuickFrequencyTest
 ```
+
+**命令行参数:**
+
+| 参数 | 短选项 | 说明 | 默认值 |
+|------|--------|------|--------|
+| `--scenario` | `-s` | 场景配置文件路径 | `../scenarios/large_scale_frequency.json` |
+| `--output` | `-o` | 输出目录 | `output/frequency_scenario` |
+| `--orbit-output` | | 轨道数据输出路径 | `<output>/orbits.json.gz` |
+| `--coarse-step` | | 粗扫描步长(秒) | `5.0` |
+| `--fine-step` | | 精化步长(秒) | `1.0` |
 
 ### 可见性计算
 
@@ -353,11 +526,19 @@ python scripts/compute_visibility.py \
     --scenario scenarios/large_scale_frequency.json \
     --output output/frequency_scenario/
 
+# 计算并导出轨道数据（用于姿态预计算）
+python scripts/compute_visibility.py \
+    --scenario scenarios/large_scale_frequency.json \
+    --output output/frequency_scenario/ \
+    --orbit-output output/frequency_scenario/orbits.json.gz
+
 # 计算单颗卫星可见性
 python scripts/compute_visibility.py \
     --scenario scenarios/single_satellite.json \
     --sat-id SAT_001
 ```
+
+**注意**：Java后端默认同时计算卫星-目标窗口和卫星-地面站窗口，无需额外步骤。
 
 ### 数据文件管理
 
@@ -439,7 +620,11 @@ python -m experiments.runner \
 - [x] 核心模块实现（卫星/目标/地面站建模）
 - [x] **高性能可见性计算**（Java Orekit后端，80秒处理60卫星×1000目标×24h）
 - [x] **智能轨道初始化器**（SGP4/J4/HPOP自适应选择，性能提升170倍）
+- [x] **姿态预计算缓存**（O(1)查询，调度加速5.1倍）
+- [x] **批量约束检查**（Numba向量化，约束检查加速5-10倍）
+- [x] **精确姿态机动模型**（刚体动力学，时间最优轨迹）
 - [x] 轨道传播与可见性计算（SGP4 / STK HPOP / Orekit）
+- [x] 地面站窗口计算（Java后端默认计算）
 - [x] 基础调度算法（贪心、EDD、SPT）
 - [x] 元启发式算法（GA、SA、ACO、PSO、Tabu）
 - [x] 离散事件仿真引擎
@@ -561,6 +746,51 @@ TLE数据 → SGP4外推到场景开始
 ```
 
 缺失参数将使用默认值。
+
+### Q: 如何启用姿态预计算缓存？
+
+**A:** 在调度器配置中启用：
+
+```python
+config = {
+    'enable_attitude_precache': True,      # 启用姿态预计算缓存
+    'orbit_json_path': 'java/output/frequency_scenario/orbits.json.gz'
+}
+scheduler = GreedyScheduler(config)
+```
+
+**适用场景**：
+- ✅ 内存充足（>1GB可用）
+- ✅ 重复调度相同场景
+- ✅ 实时性要求高
+
+**不适用场景**：
+- ❌ 内存受限环境
+- ❌ 一次性调度任务
+- ❌ 动态变化场景
+
+### Q: 批量约束检查如何工作？
+
+**A:** 所有调度器默认使用批量约束检查器，无需额外配置：
+
+```python
+# 自动使用批量检查器
+scheduler = GreedyScheduler()  # 默认启用
+
+# 手动批量检查
+from scheduler.constraints import BatchSlewConstraintChecker
+checker = BatchSlewConstraintChecker(mission)
+results = checker.check_slew_feasibility_batch(candidates)
+```
+
+### Q: 为什么地面站窗口计算从Java后端输出？
+
+**A:** 为了保证地面站窗口使用与目标窗口相同的高精度HPOP轨道数据：
+
+- Java后端默认同时计算卫星-目标窗口和卫星-地面站窗口
+- 地面站窗口标识：`GS:` 前缀（如 `GS:GS-BEIJING`）
+- 统一使用EGM2008 90x90重力场模型
+- 调度器通过 `load_window_cache_from_json()` 自动加载
 
 ---
 
