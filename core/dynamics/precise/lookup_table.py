@@ -126,13 +126,13 @@ class SlewLookupTable:
         max_slew_rate = agility.get('max_slew_rate', 3.0)
         settling_time = agility.get('settling_time', 5.0)
         max_torque = agility.get('max_torque', 0.5)
-        max_off_nadir = getattr(satellite.capabilities, 'max_off_nadir', 45.0)
+        max_roll_angle = getattr(satellite.capabilities, 'max_roll_angle', 45.0)
 
         # 构建分类键
         # 按参数范围离散化，避免过度细分
         rate_class = int(max_slew_rate)  # 1, 2, 3, 4, 5...
         torque_class = int(max_torque * 10)  # 5, 10, 15...
-        angle_class = int(max_off_nadir / 10) * 10  # 30, 40, 50, 60...
+        angle_class = int(max_roll_angle / 10) * 10  # 30, 40, 50, 60...
 
         return f"RATE{rate_class}_TORQUE{torque_class}_ANGLE{angle_class}"
 
@@ -154,7 +154,7 @@ class SlewLookupTable:
             inertia_tensor=InertiaTensor.diagonal(Ixx, Iyy, Izz),
             max_control_torque=agility.get('max_torque', 0.5),
             max_angular_velocity=agility.get('max_slew_rate', 3.0),
-            max_slew_angle=getattr(satellite.capabilities, 'max_off_nadir', 45.0),
+            max_slew_angle=getattr(satellite.capabilities, 'max_roll_angle', 45.0),
             settling_time=agility.get('settling_time', 5.0)
         )
 
@@ -170,7 +170,7 @@ class SlewLookupTable:
         Args:
             satellite: 卫星对象
             angle_step: 角度步长（默认1.0度）
-            max_angle: 最大角度（默认使用卫星max_off_nadir）
+            max_angle: 最大角度（默认使用卫星max_roll_angle）
             force_rebuild: 强制重新构建（即使已存在）
 
         Returns:
@@ -184,7 +184,7 @@ class SlewLookupTable:
 
         angle_step = angle_step or self.DEFAULT_ANGLE_STEP
         max_angle = max_angle or getattr(
-            satellite.capabilities, 'max_off_nadir', self.DEFAULT_MAX_ANGLE
+            satellite.capabilities, 'max_roll_angle', self.DEFAULT_MAX_ANGLE
         )
 
         logger.info(f"构建刚体动力学查找表: {sat_class} "

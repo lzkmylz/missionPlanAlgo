@@ -361,8 +361,8 @@ class RLSchedulerInterface:
 
             if sat_index is not None and sat_index < len(self.mission.satellites):
                 satellite = self.mission.satellites[sat_index]
-                # 如果卫星类型匹配目标分辨率要求，给予额外奖励
-                if satellite.capabilities.resolution <= task.resolution_required:
+                # 如果卫星能满足目标分辨率要求，给予额外奖励
+                if satellite.capabilities.can_satisfy_resolution(task.resolution_required):
                     base_reward *= 1.5
 
             return base_reward
@@ -499,7 +499,7 @@ class RLSchedulerInterface:
                 sat.capabilities.storage_capacity / 2000.0,  # 存储容量
                 sat.capabilities.power_capacity / 5000.0,     # 能源容量
                 sat.capabilities.resolution / 10.0,           # 分辨率
-                sat.capabilities.max_off_nadir / 50.0,        # 最大侧摆角
+                sat.capabilities.max_roll_angle / 50.0,        # 最大侧摆角
                 len(self.satellite_assignments[sat.id]),      # 已分配任务数
                 sat.capabilities.data_rate / 500.0            # 数据速率
             ]

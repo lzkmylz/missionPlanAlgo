@@ -95,7 +95,7 @@ class TestSQLiteStorage:
             'orbit_type': 'SSO',
             'altitude': 500000,
             'inclination': 97.4,
-            'max_off_nadir': 30.0,
+            'max_roll_angle': 30.0,
             'storage_capacity': 500,
             'power_capacity': 2000,
             'data_rate': 300

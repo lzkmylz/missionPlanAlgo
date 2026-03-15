@@ -306,7 +306,7 @@ class TestCanCoverTargets:
             targets=[target],
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=30.0,
+            max_roll_angle=30.0,
             swath_width_km=10.0
         )
 
@@ -332,7 +332,7 @@ class TestCanCoverTargets:
             targets=targets,
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=30.0,
+            max_roll_angle=30.0,
             swath_width_km=10.0  # 10km swath
         )
 
@@ -357,13 +357,13 @@ class TestCanCoverTargets:
             targets=targets,
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=30.0,
+            max_roll_angle=30.0,
             swath_width_km=10.0
         )
 
         assert can_cover is False
 
-    def test_max_off_nadir_constraint(self):
+    def test_max_roll_angle_constraint(self):
         """Test that max off-nadir angle constraint is enforced"""
         from core.coverage.footprint_calculator import FootprintCalculator
 
@@ -382,23 +382,23 @@ class TestCanCoverTargets:
             latitude=0.0
         )
 
-        # With max_off_nadir=30, should not be able to cover
+        # With max_roll_angle=30, should not be able to cover
         can_cover, angle = calc.can_cover_targets(
             targets=[target],
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=30.0,  # Conservative limit
+            max_roll_angle=30.0,  # Conservative limit
             swath_width_km=100.0  # Wide swath
         )
 
         assert can_cover is False
 
-        # With max_off_nadir=50, should be able to cover
+        # With max_roll_angle=50, should be able to cover
         can_cover, angle = calc.can_cover_targets(
             targets=[target],
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=50.0,  # Aggressive limit
+            max_roll_angle=50.0,  # Aggressive limit
             swath_width_km=100.0
         )
 
@@ -417,7 +417,7 @@ class TestCanCoverTargets:
             targets=[],
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=30.0,
+            max_roll_angle=30.0,
             swath_width_km=10.0
         )
 
@@ -598,7 +598,7 @@ class TestRealisticScenarios:
             targets=targets,
             satellite_position=satellite_position,
             nadir_position=nadir_position,
-            max_off_nadir=45.0,
+            max_roll_angle=45.0,
             swath_width_km=20.0
         )
 

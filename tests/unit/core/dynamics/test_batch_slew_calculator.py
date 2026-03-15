@@ -52,7 +52,7 @@ def sample_satellite():
         capabilities=SatelliteCapabilities(
             imaging_modes=[ImagingMode.PUSH_BROOM],
             resolution=0.5,
-            max_off_nadir=45.0,
+            max_roll_angle=45.0,
             agility={
                 'max_slew_rate': 2.0,
                 'settling_time': 5.0,

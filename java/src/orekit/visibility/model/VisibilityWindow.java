@@ -1,13 +1,36 @@
 package orekit.visibility.model;
 
 import org.orekit.time.AbsoluteDate;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * 可见窗口数据类
  *
- * 存储卫星-目标可见窗口的完整信息。
+ * 存储卫星-目标可见窗口的完整信息，包括姿态采样数据。
  */
 public class VisibilityWindow {
+
+    /**
+     * 姿态采样点数据类
+     * 存储窗口内特定时间点的姿态角
+     */
+    public static class AttitudeSample {
+        public final double timestamp;  // 相对于窗口开始的秒数
+        public final double roll;       // 滚转角（度）
+        public final double pitch;      // 俯仰角（度）
+
+        public AttitudeSample(double timestamp, double roll, double pitch) {
+            this.timestamp = timestamp;
+            this.roll = roll;
+            this.pitch = pitch;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("AttitudeSample[t=%.1f, r=%.2f, p=%.2f]", timestamp, roll, pitch);
+        }
+    }
     private final String satelliteId;
     private final String targetId;
     private final AbsoluteDate startTime;
@@ -19,16 +42,19 @@ public class VisibilityWindow {
     private final double exitAzimuth;
     private final double qualityScore;
     private final String confidence;
+    private final List<AttitudeSample> attitudeSamples;  // 姿态采样数据
+    private final boolean attitudeFeasible;               // 是否通过姿态约束检查
 
     /**
-     * 创建可见窗口
+     * 创建可见窗口（带姿态数据）
      */
     public VisibilityWindow(String satelliteId, String targetId,
                            AbsoluteDate startTime, AbsoluteDate endTime,
                            double durationSeconds, double maxElevation,
                            AbsoluteDate maxElevationTime, double entryAzimuth,
                            double exitAzimuth, double qualityScore,
-                           String confidence) {
+                           String confidence, List<AttitudeSample> attitudeSamples,
+                           boolean attitudeFeasible) {
         this.satelliteId = satelliteId;
         this.targetId = targetId;
         this.startTime = startTime;
@@ -40,6 +66,22 @@ public class VisibilityWindow {
         this.exitAzimuth = exitAzimuth;
         this.qualityScore = qualityScore;
         this.confidence = confidence;
+        this.attitudeSamples = attitudeSamples != null ? attitudeSamples : new ArrayList<>();
+        this.attitudeFeasible = attitudeFeasible;
+    }
+
+    /**
+     * 创建可见窗口
+     */
+    public VisibilityWindow(String satelliteId, String targetId,
+                           AbsoluteDate startTime, AbsoluteDate endTime,
+                           double durationSeconds, double maxElevation,
+                           AbsoluteDate maxElevationTime, double entryAzimuth,
+                           double exitAzimuth, double qualityScore,
+                           String confidence) {
+        this(satelliteId, targetId, startTime, endTime, durationSeconds, maxElevation,
+             maxElevationTime, entryAzimuth, exitAzimuth, qualityScore, confidence,
+             new ArrayList<>(), true);
     }
 
     // 简化的构造函数
@@ -48,7 +90,8 @@ public class VisibilityWindow {
                            double maxElevation) {
         this(satelliteId, targetId, startTime, endTime,
              endTime.durationFrom(startTime), maxElevation,
-             startTime, 0.0, 0.0, 0.5, "HIGH");
+             startTime, 0.0, 0.0, 0.5, "HIGH",
+             new ArrayList<>(), true);
     }
 
     public String getSatelliteId() { return satelliteId; }
@@ -62,6 +105,8 @@ public class VisibilityWindow {
     public double getExitAzimuth() { return exitAzimuth; }
     public double getQualityScore() { return qualityScore; }
     public String getConfidence() { return confidence; }
+    public List<AttitudeSample> getAttitudeSamples() { return attitudeSamples; }
+    public boolean isAttitudeFeasible() { return attitudeFeasible; }
 
     @Override
     public String toString() {

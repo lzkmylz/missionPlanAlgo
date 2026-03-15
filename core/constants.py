@@ -109,8 +109,22 @@ DEFAULT_RESOLUTION_M = 10.0
 # 默认幅宽 (米)
 DEFAULT_SWATH_WIDTH_M = 10000.0
 
-# 默认最大侧摆角 (度)
-DEFAULT_MAX_OFF_NADIR_DEG = 30.0
+# 默认最大滚转角 (度) - 绕X轴旋转，控制侧摆
+DEFAULT_MAX_ROLL_ANGLE_DEG = 30.0
+
+# 默认最大俯仰角 (度) - 绕Y轴旋转，控制前后斜视
+DEFAULT_MAX_PITCH_ANGLE_DEG = 20.0
+
+# 卫星类型特定滚转角限制
+OPTICAL_MAX_ROLL_ANGLE_DEG = 35.0  # 光学卫星最大滚转角 ±35°
+SAR_MAX_ROLL_ANGLE_DEG = 45.0      # SAR卫星最大滚转角 ±45°
+
+# 卫星类型特定俯仰角限制
+OPTICAL_MAX_PITCH_ANGLE_DEG = 20.0  # 光学卫星最大俯仰角 ±20°
+SAR_MAX_PITCH_ANGLE_DEG = 30.0      # SAR卫星最大俯仰角 ±30°
+
+# 向后兼容: max_off_nadir 已废弃，使用 max_roll_angle 替代
+DEFAULT_MAX_OFF_NADIR_DEG = DEFAULT_MAX_ROLL_ANGLE_DEG
 
 # 光学卫星功率容量 (Wh)
 OPTICAL_1_POWER_CAPACITY_WH = 2000.0

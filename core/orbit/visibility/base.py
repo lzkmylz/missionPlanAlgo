@@ -25,6 +25,8 @@ class VisibilityWindow:
         end_time: 窗口结束时间
         max_elevation: 最大仰角（度）
         quality_score: 窗口质量评分（0-1）
+        attitude_feasible: 姿态可行性（由Java预计算）
+        attitude_samples: 姿态采样数据列表 [(timestamp, roll, pitch), ...]
     """
     satellite_id: str
     target_id: str
@@ -32,6 +34,8 @@ class VisibilityWindow:
     end_time: datetime
     max_elevation: float = 90.0
     quality_score: float = 1.0
+    attitude_feasible: bool = True
+    attitude_samples: Optional[List[Tuple[float, float, float]]] = None
 
     def duration(self) -> float:
         """窗口持续时间（秒）"""

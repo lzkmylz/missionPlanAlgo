@@ -13,8 +13,10 @@
   },
   "capabilities": {
     "_comment": "高级SAR载荷能力配置 - 支持高分辨率聚束模式",
-    "max_off_nadir": 45.0,
-    "max_off_nadir_comment": "最大侧摆角度 45度 - 最大的观测范围，支持大幅宽成像",
+    "max_roll_angle": 45.0,
+    "max_roll_angle_comment": "最大滚转角 ±45度 - 绕X轴侧摆（原侧摆角）",
+    "max_pitch_angle": 30.0,
+    "max_pitch_angle_comment": "最大俯仰角 ±30度 - 绕Y轴前后斜视",
     "storage_capacity": 1500,
     "storage_capacity_comment": "存储容量 1500GB = 1.5TB - 高分辨率数据量巨大",
     "power_capacity": 4000,

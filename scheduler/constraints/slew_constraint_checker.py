@@ -88,7 +88,8 @@ class SlewConstraintChecker:
 
         self._satellite_configs[satellite.id] = {
             'max_slew_rate': agility.get('max_slew_rate', 3.0),
-            'max_slew_angle': satellite.capabilities.max_off_nadir,
+            'max_roll_angle': satellite.capabilities.max_roll_angle,
+            'max_pitch_angle': satellite.capabilities.max_pitch_angle,
             'settling_time': agility.get('settling_time', 5.0)
         }
 
@@ -159,7 +160,8 @@ class SlewConstraintChecker:
                 reason=f"Satellite configuration not initialized for {satellite_id}"
             )
 
-        max_slew_angle = sat_config['max_slew_angle']
+        # 使用最大滚转角作为机动角度限制（滚转是主要机动方向）
+        max_slew_angle = sat_config['max_roll_angle']
 
         # 如果没有上一个目标，计算从对地定向到第一个目标的机动
         if prev_target is None:

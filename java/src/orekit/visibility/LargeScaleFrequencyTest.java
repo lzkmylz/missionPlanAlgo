@@ -312,7 +312,7 @@ public class LargeScaleFrequencyTest {
                              List<TargetConfig> targets,
                              List<GroundStationConfig> groundStations,
                              List<ObservationRequirement> requirements) throws IOException {
-        // 1. 可见性窗口
+        // 1. 可见性窗口（带姿态数据）
         StringBuilder visJson = new StringBuilder();
         visJson.append("{\n  \"windows\": [\n");
 
@@ -327,7 +327,19 @@ public class LargeScaleFrequencyTest {
                 visJson.append("\"start\":\"").append(window.getStartTime().toString()).append("\",");
                 visJson.append("\"end\":\"").append(window.getEndTime().toString()).append("\",");
                 visJson.append("\"dur\":").append(window.getDurationSeconds()).append(",");
-                visJson.append("\"el\":").append(String.format("%.1f", window.getMaxElevation())).append("}");
+                visJson.append("\"el\":").append(String.format("%.1f", window.getMaxElevation())).append(",");
+                visJson.append("\"attitude_feasible\":").append(window.isAttitudeFeasible()).append(",");
+
+                // 添加姿态采样数据
+                visJson.append("\"attitude_samples\":[");
+                List<VisibilityWindow.AttitudeSample> samples = window.getAttitudeSamples();
+                for (int i = 0; i < samples.size(); i++) {
+                    VisibilityWindow.AttitudeSample sample = samples.get(i);
+                    if (i > 0) visJson.append(",");
+                    visJson.append(String.format("{\"t\":%.1f,\"r\":%.2f,\"p\":%.2f}",
+                        sample.timestamp, sample.roll, sample.pitch));
+                }
+                visJson.append("]}");
             }
         }
         visJson.append("\n  ]\n}\n");

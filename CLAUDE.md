@@ -897,3 +897,295 @@ except ValueError as e:
 config = ConstraintConfig(mode="standard")  # OK
 checker = MetaheuristicConstraintChecker(mission)  # OK
 ```
+
+---
+
+## 2026-03-14: 姿态角术语重构 - 统一使用滚转角/俯仰角
+
+### 重构背景
+
+通过查阅文献，发现**侧摆角**和**滚转角**实际上是同一个物理现象的不同表述，都控制绕X轴的旋转。原代码中同时使用 `max_off_nadir`（最大侧摆角）和 `roll`（滚转角）造成了概念混淆。
+
+### 术语统一
+
+| 旧术语 | 新术语 | 说明 |
+|--------|--------|------|
+| max_off_nadir (侧摆角) | **max_roll_angle** (滚转角) | 绕X轴旋转，控制左右侧摆 |
+| - | **max_pitch_angle** (俯仰角) | 绕Y轴旋转，控制前后斜视（新增） |
+
+### 约束计算方案修正
+
+**原来（错误）**:
+```python
+# 使用合成角度检查
+total_angle = sqrt(roll² + pitch²)
+if total_angle > max_off_nadir:
+    feasible = False
+```
+
+**现在（正确）**:
+```python
+# 分别检查滚转角和俯仰角
+if abs(roll) > max_roll_angle:
+    feasible = False
+if abs(pitch) > max_pitch_angle:
+    feasible = False
+```
+
+### 卫星能力配置更新
+
+| 卫星类型 | 最大滚转角 | 最大俯仰角 |
+|----------|-----------|-----------|
+| 光学卫星 | **±35°** | **±20°** |
+| SAR卫星 | **±45°** | **±30°** |
+
+### 修改的文件列表
+
+**场景配置** (5个文件):
+- `data/entity_lib/satellites/optical_1.json`
+- `data/entity_lib/satellites/optical_2.json`
+- `data/entity_lib/satellites/sar_1.json`
+- `data/entity_lib/satellites/sar_2.json`
+- `scenarios/large_scale_frequency.json` (60颗卫星)
+- `scenarios/point_group_scenario.json`
+- `scenarios/point_group_scenario.yaml`
+- `scenarios/archive/large_scale_experiment.json`
+
+**核心数据模型** (2个文件):
+- `core/constants.py` - 添加新的常量定义
+- `core/models/satellite.py` - SatelliteCapabilities类更新
+
+**姿态约束检查** (4个文件):
+- `scheduler/constraints/batch_attitude_calculator.py` - 分别检查roll/pitch
+- `scheduler/constraints/slew_constraint_checker.py`
+- `scheduler/constraints/precise_slew_constraint_checker.py`
+- `scheduler/constraints/unified_maneuver_checker.py`
+
+**覆盖计算** (1个文件):
+- `core/coverage/footprint_calculator.py` - `calculate_off_nadir_angle` → `calculate_required_roll_angle`
+
+**调度器** (3个文件):
+- `scheduler/greedy/greedy_scheduler.py`
+- `scheduler/greedy/heuristic_scheduler.py`
+- `scheduler/common/constraint_checker.py`
+
+**Java后端** (1个文件):
+- `java/src/orekit/visibility/JsonScenarioLoader.java` - 兼容新旧字段
+
+**工具脚本** (4个文件):
+- `scripts/generate_scenario.py`
+- `utils/yaml_loader.py`
+- `utils/entity/library.py`
+- `utils/entity/cli/commands/feasibility.py`
+
+**数据库Schema** (2个文件):
+- `storage/schema.py`
+- `core/models/schema/config_tables.py`
+
+**测试文件** (13个文件):
+- `tests/unit/core/models/test_satellite.py`
+- `tests/unit/core/coverage/test_footprint_calculator.py`
+- `tests/unit/scheduler/test_*.py`
+- `tests/integration/test_*.py`
+- 其他相关测试文件
+
+### 向后兼容性
+
+Java后端 (`JsonScenarioLoader.java`) 保持向后兼容:
+```java
+// 优先读取max_roll_angle（新字段），回退到max_off_nadir（旧字段）
+if (capabilities.has("max_roll_angle")) {
+    maxOffNadir = capabilities.getDouble("max_roll_angle");
+} else if (capabilities.has("max_off_nadir")) {
+    maxOffNadir = capabilities.getDouble("max_off_nadir");
+}
+```
+
+### 关键代码变更示例
+
+**SatelliteCapabilities类**:
+```python
+@dataclass
+class SatelliteCapabilities:
+    # 旧:
+    max_off_nadir: float = DEFAULT_MAX_OFF_NADIR_DEG
+    
+    # 新:
+    max_roll_angle: float = DEFAULT_MAX_ROLL_ANGLE_DEG   # 35°光学 / 45°SAR
+    max_pitch_angle: float = DEFAULT_MAX_PITCH_ANGLE_DEG  # 20°光学 / 30°SAR
+```
+
+**批量姿态约束检查**:
+```python
+# scheduler/constraints/batch_attitude_calculator.py
+@njit(parallel=True, cache=True)
+def _batch_filter_by_attitude_numba(
+    rolls: np.ndarray,
+    pitches: np.ndarray,
+    max_roll_angles: np.ndarray,    # 新增
+    max_pitch_angles: np.ndarray    # 新增
+) -> np.ndarray:
+    for i in prange(n):
+        # 分别检查（替代原来的合成角度检查）
+        if abs(rolls[i]) > max_roll_angles[i] * 1.1:
+            feasible_mask[i] = False
+        elif abs(pitches[i]) > max_pitch_angles[i] * 1.1:
+            feasible_mask[i] = False
+```
+
+---
+
+## 2026-03-15: 姿态预计算系统重大修复
+
+### 问题背景
+在大规模场景（60卫星×1000目标）姿态预计算测试中，发现计算出的目标可见性窗口为**0个**，而地面站窗口正常（3884个）。
+
+### 问题排查过程
+
+#### 1. 姿态计算Bug（180°误差）
+**问题**: 姿态角计算结果异常（如118-180°），超出正常范围（±90°）
+
+**根因**: `AttitudeCalculator.java` 中使用了错误的公式：
+```java
+// 错误代码
+roll = Math.toDegrees(Math.atan2(y, -z));  // -z 导致180°误差
+pitch = Math.toDegrees(Math.atan2(x, -z));
+```
+
+**修复**: 移除负号
+```java
+// 正确代码
+roll = Math.toDegrees(Math.atan2(y, z));
+pitch = Math.toDegrees(Math.atan2(x, z));
+```
+
+#### 2. 轨道参数显示错误（单位转换错误）
+**问题**: 验证程序显示轨道倾角为4125.3°（应为55°或72°）
+
+**根因**: `OrbitVerify.java` 中对已经是度数的角度再次使用 `Math.toDegrees()` 转换：
+```java
+// 错误代码
+double i = Math.toDegrees(es.inclination);  // 72° -> 4125.3°
+```
+
+**修复**: 直接使用存储的度数
+```java
+// 正确代码
+double i = es.inclination;  // 已经是度数
+```
+
+#### 3. 姿态约束检查逻辑错误（核心问题）
+**问题**: 原实现中，只要窗口内有**任何一点**超出姿态限制，整个窗口被丢弃
+
+**错误代码**:
+```java
+// 原逻辑：全有或全无
+for (sample : samples) {
+    if (Math.abs(roll) > maxRoll || Math.abs(pitch) > maxPitch) {
+        return false;  // 整个窗口丢弃！
+    }
+}
+```
+
+**物理现实**: 卫星经过目标时，姿态角变化规律：
+- 接近目标：俯仰角最大（如60-70°）
+- 正上方：俯仰角接近0°
+- 远离目标：俯仰角反向最大
+- **滚转角在侧面观测时可能始终较大**
+
+**正确逻辑**: 提取窗口内**姿态约束满足的具体子时段**
+
+**修复代码**:
+```java
+// 新逻辑：提取可行子时段
+public static class AttitudeFeasibleInterval {
+    public final double startTime;  // 相对于窗口开始
+    public final double endTime;
+    public final List<AttitudeSample> samples;
+}
+
+private List<AttitudeFeasibleInterval> findAttitudeFeasibleIntervals(
+        List<AttitudeSample> samples,
+        double maxRoll, double maxPitch,
+        String satId, String targetId,
+        double minDuration) {
+
+    List<AttitudeFeasibleInterval> intervals = new ArrayList<>();
+    boolean inFeasibleInterval = false;
+    double intervalStart = 0;
+    List<AttitudeSample> currentSamples = new ArrayList<>();
+
+    for (AttitudeSample sample : samples) {
+        boolean feasible = Math.abs(sample.roll) <= maxRoll
+                        && Math.abs(sample.pitch) <= maxPitch;
+
+        if (feasible) {
+            if (!inFeasibleInterval) {
+                // 开始新的可行区间
+                inFeasibleInterval = true;
+                intervalStart = sample.timestamp;
+                currentSamples = new ArrayList<>();
+            }
+            currentSamples.add(sample);
+        } else {
+            if (inFeasibleInterval) {
+                // 结束当前可行区间
+                inFeasibleInterval = false;
+                double intervalEnd = sample.timestamp;
+
+                // 检查最小持续时间
+                if (intervalEnd - intervalStart >= minDuration) {
+                    intervals.add(new AttitudeFeasibleInterval(
+                        intervalStart, intervalEnd,
+                        new ArrayList<>(currentSamples)));
+                }
+                currentSamples.clear();
+            }
+        }
+    }
+    // ... 处理最后一个区间
+    return intervals;
+}
+```
+
+### 关键经验总结
+
+#### 1. 可见性窗口定义
+**正确的可见性窗口**必须同时满足：
+- 几何可见（仰角≥最小仰角）
+- **姿态可行（滚转/俯仰角在限制范围内）**
+- 持续时间≥最小观测时长
+
+#### 2. 姿态角变化规律
+卫星经过目标时：
+| 阶段 | 俯仰角 | 滚转角 | 说明 |
+|------|--------|--------|------|
+| 接近 | 大→小 | 变化 | 需要俯视 |
+| 正上方 | 接近0° | 较小 | 最佳观测点 |
+| 远离 | 小→大 | 变化 | 需要仰视 |
+| 侧面 | 中等 | 可能大 | 需要侧摆 |
+
+#### 3. 设计原则
+- **提取子时段**：一个几何窗口可能产生多个姿态可行子窗口
+- **全时段采样**：1秒步长采样确保不遗漏可行时段
+- **严格约束**：每个采样点都必须满足姿态限制
+
+### 修复结果
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| 目标窗口数 | 0 | **184,357** |
+| 平均每目标 | 0 | 184.2个 |
+| 总窗口数 | 2,843 | 188,241 |
+| 平均每卫星 | 47.4 | 3,137.4个 |
+
+### 相关文件变更
+
+**Java后端**:
+- `java/src/orekit/visibility/AttitudeCalculator.java` - 修复姿态角计算
+- `java/src/orekit/visibility/OptimizedVisibilityCalculator.java` - 实现子时段提取
+- `java/src/orekit/visibility/OrbitVerify.java` - 修复角度显示
+
+**场景生成**:
+- `scripts/generate_scenario.py` - 修正Walker星座倾角参数
+

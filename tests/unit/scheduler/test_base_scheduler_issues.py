@@ -41,7 +41,7 @@ def sample_satellite(mission_start_time):
         swath_width=10.0,
         power_capacity=2800.0,
         storage_capacity=128.0,
-        max_off_nadir=45.0,
+        max_roll_angle=45.0,
         agility={
             'max_slew_rate': 2.0,
             'settling_time': 5.0

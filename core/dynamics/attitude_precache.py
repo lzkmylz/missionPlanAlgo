@@ -128,8 +128,14 @@ class AttitudePrecacheManager:
 
                 for i, record in enumerate(records):
                     timestamps[i] = record.get('timestamp', 0)
-                    pos = record.get('position', [0, 0, 0])
-                    vel = record.get('velocity', [0, 0, 0])
+                    # 支持两种格式：position数组 或 pos_x/pos_y/pos_z单独字段
+                    if 'position' in record:
+                        pos = record.get('position', [0, 0, 0])
+                        vel = record.get('velocity', [0, 0, 0])
+                    else:
+                        # Java导出的格式：pos_x, pos_y, pos_z
+                        pos = [record.get('pos_x', 0), record.get('pos_y', 0), record.get('pos_z', 0)]
+                        vel = [record.get('vel_x', 0), record.get('vel_y', 0), record.get('vel_z', 0)]
                     positions[i] = pos
                     velocities[i] = vel
 
@@ -278,6 +284,51 @@ class AttitudePrecacheManager:
 
         return 0
 
+    def load_precomputed_attitudes_from_windows(
+        self,
+        visibility_windows: List[Any]
+    ) -> int:
+        """
+        从Java预计算的可见性窗口中加载姿态数据
+
+        Args:
+            visibility_windows: VisibilityWindow对象列表（包含attitude_samples）
+
+        Returns:
+            加载的姿态缓存数量
+        """
+        logger.info(f"Loading precomputed attitudes from {len(visibility_windows)} windows...")
+
+        count = 0
+        for window in visibility_windows:
+            sat_id = window.satellite_id
+            window_start = window.start_time
+
+            # 跳过地面站窗口
+            if window.target_id.startswith('GS:'):
+                continue
+
+            # 检查是否有预计算的姿态采样数据
+            if window.attitude_samples:
+                # 找到窗口中点附近的姿态（或取第一个有效姿态）
+                # attitude_samples: [(timestamp_offset, roll, pitch), ...]
+                mid_idx = len(window.attitude_samples) // 2
+                sample = window.attitude_samples[mid_idx]
+                roll, pitch = sample[1], sample[2]
+
+                key = (sat_id, window_start.isoformat())
+                self._attitude_cache[key] = (roll, pitch)
+                count += 1
+            elif not window.attitude_feasible:
+                # 如果Java标记为不可行，缓存一个特殊值
+                # 这样后续查询可以快速知道这个窗口不可行
+                key = (sat_id, window_start.isoformat())
+                self._attitude_cache[key] = (None, None)  # None表示不可行
+                count += 1
+
+        logger.info(f"Loaded {count} precomputed attitudes from Java")
+        return count
+
     def get_attitude(
         self,
         sat_id: str,
@@ -291,24 +342,58 @@ class AttitudePrecacheManager:
             window_start: 窗口开始时间
 
         Returns:
-            (roll, pitch) 或 None
+            (roll, pitch) 或 None (None表示窗口不可行或数据不存在)
         """
         key = (sat_id, window_start.isoformat())
 
         if key in self._attitude_cache:
             self._cache_hits += 1
-            return self._attitude_cache[key]
+            result = self._attitude_cache[key]
+            # 检查是否是特殊标记的不可行窗口
+            if result[0] is None:
+                return None
+            return result
 
         self._cache_misses += 1
         return None
+
+    def is_attitude_feasible(
+        self,
+        sat_id: str,
+        window_start: datetime
+    ) -> bool:
+        """
+        检查窗口的姿态可行性（使用Java预计算结果）
+
+        Args:
+            sat_id: 卫星ID
+            window_start: 窗口开始时间
+
+        Returns:
+            True如果姿态可行，False如果不可行或数据不存在
+        """
+        key = (sat_id, window_start.isoformat())
+
+        if key in self._attitude_cache:
+            result = self._attitude_cache[key]
+            # (None, None) 表示不可行
+            return result[0] is not None
+
+        return False
 
     def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
         total_requests = self._cache_hits + self._cache_misses
         hit_rate = self._cache_hits / total_requests if total_requests > 0 else 0
 
+        # 计算有效缓存条目数（排除标记为不可行的条目）
+        valid_entries = sum(1 for v in self._attitude_cache.values() if v[0] is not None)
+        infeasible_entries = len(self._attitude_cache) - valid_entries
+
         return {
             'cache_size': len(self._attitude_cache),
+            'valid_entries': valid_entries,
+            'infeasible_entries': infeasible_entries,
             'cache_hits': self._cache_hits,
             'cache_misses': self._cache_misses,
             'hit_rate': hit_rate,
@@ -391,8 +476,9 @@ def _batch_compute_attitudes_numba(
             rolls[i] = 0.0
             pitches[i] = 0.0
         else:
-            rolls[i] = np.degrees(np.arctan2(y_lvlh, z_lvlh))
-            pitches[i] = np.degrees(np.arctan2(x_lvlh, z_lvlh))
+            # LVLH坐标系：Z轴指向地心，需要取负号来计算相对于-Z轴的角度
+            rolls[i] = np.degrees(np.arctan2(y_lvlh, -z_lvlh))
+            pitches[i] = np.degrees(np.arctan2(x_lvlh, -z_lvlh))
 
     return rolls, pitches
 

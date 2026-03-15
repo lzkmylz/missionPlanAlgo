@@ -133,7 +133,7 @@ class PreciseSlewConstraintChecker(SlewConstraintChecker):
             max_control_torque=agility.get('max_torque', 0.5),
             max_angular_velocity=agility.get('max_slew_rate', 3.0),
             max_slew_rate=agility.get('max_slew_rate', 3.0),
-            max_slew_angle=satellite.capabilities.max_off_nadir,
+            max_slew_angle=satellite.capabilities.max_roll_angle,
             settling_time=agility.get('settling_time', 5.0)
         )
 

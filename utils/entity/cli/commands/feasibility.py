@@ -273,16 +273,16 @@ class FeasibilityChecker:
                 result["all_satisfied"] = False
 
             # Attitude constraints
-            max_off_nadir = capabilities.get("max_off_nadir", 0)
+            max_roll_angle = capabilities.get('max_roll_angle', 0)
             result["attitude"][sat_id] = {
-                "max_off_nadir": max_off_nadir,
-                "sufficient": max_off_nadir >= MIN_OFF_NADIR
+                'max_roll_angle': max_roll_angle,
+                "sufficient": max_roll_angle >= MIN_OFF_NADIR
             }
-            if max_off_nadir < MIN_OFF_NADIR:
+            if max_roll_angle < MIN_OFF_NADIR:
                 result["violations"].append({
                     "type": "attitude",
                     "satellite": sat_id,
-                    "message": f"Max off-nadir {max_off_nadir} below minimum {MIN_OFF_NADIR}"
+                    "message": f"Max roll angle {max_roll_angle} below minimum {MIN_OFF_NADIR}"
                 })
                 result["all_satisfied"] = False
 
@@ -297,8 +297,8 @@ class FeasibilityChecker:
                 can_observe = False
                 for sat in satellites:
                     capabilities = sat.get("capabilities", {}) or {}
-                    max_off_nadir = capabilities.get("max_off_nadir", 0)
-                    if max_off_nadir >= required_off_nadir:
+                    max_roll_angle = capabilities.get('max_roll_angle', 0)
+                    if max_roll_angle >= required_off_nadir:
                         can_observe = True
                         break
 

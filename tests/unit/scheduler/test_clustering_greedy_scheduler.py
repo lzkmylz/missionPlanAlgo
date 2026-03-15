@@ -71,7 +71,7 @@ def optical_satellite() -> Satellite:
     """Create an optical satellite for testing"""
     capabilities = SatelliteCapabilities(
         imaging_modes=[ImagingMode.PUSH_BROOM],
-        max_off_nadir=30.0,
+        max_roll_angle=30.0,
         storage_capacity=500.0,
         power_capacity=2000.0,
         resolution=10.0,
@@ -91,7 +91,7 @@ def sar_satellite() -> Satellite:
     """Create a SAR satellite with larger swath for testing"""
     capabilities = SatelliteCapabilities(
         imaging_modes=[ImagingMode.STRIPMAP, ImagingMode.SPOTLIGHT],
-        max_off_nadir=45.0,
+        max_roll_angle=45.0,
         storage_capacity=1000.0,
         power_capacity=3000.0,
         resolution=3.0,
@@ -581,7 +581,7 @@ class TestGreedyScheduler:
         scheduler = GreedyScheduler(base_config)
 
         # Modify optical satellite to have small max off-nadir
-        optical_satellite.capabilities.max_off_nadir = 10.0
+        optical_satellite.capabilities.max_roll_angle= 10.0
 
         mock_mission.satellites = [optical_satellite]
         mock_mission.targets = nearby_targets
@@ -631,7 +631,7 @@ class TestGreedyScheduler:
             targets=cluster.targets,
             satellite_position=sat_position,
             nadir_position=nadir_position,
-            max_off_nadir=30.0,
+            max_roll_angle=30.0,
             swath_width_km=10.0
         )
 

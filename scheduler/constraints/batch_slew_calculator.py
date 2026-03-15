@@ -37,7 +37,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BatchSlewCandidate:
-    """批量机动计算候选数据结构"""
+    """批量机动计算候选数据结构
+
+    时间定义:
+    - window_start/window_end: 可见性窗口起止时间
+    - imaging_begin: 实际成像开始时间 (用户选择的具体时刻, 默认为 window_start)
+    - prev_end_time: 前一任务结束时间 (可能是成像结束, 也可能是复位完成)
+
+    约束检查:
+    - time_interval = imaging_begin - prev_end_time
+    - 任务机动+稳定时间必须 <= time_interval
+    """
     sat_id: str
     satellite: Satellite
     target: Target
@@ -48,6 +58,12 @@ class BatchSlewCandidate:
     imaging_duration: float
     sat_position: Tuple[float, float, float]  # ECEF (m)
     sat_velocity: Tuple[float, float, float]  # ECEF (m/s)
+    imaging_begin: Optional[datetime] = None  # 实际成像开始时间 (None 时默认为 window_start)
+
+    def __post_init__(self):
+        """初始化后处理: 默认 imaging_begin = window_start"""
+        if self.imaging_begin is None:
+            self.imaging_begin = self.window_start
 
 
 @dataclass
@@ -102,6 +118,10 @@ class BatchSlewData:
 
         # 窗口约束
         self.window_durations = np.zeros(n_candidates, dtype=np.float64)
+
+        # 实际成像开始时间 [n] (Python datetime 对象列表, Numba 不直接处理)
+        # 用于计算 time_interval = imaging_begin - prev_end_time
+        self.imaging_begins: List[datetime] = [datetime.min] * n_candidates
 
         # 输出数组 (预分配)
         self.out_feasible = np.zeros(n_candidates, dtype=np.bool_)
@@ -342,8 +362,24 @@ if HAS_NUMBA:
 
         total_slew_time = total_reset_time + total_task_time
 
-        # 4. 检查窗口约束
-        feasible = total_slew_time <= window_duration
+        # 4. 检查时间约束（分项检查）
+        # time_interval = imaging_begin - prev_end_time (卫星可以完成机动的可用时间)
+        # window_duration = 可见性窗口持续时间
+        #
+        # 约束检查逻辑：
+        # 1. 任务机动+稳定时间必须在 time_interval 内完成
+        #    （确保卫星能在 imaging_begin 前到达目标姿态）
+        # 2. 成像持续时间必须 <= window_duration
+        #    （确保成像能在可见性窗口内完成）
+
+        # 检查1：任务机动+稳定时间
+        feasible = total_task_time <= time_interval
+
+        # 检查2：成像持续时间是否超过窗口
+        # 注意：这里假设调用者已经验证了 imaging_duration <= window_duration
+        # 如果成像时间超过窗口，任务不可行
+        if imaging_duration > window_duration:
+            feasible = False
 
         # 5. 估算能量消耗 (简化模型)
         # E = P * t, 假设平均功率与角速度成正比
@@ -548,8 +584,12 @@ class BatchSlewCalculator:
             # 卫星位置
             data.sat_positions[i] = list(cand.sat_position)
 
-            # 时间间隔
-            time_diff = (cand.window_start - cand.prev_end_time).total_seconds()
+            # 实际成像开始时间 (使用 candidate.imaging_begin, 默认为 window_start)
+            data.imaging_begins[i] = cand.imaging_begin
+
+            # 时间间隔 = imaging_begin - prev_end_time
+            # 这是卫星可以完成机动的可用时间
+            time_diff = (cand.imaging_begin - cand.prev_end_time).total_seconds()
             data.time_intervals[i] = time_diff
 
             # 成像持续时间
@@ -736,9 +776,29 @@ class BatchSlewCalculator:
                 momentum_margin = max(0, 100.0 - slew_angle)
                 feasible = slew_angle <= 45.0
 
-            # 检查窗口约束
+            # 检查时间约束（分项检查）
+            # time_interval = imaging_begin - prev_end_time (可用机动时间)
+            # window_duration = 可见性窗口持续时间
+            #
+            # 约束检查：
+            # 1. 任务机动+稳定时间必须在 time_interval 内完成
+            # 2. 成像持续时间必须 <= window_duration
+
+            time_interval = data.time_intervals[i]
             window_duration = data.window_durations[i]
-            feasible = feasible and (total_slew_time <= window_duration)
+            imaging_duration = data.imaging_durations[i]
+
+            # 任务机动时间（包含稳定时间）
+            task_time_with_settling = slew_time
+
+            # 检查1：任务机动+稳定时间能否在 time_interval 内完成
+            # 注意：这里假设 lookup_result.time 已经包含稳定时间
+            # 如果不包含，需要加上 settling_time
+            feasible = feasible and (task_time_with_settling <= time_interval)
+
+            # 检查2：成像持续时间是否超过窗口
+            if imaging_duration > window_duration:
+                feasible = False
 
             # 计算actual_start
             if i < len(data.candidates):
@@ -872,8 +932,20 @@ if not HAS_NUMBA:
 
         total_time = task_time + reset_time
 
-        # 4. 可行性检查
-        feasible = total_time < window_duration
+        # 4. 可行性检查（分项检查）
+        # time_interval = imaging_begin - prev_end_time (可用机动时间)
+        # window_duration = 可见性窗口持续时间
+        #
+        # 约束检查：
+        # 1. 任务机动+稳定时间必须在 time_interval 内完成
+        # 2. 成像持续时间必须 <= window_duration
+
+        # 检查1：任务机动+稳定时间
+        feasible = task_time <= time_interval
+
+        # 检查2：成像持续时间是否超过窗口
+        if imaging_duration > window_duration:
+            feasible = False
 
         # 5. 简化的能量和动量估算
         energy = total_time * 10.0  # 简化估算

@@ -4,6 +4,7 @@ import orekit.visibility.model.BatchResult;
 import orekit.visibility.model.SatelliteConfig;
 import orekit.visibility.model.TargetConfig;
 import orekit.visibility.model.VisibilityWindow;
+import orekit.visibility.AttitudeCalculator;
 
 import org.orekit.bodies.GeodeticPoint;
 import org.orekit.bodies.OneAxisEllipsoid;
@@ -17,6 +18,7 @@ import org.orekit.utils.Constants;
 import org.orekit.utils.IERSConventions;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -275,13 +277,13 @@ public class OptimizedVisibilityCalculator {
                 if (wasVisible && windowStart != null) {
                     // 窗口结束，精化边界
                     AbsoluteDate windowEnd = startTime.shiftedBy(t);
-                    VisibilityWindow window = refineWindow(
+                    List<VisibilityWindow> refinedWindows = refineWindow(
                         sat, target, windowStart, windowEnd,
                         Math.toDegrees(maxElevationInWindow), maxElevationTime,
                         targetPoint, minElevationRad, fineStep, startTime, endTime
                     );
-                    if (window != null) {
-                        windows.add(window);
+                    if (refinedWindows != null) {
+                        windows.addAll(refinedWindows);
                     }
                 } else {
                     // 窗口开始
@@ -302,13 +304,13 @@ public class OptimizedVisibilityCalculator {
 
         // 处理最后一个窗口
         if (wasVisible && windowStart != null) {
-            VisibilityWindow window = refineWindow(
+            List<VisibilityWindow> refinedWindows = refineWindow(
                 sat, target, windowStart, endTime,
                 Math.toDegrees(maxElevationInWindow), maxElevationTime,
                 targetPoint, minElevationRad, fineStep, startTime, endTime
             );
-            if (window != null) {
-                windows.add(window);
+            if (refinedWindows != null) {
+                windows.addAll(refinedWindows);
             }
         }
 
@@ -316,9 +318,10 @@ public class OptimizedVisibilityCalculator {
     }
 
     /**
-     * 精化窗口边界
+     * 精化窗口边界，并基于姿态约束提取满足条件的子窗口
+     * 返回满足姿态约束的所有子窗口列表
      */
-    private VisibilityWindow refineWindow(
+    private List<VisibilityWindow> refineWindow(
             SatelliteConfig sat,
             TargetConfig target,
             AbsoluteDate coarseStart,
@@ -389,22 +392,227 @@ public class OptimizedVisibilityCalculator {
             return null;
         }
 
-        // 计算质量分数
-        double qualityScore = Math.min(1.0, maxElevation / 90.0);
-
-        return new VisibilityWindow(
-            sat.getId(),
-            target.getId(),
-            preciseStart,
-            preciseEnd,
-            duration,
-            maxElevation,
-            maxElTime != null ? maxElTime : preciseStart.shiftedBy(duration / 2),
-            0.0,  // entryAzimuth - 简化处理
-            0.0,  // exitAzimuth - 简化处理
-            qualityScore,
-            maxElevation > 30.0 ? "HIGH" : (maxElevation > 15.0 ? "MEDIUM" : "LOW")
+        // Phase 4: 姿态计算和过滤
+        // 计算窗口内所有采样点的姿态（1秒步长）
+        List<VisibilityWindow.AttitudeSample> attitudeSamples = computeAttitudeSamples(
+            sat, target, preciseStart, preciseEnd, missionStart
         );
+
+        // 找出所有姿态约束满足的连续子时段
+        List<AttitudeFeasibleInterval> feasibleIntervals = findAttitudeFeasibleIntervals(
+            attitudeSamples, sat.getMaxRollAngle(), sat.getMaxPitchAngle(),
+            sat.getId(), target.getId(), target.getMinObservationDuration()
+        );
+
+        // 如果没有满足约束的子时段，过滤掉此窗口
+        if (feasibleIntervals.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 为每个满足约束的子时段创建一个窗口
+        List<VisibilityWindow> resultWindows = new ArrayList<>();
+
+        for (AttitudeFeasibleInterval interval : feasibleIntervals) {
+            // 计算子窗口的绝对时间
+            AbsoluteDate subStart = preciseStart.shiftedBy(interval.startTime);
+            AbsoluteDate subEnd = preciseStart.shiftedBy(interval.endTime);
+            double subDuration = interval.endTime - interval.startTime;
+
+            // 计算子窗口内的最大仰角
+            double subMaxElevation = maxElevation;
+            AbsoluteDate subMaxElTime = maxElTime;
+
+            // 重新计算子窗口中点的仰角
+            double subMidT = interval.startTime + (interval.endTime - interval.startTime) / 2.0;
+            OrbitStateCache.OrbitState subMidState = orbitCache.getStateAtTime(
+                sat.getId(), preciseStart.durationFrom(missionStart) + subMidT);
+
+            if (subMidState != null) {
+                double subMidEl = Math.toDegrees(calculateElevationFromState(subMidState, targetCart));
+                if (subMidEl > subMaxElevation) {
+                    subMaxElevation = subMidEl;
+                    subMaxElTime = preciseStart.shiftedBy(subMidT);
+                }
+            }
+
+            // 计算质量分数
+            double qualityScore = Math.min(1.0, subMaxElevation / 90.0);
+
+            // 创建子窗口
+            resultWindows.add(new VisibilityWindow(
+                sat.getId(),
+                target.getId(),
+                subStart,
+                subEnd,
+                subDuration,
+                subMaxElevation,
+                subMaxElTime != null ? subMaxElTime : subStart.shiftedBy(subDuration / 2),
+                0.0,  // entryAzimuth
+                0.0,  // exitAzimuth
+                qualityScore,
+                subMaxElevation > 30.0 ? "HIGH" : (subMaxElevation > 15.0 ? "MEDIUM" : "LOW"),
+                interval.samples,
+                true  // 姿态可行
+            ));
+        }
+
+        return resultWindows;
+    }
+
+    /**
+     * 计算窗口内所有采样点的姿态（1秒步长）
+     */
+    private List<VisibilityWindow.AttitudeSample> computeAttitudeSamples(
+            SatelliteConfig sat,
+            TargetConfig target,
+            AbsoluteDate windowStart,
+            AbsoluteDate windowEnd,
+            AbsoluteDate missionStart) {
+
+        List<VisibilityWindow.AttitudeSample> samples = new ArrayList<>();
+        double duration = windowEnd.durationFrom(windowStart);
+
+        // 1秒步长采样
+        for (double t = 0; t <= duration; t += 1.0) {
+            AbsoluteDate currentTime = windowStart.shiftedBy(t);
+            double relativeTime = currentTime.durationFrom(missionStart);
+
+            OrbitStateCache.OrbitState state = orbitCache.getStateAtTime(sat.getId(), relativeTime);
+            if (state == null) continue;
+
+            // 计算姿态
+            AttitudeCalculator.AttitudeAngles attitude = AttitudeCalculator.calculateAttitude(
+                new double[]{state.x, state.y, state.z},
+                new double[]{state.vx, state.vy, state.vz},
+                target.getLatitude(),
+                target.getLongitude(),
+                target.getAltitude()
+            );
+
+            samples.add(new VisibilityWindow.AttitudeSample(t, attitude.roll, attitude.pitch));
+        }
+
+        return samples;
+    }
+
+    private static int debugCount = 0;
+
+    /**
+     * 姿态约束时段类 - 记录满足约束的子时段
+     */
+    public static class AttitudeFeasibleInterval {
+        public final double startTime;  // 相对于窗口开始的秒数
+        public final double endTime;
+        public final List<VisibilityWindow.AttitudeSample> samples;
+
+        public AttitudeFeasibleInterval(double start, double end, List<VisibilityWindow.AttitudeSample> samples) {
+            this.startTime = start;
+            this.endTime = end;
+            this.samples = samples;
+        }
+    }
+
+    /**
+     * 从姿态采样中找出所有满足约束的连续子时段
+     * @param samples 完整的姿态采样列表
+     * @param maxRoll 最大滚转角
+     * @param maxPitch 最大俯仰角
+     * @param satId 卫星ID（用于调试）
+     * @param targetId 目标ID（用于调试）
+     * @param minDuration 最小持续时间（秒）
+     * @return 满足约束的子时段列表
+     */
+    private List<AttitudeFeasibleInterval> findAttitudeFeasibleIntervals(
+            List<VisibilityWindow.AttitudeSample> samples,
+            double maxRoll,
+            double maxPitch,
+            String satId,
+            String targetId,
+            double minDuration) {
+
+        List<AttitudeFeasibleInterval> intervals = new ArrayList<>();
+
+        if (samples.isEmpty()) {
+            return intervals;
+        }
+
+        // 找到所有满足约束的连续时段
+        boolean inFeasibleInterval = false;
+        double intervalStart = 0;
+        List<VisibilityWindow.AttitudeSample> currentSamples = new ArrayList<>();
+
+        for (VisibilityWindow.AttitudeSample sample : samples) {
+            double roll = sample.roll;
+            double pitch = sample.pitch;
+            boolean feasible = Math.abs(roll) <= maxRoll && Math.abs(pitch) <= maxPitch;
+
+            if (feasible) {
+                if (!inFeasibleInterval) {
+                    // 开始新的可行区间
+                    inFeasibleInterval = true;
+                    intervalStart = sample.timestamp;
+                    currentSamples = new ArrayList<>();
+                }
+                currentSamples.add(sample);
+            } else {
+                if (inFeasibleInterval) {
+                    // 结束当前可行区间
+                    inFeasibleInterval = false;
+                    double intervalEnd = sample.timestamp; // 使用当前时间点作为结束
+
+                    // 检查最小持续时间
+                    if (intervalEnd - intervalStart >= minDuration) {
+                        intervals.add(new AttitudeFeasibleInterval(
+                            intervalStart, intervalEnd, new ArrayList<>(currentSamples)));
+
+                        if (debugCount < 10) {
+                            System.out.println("[INTERVAL] " + satId + " -> " + targetId +
+                                ": found feasible interval " + String.format("%.0f", intervalStart) +
+                                "s to " + String.format("%.0f", intervalEnd) + "s (" +
+                                String.format("%.0f", intervalEnd - intervalStart) + "s)");
+                            debugCount++;
+                        }
+                    }
+                    currentSamples.clear();
+                }
+
+                // 打印被过滤的采样点（用于调试）
+                if (debugCount < 10) {
+                    System.out.println("[FILTERED] " + satId + " -> " + targetId +
+                        ": roll=" + String.format("%.1f", roll) + "°, pitch=" + String.format("%.1f", pitch) +
+                        "° (limit: " + maxRoll + "/" + maxPitch + ") at t=" + String.format("%.0f", sample.timestamp) + "s");
+                    debugCount++;
+                }
+            }
+        }
+
+        // 处理最后一个区间
+        if (inFeasibleInterval && !currentSamples.isEmpty()) {
+            double intervalEnd = samples.get(samples.size() - 1).timestamp;
+            if (intervalEnd - intervalStart >= minDuration) {
+                intervals.add(new AttitudeFeasibleInterval(
+                    intervalStart, intervalEnd, new ArrayList<>(currentSamples)));
+            }
+        }
+
+        return intervals;
+    }
+
+    /**
+     * 检查姿态约束（旧方法，保留用于兼容性）
+     * 如果所有采样点都满足约束，返回true
+     */
+    private boolean checkAttitudeConstraints(
+            List<VisibilityWindow.AttitudeSample> samples,
+            double maxRoll,
+            double maxPitch,
+            String satId,
+            String targetId) {
+
+        // 现在使用新方法，只要有任何可行区间就返回true
+        List<AttitudeFeasibleInterval> intervals = findAttitudeFeasibleIntervals(
+            samples, maxRoll, maxPitch, satId, targetId, 1.0);
+        return !intervals.isEmpty();
     }
 
     /**

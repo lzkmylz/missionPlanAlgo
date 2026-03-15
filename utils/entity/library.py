@@ -80,7 +80,7 @@ class EntityLibrary:
                 m.strip() for m in imaging_modes_str.split(",")
             ]
 
-            capabilities["max_off_nadir"] = click.prompt(
+            capabilities['max_roll_angle'] = click.prompt(
                 "Max off-nadir angle (degrees)",
                 type=float,
                 default=30.0
@@ -188,7 +188,7 @@ class EntityLibrary:
                 },
                 "capabilities": {
                     "imaging_modes": ["push_broom"],
-                    "max_off_nadir": 30.0,
+                    'max_roll_angle': 30.0,
                     "storage_capacity": 500,
                     "power_capacity": 2000,
                     "data_rate": 300
@@ -205,7 +205,7 @@ class EntityLibrary:
                 },
                 "capabilities": {
                     "imaging_modes": ["frame"],
-                    "max_off_nadir": 35.0,
+                    'max_roll_angle': 35.0,
                     "storage_capacity": 800,
                     "power_capacity": 2500,
                     "data_rate": 400
@@ -222,7 +222,7 @@ class EntityLibrary:
                 },
                 "capabilities": {
                     "imaging_modes": ["stripmap", "scan"],
-                    "max_off_nadir": 35.0,
+                    'max_roll_angle': 35.0,
                     "storage_capacity": 1000,
                     "power_capacity": 3000,
                     "data_rate": 300
@@ -239,7 +239,7 @@ class EntityLibrary:
                 },
                 "capabilities": {
                     "imaging_modes": ["spotlight", "sliding_spotlight", "stripmap"],
-                    "max_off_nadir": 45.0,
+                    'max_roll_angle': 45.0,
                     "storage_capacity": 1500,
                     "power_capacity": 4000,
                     "data_rate": 500

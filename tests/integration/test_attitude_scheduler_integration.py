@@ -27,7 +27,7 @@ class TestGreedySchedulerAttitudeIntegration:
         sat1 = Mock()
         sat1.id = "SAT-00"
         sat1.capabilities = Mock()
-        sat1.capabilities.max_off_nadir = 45.0
+        sat1.capabilities.max_roll_angle= 45.0
         sat1.capabilities.storage_capacity = 100.0
         sat1.capabilities.power_capacity = 1000.0
         sat1.capabilities.imaging_modes = [Mock()]
@@ -263,7 +263,7 @@ class TestAttitudeTransitionFeasibility:
         sat = Mock()
         sat.id = "SAT-00"
         sat.capabilities = Mock()
-        sat.capabilities.max_off_nadir = 45.0
+        sat.capabilities.max_roll_angle= 45.0
         sat.capabilities.storage_capacity = 100.0
         sat.capabilities.power_capacity = 1000.0
         sat.capabilities.imaging_modes = [Mock()]
@@ -317,7 +317,7 @@ class TestAttitudeTransitionFeasibility:
         sat = Mock()
         sat.id = "SAT-00"
         sat.capabilities = Mock()
-        sat.capabilities.max_off_nadir = 45.0
+        sat.capabilities.max_roll_angle= 45.0
         sat.capabilities.storage_capacity = 100.0
         sat.capabilities.power_capacity = 1000.0
         sat.capabilities.imaging_modes = [Mock()]
@@ -378,7 +378,7 @@ class TestMultipleTasksSequence:
         sat = Mock()
         sat.id = "SAT-00"
         sat.capabilities = Mock()
-        sat.capabilities.max_off_nadir = 45.0
+        sat.capabilities.max_roll_angle= 45.0
         sat.capabilities.storage_capacity = 1000.0
         sat.capabilities.power_capacity = 10000.0
         sat.capabilities.imaging_modes = [Mock()]
@@ -446,7 +446,7 @@ class TestMultipleTasksSequence:
         sat = Mock()
         sat.id = "SAT-00"
         sat.capabilities = Mock()
-        sat.capabilities.max_off_nadir = 45.0
+        sat.capabilities.max_roll_angle= 45.0
         sat.capabilities.storage_capacity = 1000.0
         sat.capabilities.power_capacity = 10000.0
         sat.capabilities.imaging_modes = [Mock()]

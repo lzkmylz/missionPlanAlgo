@@ -37,12 +37,14 @@ from scripts.utils import setup_logging, save_results
 # 配置常量
 # ============================================================================
 
+# Walker星座参数: 5轨道面, 每面6颗卫星, 72度RAAN, 120度相位间隔
 WALKER_PARAMS = {
-    'num_planes': 6,
-    'sats_per_plane': 5,
-    'altitude_m': 500000,  # 500km
-    'inclination_deg': 55.0,
-    'phase_factor': 1
+    'num_planes': 5,           # 5个轨道面
+    'sats_per_plane': 6,       # 每面6颗卫星 (30颗光学 + 30颗SAR)
+    'altitude_m': 500000,      # 500km
+    'inclination_deg': 55.0,   # 55度倾角
+    'raan_spacing': 72.0,      # RAAN间隔72度
+    'phase_spacing': 120.0     # 相位间隔120度
 }
 
 EARTH_RADIUS_M = 6371000.0
@@ -141,19 +143,26 @@ class ScenarioGenerator:
         self.epoch = epoch
         np.random.seed(seed)
 
-    def generate_walker_orbits(self, sat_type: str, phase_offset: int = 0) -> List[OrbitConfig]:
-        """生成Walker 30/6/1星座轨道"""
+    def generate_walker_orbits(self, sat_type: str, raan_offset: float = 0) -> List[OrbitConfig]:
+        """生成Walker星座轨道: 5面/6星, 72度RAAN间隔, 120度相位间隔
+
+        Args:
+            sat_type: 卫星类型 ('optical' 或 'sar')
+            raan_offset: RAAN偏移量 (光学0度, SAR 36度实现轨道面错开)
+        """
         params = WALKER_PARAMS
         semi_major_axis = EARTH_RADIUS_M + params['altitude_m']
-        raan_spacing = 360.0 / params['num_planes']
-        mean_anomaly_spacing = 360.0 / params['sats_per_plane']
-        phase_increment = 360.0 / (params['num_planes'] * params['sats_per_plane'])
 
         orbits = []
         for plane in range(params['num_planes']):
-            raan = plane * raan_spacing
+            # RAAN: 0, 72, 144, 216, 288 (光学) 或偏移后 (SAR)
+            raan = plane * params['raan_spacing'] + raan_offset
+
             for sat in range(params['sats_per_plane']):
-                mean_anomaly = (sat * mean_anomaly_spacing + plane * phase_increment + phase_offset) % 360.0
+                # 平面内卫星间隔60度 (360/6)
+                # 相邻平面相位差120度
+                mean_anomaly = (sat * 60.0 + plane * params['phase_spacing']) % 360.0
+
                 orbit = OrbitConfig(
                     semi_major_axis=semi_major_axis,
                     eccentricity=0.0,
@@ -170,8 +179,8 @@ class ScenarioGenerator:
         """生成60颗卫星配置（30光学 + 30SAR）"""
         satellites = []
 
-        # 生成30颗光学卫星
-        optical_orbits = self.generate_walker_orbits('optical', phase_offset=0)
+        # 生成30颗光学卫星 (RAAN 0, 72, 144, 216, 288)
+        optical_orbits = self.generate_walker_orbits('optical', raan_offset=0.0)
         for i, orbit in enumerate(optical_orbits):
             sat_id = f"OPT-{i+1:02d}"
             satellite = SatelliteConfig(
@@ -191,7 +200,8 @@ class ScenarioGenerator:
                 },
                 capabilities={
                     'imaging_modes': ['push_broom'],
-                    'max_off_nadir': 30.0,
+                    'max_roll_angle': 60.0,
+                    'max_pitch_angle': 60.0,
                     'storage_capacity': 128.0,
                     'power_capacity': 2800.0,
                     'data_rate': 300.0,
@@ -207,8 +217,8 @@ class ScenarioGenerator:
             )
             satellites.append(satellite)
 
-        # 生成30颗SAR卫星
-        sar_orbits = self.generate_walker_orbits('sar', phase_offset=36)
+        # 生成30颗SAR卫星 (轨道面错开36度, 在光学轨道面中间)
+        sar_orbits = self.generate_walker_orbits('sar', raan_offset=36.0)
         for i, orbit in enumerate(sar_orbits):
             sat_id = f"SAR-{i+1:02d}"
             satellite = SatelliteConfig(
@@ -228,7 +238,8 @@ class ScenarioGenerator:
                 },
                 capabilities={
                     'imaging_modes': ['stripmap', 'spotlight', 'sliding_spotlight'],
-                    'max_off_nadir': 45.0,
+                    'max_roll_angle': 60.0,
+                    'max_pitch_angle': 60.0,
                     'storage_capacity': 128.0,
                     'power_capacity': 2800.0,
                     'data_rate': 500.0,

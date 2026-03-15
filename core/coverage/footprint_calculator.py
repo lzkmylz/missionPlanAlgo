@@ -81,20 +81,23 @@ class FootprintCalculator:
             length_km=length_km
         )
 
-    def calculate_off_nadir_angle(
+    def calculate_required_roll_angle(
         self,
         satellite_position: Tuple[float, float, float],
         target_position: Tuple[float, float]  # (lon, lat)
     ) -> float:
         """
-        计算观测目标所需的侧摆角
+        计算观测目标所需的滚转角（原侧摆角）
+
+        滚转角是绕X轴旋转的角度，控制卫星的侧摆（左右）。
+        与俯仰角（绕Y轴）不同，滚转角是主要的观测姿态控制。
 
         Args:
             satellite_position: 卫星ECEF坐标（米）
             target_position: 目标经纬度（度）
 
         Returns:
-            float: 所需侧摆角（度）
+            float: 所需滚转角（度）
         """
         if satellite_position is None:
             raise ValueError("Satellite position cannot be None")
@@ -121,10 +124,10 @@ class FootprintCalculator:
             satellite_position, target_ecef
         )
 
-        # 计算侧摆角: atan2(地面距离, 高度)
-        off_nadir = math.degrees(math.atan2(ground_distance, altitude))
+        # 计算滚转角: atan2(地面距离, 高度)
+        roll_angle = math.degrees(math.atan2(ground_distance, altitude))
 
-        return off_nadir
+        return roll_angle
 
     def is_target_in_footprint(
         self,
@@ -158,7 +161,7 @@ class FootprintCalculator:
         targets: List[Target],
         satellite_position: Tuple[float, float, float],
         nadir_position: Tuple[float, float],
-        max_off_nadir: float,
+        max_roll_angle: float,
         swath_width_km: float
     ) -> Tuple[bool, float]:
         """
@@ -168,41 +171,41 @@ class FootprintCalculator:
             targets: 目标列表
             satellite_position: 卫星ECEF坐标（米）
             nadir_position: 星下点经纬度（度）
-            max_off_nadir: 最大允许侧摆角（度）
+            max_roll_angle: 最大允许滚转角（度）
             swath_width_km: 幅宽（公里）
 
         Returns:
-            Tuple[bool, float]: (是否可覆盖, 所需侧摆角)
+            Tuple[bool, float]: (是否可覆盖, 所需滚转角)
         """
         if not targets:
             return True, 0.0
 
         if len(targets) == 1:
-            return self._check_single_target(targets[0], satellite_position, max_off_nadir)
+            return self._check_single_target(targets[0], satellite_position, max_roll_angle)
 
         return self._check_multiple_targets(
-            targets, satellite_position, max_off_nadir, swath_width_km
+            targets, satellite_position, max_roll_angle, swath_width_km
         )
 
     def _check_single_target(
         self,
         target: Target,
         satellite_position: Tuple[float, float, float],
-        max_off_nadir: float
+        max_roll_angle: float
     ) -> Tuple[bool, float]:
         """Check if a single target is within coverage."""
-        angle = self.calculate_off_nadir_angle(
+        angle = self.calculate_required_roll_angle(
             satellite_position,
             target.get_center()
         )
-        can_cover = abs(angle) <= max_off_nadir
+        can_cover = abs(angle) <= max_roll_angle
         return can_cover, angle
 
     def _check_multiple_targets(
         self,
         targets: List[Target],
         satellite_position: Tuple[float, float, float],
-        max_off_nadir: float,
+        max_roll_angle: float,
         swath_width_km: float
     ) -> Tuple[bool, float]:
         """Check if multiple targets can be covered together."""
@@ -212,12 +215,12 @@ class FootprintCalculator:
         if not self._are_targets_within_swath(target_centers, center_lon, center_lat, swath_width_km):
             return False, 0.0
 
-        required_angle = self.calculate_off_nadir_angle(
+        required_angle = self.calculate_required_roll_angle(
             satellite_position,
             (center_lon, center_lat)
         )
 
-        if abs(required_angle) > max_off_nadir:
+        if abs(required_angle) > max_roll_angle:
             return False, required_angle
 
         if not self._all_targets_in_swath(target_centers, center_lon, center_lat, swath_width_km):

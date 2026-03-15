@@ -38,7 +38,7 @@ class TestBatchSlewWithClustering:
             capabilities=SatelliteCapabilities(
                 imaging_modes=[ImagingMode.PUSH_BROOM],
                 resolution=0.5,
-                max_off_nadir=45.0,
+                max_roll_angle=45.0,
                 agility={
                     'max_slew_rate': 2.0,
                     'settling_time': 5.0,
@@ -205,7 +205,7 @@ class TestBatchSlewWithClustering:
             capabilities=SatelliteCapabilities(
                 imaging_modes=[ImagingMode.PUSH_BROOM],
                 resolution=0.5,
-                max_off_nadir=30.0,
+                max_roll_angle=30.0,
                 agility={
                     'max_slew_rate': 1.0,
                     'settling_time': 10.0,
@@ -223,7 +223,7 @@ class TestBatchSlewWithClustering:
             capabilities=SatelliteCapabilities(
                 imaging_modes=[ImagingMode.PUSH_BROOM],
                 resolution=0.5,
-                max_off_nadir=60.0,
+                max_roll_angle=60.0,
                 agility={
                     'max_slew_rate': 5.0,
                     'settling_time': 3.0,
@@ -316,7 +316,7 @@ class TestBatchSlewWithScheduling:
             capabilities=SatelliteCapabilities(
                 imaging_modes=[ImagingMode.PUSH_BROOM],
                 resolution=0.5,
-                max_off_nadir=45.0,
+                max_roll_angle=45.0,
                 agility={
                     'max_slew_rate': 2.0,
                     'settling_time': 5.0,

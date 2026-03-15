@@ -18,7 +18,7 @@ def create_mock_satellite(sat_id="SAT-01"):
     sat.id = sat_id
     sat.capabilities = Mock()
     sat.capabilities.storage_capacity = 100
-    sat.capabilities.max_off_nadir = 45.0
+    sat.capabilities.max_roll_angle= 45.0
     sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
     return sat
 
@@ -159,7 +159,7 @@ class TestTabuSchedulerWithCache:
             sat.id = f"SAT-{i:02d}"
             sat.capabilities = Mock()
             sat.capabilities.storage_capacity = 100
-            sat.capabilities.max_off_nadir = 45.0
+            sat.capabilities.max_roll_angle= 45.0
             sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
             satellites.append(sat)
 
@@ -367,7 +367,7 @@ class TestTabuSchedulerEdgeCases:
         mock_sat.id = "SAT-01"
         mock_sat.capabilities = Mock()
         mock_sat.capabilities.storage_capacity = 100
-        mock_sat.capabilities.max_off_nadir = 45.0
+        mock_sat.capabilities.max_roll_angle= 45.0
         mock_sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
         mock_mission.satellites = [mock_sat]
         mock_mission.start_time = datetime(2024, 1, 1)

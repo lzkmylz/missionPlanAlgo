@@ -97,7 +97,7 @@ class TestSatelliteFromDictExtended:
             },
             "capabilities": {
                 "imaging_modes": ["push_broom"],
-                "max_off_nadir": 30.0,
+                'max_roll_angle': 30.0,
                 "storage_capacity": 500.0,
                 "power_capacity": 2000.0,
                 "data_rate": 300.0,
@@ -184,7 +184,7 @@ class TestSatelliteFromDictExtended:
                         "max_imaging_duration": 2
                     }
                 ],
-                "max_off_nadir": 35.0,
+                'max_roll_angle': 35.0,
                 "storage_capacity": 1000.0,
                 "power_capacity": 3000.0,
                 "data_rate": 300.0,
@@ -238,7 +238,7 @@ class TestSatelliteFromDictExtended:
             },
             "capabilities": {
                 "imaging_modes": ["push_broom"],
-                "max_off_nadir": 30.0,
+                'max_roll_angle': 30.0,
                 "storage_capacity": 500.0,
                 "power_capacity": 2000.0,
                 "data_rate": 300.0
@@ -250,7 +250,7 @@ class TestSatelliteFromDictExtended:
 
         # 验证基本功能正常
         assert satellite.id == "sat_old"
-        assert satellite.capabilities.max_off_nadir == 30.0
+        assert satellite.capabilities.max_roll_angle== 30.0
 
         # 验证imager默认为空字典
         assert satellite.capabilities.imager == {}
@@ -344,7 +344,7 @@ class TestSatelliteToDictExtended:
             ),
             capabilities=SatelliteCapabilities(
                 imaging_modes=[ImagingMode.SPOTLIGHT, ImagingMode.STRIPMAP],
-                max_off_nadir=45.0,
+                max_roll_angle=45.0,
                 storage_capacity=1500.0,
                 power_capacity=4000.0,
                 data_rate=500.0,
@@ -387,7 +387,7 @@ class TestSatelliteToDictExtended:
         assert restored.orbit.inclination == original.orbit.inclination
 
         # 验证基本能力
-        assert restored.capabilities.max_off_nadir == original.capabilities.max_off_nadir
+        assert restored.capabilities.max_roll_angle== original.capabilities.max_roll_angle
         assert restored.capabilities.storage_capacity == original.capabilities.storage_capacity
 
         # 验证imager完全保留
@@ -547,7 +547,7 @@ class TestSatelliteInitialization:
             sat_type=SatelliteType.OPTICAL_1
         )
         assert ImagingMode.PUSH_BROOM in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_off_nadir == 30.0
+        assert satellite.capabilities.max_roll_angle== 30.0
         assert satellite.capabilities.resolution == 10.0
         assert satellite.capabilities.storage_capacity == 500.0
         assert satellite.capabilities.power_capacity == 2000.0
@@ -562,7 +562,7 @@ class TestSatelliteInitialization:
         )
         assert ImagingMode.PUSH_BROOM in satellite.capabilities.imaging_modes
         assert ImagingMode.FRAME in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_off_nadir == 45.0
+        assert satellite.capabilities.max_roll_angle== 45.0
         assert satellite.capabilities.resolution == 5.0
         assert satellite.capabilities.storage_capacity == 800.0
         assert satellite.capabilities.power_capacity == 2500.0
@@ -577,7 +577,7 @@ class TestSatelliteInitialization:
         assert ImagingMode.SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.SLIDING_SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.STRIPMAP in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_off_nadir == 35.0
+        assert satellite.capabilities.max_roll_angle== 35.0
         assert satellite.capabilities.resolution == 3.0
         assert satellite.capabilities.storage_capacity == 1000.0
         assert satellite.capabilities.power_capacity == 3000.0
@@ -592,7 +592,7 @@ class TestSatelliteInitialization:
         assert ImagingMode.SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.SLIDING_SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.STRIPMAP in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_off_nadir == 50.0
+        assert satellite.capabilities.max_roll_angle== 50.0
         assert satellite.capabilities.resolution == 1.0
         assert satellite.capabilities.storage_capacity == 1500.0
         assert satellite.capabilities.power_capacity == 4000.0
@@ -605,13 +605,13 @@ class TestSatelliteInitialization:
             sat_type=SatelliteType.OPTICAL_1,
             capabilities=SatelliteCapabilities(
                 imaging_modes=[ImagingMode.FRAME],  # 自定义模式
-                max_off_nadir=60.0,  # 自定义侧摆角
+                max_roll_angle=60.0,  # 自定义侧摆角
                 resolution=0.5  # 自定义分辨率
             )
         )
         # 验证自定义值被保留
         assert satellite.capabilities.imaging_modes == [ImagingMode.FRAME]
-        assert satellite.capabilities.max_off_nadir == 60.0
+        assert satellite.capabilities.max_roll_angle== 60.0
         assert satellite.capabilities.resolution == 0.5
 
 

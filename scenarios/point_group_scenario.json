@@ -35,7 +35,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -79,7 +78,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-01-01",
       "_template_source": "optical_1",
@@ -120,7 +121,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -164,7 +164,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-01-02",
       "_template_source": "optical_1",
@@ -205,7 +207,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -249,7 +250,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-01-03",
       "_template_source": "optical_1",
@@ -290,7 +293,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -334,7 +336,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-02-01",
       "_template_source": "optical_1",
@@ -375,7 +379,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -419,7 +422,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-02-02",
       "_template_source": "optical_1",
@@ -460,7 +465,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -504,7 +508,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-02-03",
       "_template_source": "optical_1",
@@ -545,7 +551,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -589,7 +594,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-03-01",
       "_template_source": "optical_1",
@@ -630,7 +637,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -674,7 +680,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-03-02",
       "_template_source": "optical_1",
@@ -715,7 +723,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -759,7 +766,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-03-03",
       "_template_source": "optical_1",
@@ -800,7 +809,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -844,7 +852,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-04-01",
       "_template_source": "optical_1",
@@ -885,7 +895,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -929,7 +938,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-04-02",
       "_template_source": "optical_1",
@@ -970,7 +981,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -1014,7 +1024,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-04-03",
       "_template_source": "optical_1",
@@ -1055,7 +1067,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -1099,7 +1110,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-05-01",
       "_template_source": "optical_1",
@@ -1140,7 +1153,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -1184,7 +1196,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-05-02",
       "_template_source": "optical_1",
@@ -1225,7 +1239,6 @@
       },
       "capabilities": {
         "_comment": "卫星载荷能力配置",
-        "max_off_nadir": 35.0,
         "max_off_nadir_comment": "最大侧摆角度 35度 - 卫星可偏离星下点的最大角度",
         "storage_capacity": 1000,
         "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
@@ -1269,7 +1282,9 @@
             "typical_velocity": 7000,
             "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
           }
-        ]
+        ],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0
       },
       "id": "WALKER-05-03",
       "_template_source": "optical_1",

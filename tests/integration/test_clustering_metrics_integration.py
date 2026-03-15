@@ -26,7 +26,7 @@ def optical_satellite() -> Satellite:
     """Create an optical satellite for testing"""
     capabilities = SatelliteCapabilities(
         imaging_modes=[ImagingMode.PUSH_BROOM],
-        max_off_nadir=30.0,
+        max_roll_angle=30.0,
         storage_capacity=500.0,
         power_capacity=2000.0,
         resolution=10.0,

@@ -320,17 +320,20 @@ class BatchAttitudeCalculator:
 def _batch_filter_by_attitude_numba(
     rolls: np.ndarray,          # [n] roll angles in degrees
     pitches: np.ndarray,        # [n] pitch angles in degrees
-    max_off_nadir: np.ndarray    # [n] max off-nadir angles in degrees
+    max_roll_angles: np.ndarray,    # [n] max roll angles in degrees
+    max_pitch_angles: np.ndarray    # [n] max pitch angles in degrees
 ) -> np.ndarray:
     """
     批量姿态过滤 - Numba并行版本
 
-    根据总姿态角（roll和pitch的向量和）是否超过最大离轴角进行过滤。
+    分别检查滚转角和俯仰角是否超过各自的限制。
+    这是正确的姿态约束检查方式（替代原来的合成角度检查）。
 
     Args:
         rolls: 滚转角数组（度）
         pitches: 俯仰角数组（度）
-        max_off_nadir: 最大离轴角数组（度），允许20%容差
+        max_roll_angles: 最大滚转角数组（度）
+        max_pitch_angles: 最大俯仰角数组（度）
 
     Returns:
         feasible_mask: 可行标记数组 [n]
@@ -339,10 +342,10 @@ def _batch_filter_by_attitude_numba(
     feasible_mask = np.ones(n, dtype=np.bool_)
 
     for i in prange(n):
-        # 计算总姿态角（向量和）
-        total_angle = np.sqrt(rolls[i]**2 + pitches[i]**2)
-        # 允许20%容差
-        if total_angle > max_off_nadir[i] * 1.2:
+        # 分别检查滚转角和俯仰角（严格检查，不允许超出名义约束）
+        if abs(rolls[i]) > max_roll_angles[i]:
+            feasible_mask[i] = False
+        elif abs(pitches[i]) > max_pitch_angles[i]:
             feasible_mask[i] = False
 
     return feasible_mask
@@ -354,20 +357,26 @@ class BatchAttitudeFilterResult:
     feasible_mask: np.ndarray  # 可行标记
     filtered_indices: List[int]  # 通过过滤的索引
     filtered_count: int  # 通过过滤的数量
+    roll_violations: List[int]  # 滚转角超限的索引
+    pitch_violations: List[int]  # 俯仰角超限的索引
 
 
 def batch_filter_by_attitude(
     rolls: List[float],
     pitches: List[float],
-    max_off_nadirs: List[float]
+    max_roll_angles: List[float],
+    max_pitch_angles: List[float]
 ) -> BatchAttitudeFilterResult:
     """
     批量姿态过滤 - 根据姿态角筛选候选
 
+    分别检查滚转角和俯仰角是否超过各自的限制。
+
     Args:
         rolls: 滚转角列表（度）
         pitches: 俯仰角列表（度）
-        max_off_nadirs: 最大离轴角列表（度）
+        max_roll_angles: 最大滚转角列表（度）
+        max_pitch_angles: 最大俯仰角列表（度）
 
     Returns:
         BatchAttitudeFilterResult: 过滤结果
@@ -376,34 +385,42 @@ def batch_filter_by_attitude(
         return BatchAttitudeFilterResult(
             feasible_mask=np.array([], dtype=np.bool_),
             filtered_indices=[],
-            filtered_count=0
+            filtered_count=0,
+            roll_violations=[],
+            pitch_violations=[]
         )
 
     # 转换为numpy数组
     rolls_arr = np.array(rolls, dtype=np.float64)
     pitches_arr = np.array(pitches, dtype=np.float64)
-    max_off_nadir_arr = np.array(max_off_nadirs, dtype=np.float64)
+    max_roll_arr = np.array(max_roll_angles, dtype=np.float64)
+    max_pitch_arr = np.array(max_pitch_angles, dtype=np.float64)
 
     # Numba批量过滤
     if HAS_NUMBA:
         feasible_mask = _batch_filter_by_attitude_numba(
-            rolls_arr, pitches_arr, max_off_nadir_arr
+            rolls_arr, pitches_arr, max_roll_arr, max_pitch_arr
         )
     else:
         # Python回退
         feasible_mask = np.ones(len(rolls), dtype=np.bool_)
         for i in range(len(rolls)):
-            total_angle = (rolls[i]**2 + pitches[i]**2)**0.5
-            if total_angle > max_off_nadirs[i] * 1.2:
+            if abs(rolls[i]) > max_roll_angles[i]:
+                feasible_mask[i] = False
+            elif abs(pitches[i]) > max_pitch_angles[i]:
                 feasible_mask[i] = False
 
     # 获取通过的索引
     filtered_indices = np.where(feasible_mask)[0].tolist()
+    roll_violations = [i for i in range(len(rolls)) if abs(rolls[i]) > max_roll_angles[i]]
+    pitch_violations = [i for i in range(len(pitches)) if abs(pitches[i]) > max_pitch_angles[i]]
 
     return BatchAttitudeFilterResult(
         feasible_mask=feasible_mask,
         filtered_indices=filtered_indices,
-        filtered_count=len(filtered_indices)
+        filtered_count=len(filtered_indices),
+        roll_violations=roll_violations,
+        pitch_violations=pitch_violations
     )
 
 

@@ -59,7 +59,7 @@ def sample_satellite_high_agility(mission_start_time):
         swath_width=10.0,
         power_capacity=2800.0,
         storage_capacity=128.0,
-        max_off_nadir=45.0,
+        max_roll_angle=45.0,
         agility={
             'max_slew_rate': 5.0,  # 5 degrees/sec - fast
             'settling_time': 3.0    # 3 seconds
@@ -83,7 +83,7 @@ def sample_satellite_low_agility(mission_start_time):
         swath_width=10.0,
         power_capacity=2800.0,
         storage_capacity=128.0,
-        max_off_nadir=30.0,
+        max_roll_angle=30.0,
         agility={
             'max_slew_rate': 1.0,  # 1 degree/sec - slow
             'settling_time': 10.0   # 10 seconds
@@ -107,7 +107,7 @@ def sample_satellite_default_agility(mission_start_time):
         swath_width=10.0,
         power_capacity=2800.0,
         storage_capacity=128.0,
-        max_off_nadir=45.0,
+        max_roll_angle=45.0,
         agility={
             'max_slew_rate': 2.0,  # 2 degrees/sec - default
             'settling_time': 5.0    # 5 seconds - default
@@ -606,7 +606,7 @@ class TestSlewTimeEdgeCases:
             swath_width=10.0,
             power_capacity=2800.0,
             storage_capacity=128.0,
-            max_off_nadir=45.0
+            max_roll_angle=45.0
             # No agility parameter
         )
         sat_no_agility = Satellite(

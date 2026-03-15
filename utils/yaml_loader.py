@@ -246,7 +246,7 @@ class YamlLoader:
             capabilities = sat_config.get('capabilities', {})
             caps = SatelliteCapabilities(
                 imaging_modes=capabilities.get('imaging_modes', ['push_broom']),
-                max_off_nadir=capabilities.get('max_off_nadir', 30.0),
+                max_roll_angle=capabilities.get('max_roll_angle', 30.0),
                 storage_capacity=capabilities.get('storage_capacity', 500.0),
                 power_capacity=capabilities.get('power_capacity', 2000.0)
             )

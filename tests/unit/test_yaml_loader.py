@@ -37,7 +37,7 @@ scenario:
         inclination: 97.4
       capabilities:
         imaging_modes: ["push_broom"]
-        max_off_nadir: 30.0
+        max_roll_angle: 30.0
         storage_capacity: 500
         power_capacity: 2000
 

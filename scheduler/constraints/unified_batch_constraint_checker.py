@@ -46,6 +46,7 @@ class UnifiedBatchCandidate:
     window_end: datetime
     prev_end_time: datetime
     imaging_duration: float = 10.0
+    imaging_begin: Optional[datetime] = None  # 实际成像开始时间
 
     # 机动信息
     prev_target: Optional[Target] = None
@@ -55,6 +56,11 @@ class UnifiedBatchCandidate:
     # 资源信息
     power_needed: float = 0.0
     storage_produced: float = 0.0
+
+    def __post_init__(self):
+        """初始化后处理：默认 imaging_begin = window_start"""
+        if self.imaging_begin is None:
+            self.imaging_begin = self.window_start
 
 
 @dataclass
@@ -375,7 +381,8 @@ class UnifiedBatchConstraintChecker:
                 prev_target=c.prev_target,
                 imaging_duration=c.imaging_duration,
                 sat_position=c.sat_position,
-                sat_velocity=c.sat_velocity
+                sat_velocity=c.sat_velocity,
+                imaging_begin=c.imaging_begin
             )
             for c in candidates
         ]

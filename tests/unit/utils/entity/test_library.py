@@ -210,7 +210,7 @@ class TestEntityLibraryInteractiveWizard:
             "Custom Satellite",
             "optical_1",
             "push_broom,frame",  # imaging_modes
-            "30.0",              # max_off_nadir
+            "30.0",              # max_roll_angle
             "500",               # storage_capacity
             "2000",              # power_capacity
             "300",               # data_rate

@@ -13,8 +13,10 @@
   },
   "capabilities": {
     "_comment": "SAR载荷能力配置 - 支持多种成像模式",
-    "max_off_nadir": 35.0,
-    "max_off_nadir_comment": "最大侧摆角度 35度 - SAR通常有更大的观测范围",
+    "max_roll_angle": 45.0,
+    "max_roll_angle_comment": "最大滚转角 ±45度 - 绕X轴侧摆（原侧摆角）",
+    "max_pitch_angle": 30.0,
+    "max_pitch_angle_comment": "最大俯仰角 ±30度 - 绕Y轴前后斜视",
     "storage_capacity": 1000,
     "storage_capacity_comment": "存储容量 1000GB = 1TB - SAR数据量更大，需要更多存储",
     "power_capacity": 3000,

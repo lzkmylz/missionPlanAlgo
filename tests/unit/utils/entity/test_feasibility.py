@@ -209,7 +209,7 @@ class TestResourceConstraintCheck:
                 {
                     "id": "S1",
                     "capabilities": {
-                        "max_off_nadir": 30.0
+                        'max_roll_angle': 30.0
                     }
                 }
             ]
@@ -218,7 +218,7 @@ class TestResourceConstraintCheck:
         result = checker.check_resource_constraints()
 
         assert "attitude" in result
-        assert result["attitude"]["S1"]["max_off_nadir"] == 30.0
+        assert result["attitude"]["S1"]['max_roll_angle'] == 30.0
 
     def test_resource_constraints_all_satisfied(self):
         """Test when all resource constraints are satisfied."""
@@ -231,7 +231,7 @@ class TestResourceConstraintCheck:
                     "capabilities": {
                         "power_capacity": 2000,
                         "storage_capacity": 500,
-                        "max_off_nadir": 30.0
+                        'max_roll_angle': 30.0
                     }
                 }
             ],
@@ -256,7 +256,7 @@ class TestResourceConstraintCheck:
                     "capabilities": {
                         "power_capacity": 100,  # Very low
                         "storage_capacity": 10,  # Very low
-                        "max_off_nadir": 5.0  # Very restrictive
+                        'max_roll_angle': 5.0  # Very restrictive
                     }
                 }
             ],
@@ -369,7 +369,7 @@ class TestCLICommand:
                 "capabilities": {
                     "power_capacity": 2000,
                     "storage_capacity": 500,
-                    "max_off_nadir": 30.0
+                    'max_roll_angle': 30.0
                 },
                 "orbit": {
                     "altitude": 500000,
@@ -489,7 +489,7 @@ class TestIntegration:
                     "capabilities": {
                         "power_capacity": 2000,
                         "storage_capacity": 500,
-                        "max_off_nadir": 30.0,
+                        'max_roll_angle': 30.0,
                         "data_rate": 300
                     },
                     "orbit": {
@@ -573,7 +573,7 @@ class TestVerboseOutput:
                 "capabilities": {
                     "power_capacity": 2000,
                     "storage_capacity": 500,
-                    "max_off_nadir": 30.0
+                    'max_roll_angle': 30.0
                 },
                 "orbit": {"altitude": 500000, "inclination": 97.5}
             }],
@@ -667,7 +667,7 @@ class TestRecommendations:
                 "capabilities": {
                     "power_capacity": 100,  # Below minimum
                     "storage_capacity": 50,  # Below minimum
-                    "max_off_nadir": 5.0  # Below minimum
+                    'max_roll_angle': 5.0  # Below minimum
                 },
                 "orbit": {"altitude": 500000, "inclination": 97.5}
             }],
@@ -697,7 +697,7 @@ class TestNonSSOOrbit:
                 "capabilities": {
                     "power_capacity": 2000,
                     "storage_capacity": 500,
-                    "max_off_nadir": 30.0
+                    'max_roll_angle': 30.0
                 },
                 "orbit": {"altitude": 500000, "inclination": 45.0}  # Low inclination
             }],
@@ -724,7 +724,7 @@ class TestResolutionConstraint:
                 "capabilities": {
                     "power_capacity": 2000,
                     "storage_capacity": 500,
-                    "max_off_nadir": 10.0  # Limited off-nadir
+                    'max_roll_angle': 10.0  # Limited off-nadir
                 }
             }],
             "targets": [{

@@ -392,11 +392,15 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
             if attitude:
                 roll, pitch = attitude
-                total_angle = (roll ** 2 + pitch ** 2) ** 0.5
-                if total_angle > sat.capabilities.max_off_nadir * 1.2:
+                # 分别检查滚转角和俯仰角（替代原来的合成角度检查）
+                if abs(roll) > sat.capabilities.max_roll_angle * 1.1:
                     continue
-
-            filtered.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+                if abs(pitch) > sat.capabilities.max_pitch_angle * 1.1:
+                    continue
+                filtered.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
+            else:
+                # 如果无法获取姿态角，跳过此候选（保守策略）
+                continue
 
         return filtered
 
@@ -430,6 +434,12 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                 last_task_end = usage.get('last_task_end', self.mission.start_time)
                 sat_position, sat_velocity = self._get_satellite_position(sat, last_task_end)
 
+                # 简化处理：使用窗口开始作为 imaging_begin
+                # HeuristicScheduler 可以覆盖 _select_imaging_begin 实现自定义策略
+                imaging_begin = self._select_imaging_begin(
+                    sat, task, window_start, window_end, last_task_end, imaging_duration
+                )
+
                 candidate = BatchSlewCandidate(
                     sat_id=sat.id,
                     satellite=sat,
@@ -440,7 +450,8 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                     prev_target=self._get_previous_task_target(sat.id),
                     imaging_duration=imaging_duration,
                     sat_position=sat_position,
-                    sat_velocity=sat_velocity
+                    sat_velocity=sat_velocity,
+                    imaging_begin=imaging_begin
                 )
                 batch_candidates.append(candidate)
 
@@ -548,6 +559,35 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
         return None
 
+    def _select_imaging_begin(
+        self,
+        satellite: Any,
+        target: Any,
+        window_start: datetime,
+        window_end: datetime,
+        prev_end_time: datetime,
+        imaging_duration: float
+    ) -> datetime:
+        """
+        选择成像开始时间 (imaging_begin)
+
+        HeuristicScheduler 的默认策略：使用 window_start
+        子类可以覆盖此方法实现自定义策略（如离散采样）
+
+        Args:
+            satellite: 卫星对象
+            target: 目标对象
+            window_start: 可见性窗口开始
+            window_end: 可见性窗口结束
+            prev_end_time: 前一任务结束时间
+            imaging_duration: 成像持续时间
+
+        Returns:
+            选择的 imaging_begin
+        """
+        # 默认策略：在窗口开始时成像
+        return window_start
+
     def _select_best_assignment(
         self,
         candidates: List[Tuple],
@@ -590,10 +630,12 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
     # ========== 辅助方法 ==========
 
     def _get_feasible_windows(self, sat: Any, task: Any) -> List[Any]:
-        """获取可行的时间窗口"""
+        """获取可行的时间窗口（过滤掉Java标记为姿态不可行的窗口）"""
         if self.window_cache:
             target_id = task.target_id if isinstance(task, ObservationTask) else task.id
-            return self.window_cache.get_windows(sat.id, target_id)
+            windows = self.window_cache.get_windows(sat.id, target_id)
+            # Filter out windows that Java marked as attitude infeasible
+            return [w for w in windows if getattr(w, 'attitude_feasible', True)]
         return []
 
     def _extract_window_times(self, window: Any) -> Tuple[Optional[datetime], Optional[datetime]]:
@@ -610,13 +652,9 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
         required_resolution = getattr(task, 'resolution_required', None)
         if required_resolution is not None:
-            sat_resolution = getattr(sat.capabilities, 'resolution', None)
-            try:
-                if sat_resolution is not None and required_resolution is not None:
-                    if sat_resolution > required_resolution:
-                        return False
-            except TypeError:
-                pass
+            # Use the correct method: check all imaging mode resolutions
+            if not sat.capabilities.can_satisfy_resolution(required_resolution):
+                return False
 
         return True
 

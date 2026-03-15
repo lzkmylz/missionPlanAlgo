@@ -29,7 +29,12 @@ from core.constants import (
     DEFAULT_DATA_RATE_MBPS,
     DEFAULT_RESOLUTION_M,
     DEFAULT_SWATH_WIDTH_M,
-    DEFAULT_MAX_OFF_NADIR_DEG,
+    DEFAULT_MAX_ROLL_ANGLE_DEG,
+    DEFAULT_MAX_PITCH_ANGLE_DEG,
+    OPTICAL_MAX_ROLL_ANGLE_DEG,
+    OPTICAL_MAX_PITCH_ANGLE_DEG,
+    SAR_MAX_ROLL_ANGLE_DEG,
+    SAR_MAX_PITCH_ANGLE_DEG,
     OPTICAL_1_POWER_CAPACITY_WH,
     OPTICAL_1_STORAGE_CAPACITY_GB,
     OPTICAL_2_POWER_CAPACITY_WH,
@@ -260,7 +265,8 @@ class SatelliteCapabilities:
     """卫星能力配置"""
     # 成像能力
     imaging_modes: List[ImagingMode] = field(default_factory=list)
-    max_off_nadir: float = DEFAULT_MAX_OFF_NADIR_DEG  # 最大侧摆角（度）
+    max_roll_angle: float = DEFAULT_MAX_ROLL_ANGLE_DEG  # 最大滚转角（度）- 绕X轴侧摆
+    max_pitch_angle: float = DEFAULT_MAX_PITCH_ANGLE_DEG  # 最大俯仰角（度）- 绕Y轴前后斜视
     agility: Dict[str, float] = field(default_factory=lambda: {
         'max_slew_rate': 3.0,  # 度/秒
         'slew_acceleration': 1.5,  # 度/秒²
@@ -451,7 +457,8 @@ class Satellite:
         """根据卫星类型设置默认能力"""
         if self.sat_type == SatelliteType.OPTICAL_1:
             self.capabilities.imaging_modes = [ImagingMode.PUSH_BROOM]
-            self.capabilities.max_off_nadir = DEFAULT_MAX_OFF_NADIR_DEG
+            self.capabilities.max_roll_angle = OPTICAL_MAX_ROLL_ANGLE_DEG
+            self.capabilities.max_pitch_angle = OPTICAL_MAX_PITCH_ANGLE_DEG
             self.capabilities.storage_capacity = OPTICAL_1_STORAGE_CAPACITY_GB
             self.capabilities.power_capacity = OPTICAL_1_POWER_CAPACITY_WH
             self.capabilities.resolution = DEFAULT_RESOLUTION_M
@@ -464,7 +471,8 @@ class Satellite:
             }
         elif self.sat_type == SatelliteType.OPTICAL_2:
             self.capabilities.imaging_modes = [ImagingMode.PUSH_BROOM, ImagingMode.FRAME]
-            self.capabilities.max_off_nadir = 45.0
+            self.capabilities.max_roll_angle = OPTICAL_MAX_ROLL_ANGLE_DEG
+            self.capabilities.max_pitch_angle = OPTICAL_MAX_PITCH_ANGLE_DEG
             self.capabilities.storage_capacity = OPTICAL_2_STORAGE_CAPACITY_GB
             self.capabilities.power_capacity = OPTICAL_2_POWER_CAPACITY_WH
             self.capabilities.resolution = 5.0
@@ -485,7 +493,8 @@ class Satellite:
                 ImagingMode.SLIDING_SPOTLIGHT,
                 ImagingMode.STRIPMAP
             ]
-            self.capabilities.max_off_nadir = 35.0
+            self.capabilities.max_roll_angle = SAR_MAX_ROLL_ANGLE_DEG
+            self.capabilities.max_pitch_angle = SAR_MAX_PITCH_ANGLE_DEG
             self.capabilities.storage_capacity = SAR_1_STORAGE_CAPACITY_GB
             self.capabilities.power_capacity = SAR_1_POWER_CAPACITY_WH
             self.capabilities.resolution = 3.0
@@ -510,7 +519,8 @@ class Satellite:
                 ImagingMode.SLIDING_SPOTLIGHT,
                 ImagingMode.STRIPMAP
             ]
-            self.capabilities.max_off_nadir = 50.0
+            self.capabilities.max_roll_angle = SAR_MAX_ROLL_ANGLE_DEG
+            self.capabilities.max_pitch_angle = SAR_MAX_PITCH_ANGLE_DEG
             self.capabilities.storage_capacity = SAR_2_STORAGE_CAPACITY_GB
             self.capabilities.power_capacity = SAR_2_POWER_CAPACITY_WH
             self.capabilities.resolution = 1.0
@@ -655,7 +665,8 @@ class Satellite:
             'orbit': orbit_dict,
             'capabilities': {
                 'imaging_modes': [m.value for m in self.capabilities.imaging_modes],
-                'max_off_nadir': self.capabilities.max_off_nadir,
+                'max_roll_angle': self.capabilities.max_roll_angle,
+                'max_pitch_angle': self.capabilities.max_pitch_angle,
                 'storage_capacity': self.capabilities.storage_capacity,
                 'power_capacity': self.capabilities.power_capacity,
                 'data_rate': self.capabilities.data_rate,
@@ -792,7 +803,8 @@ class Satellite:
 
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
-            max_off_nadir=cap_data.get('max_off_nadir', DEFAULT_MAX_OFF_NADIR_DEG),
+            max_roll_angle=cap_data.get('max_roll_angle', DEFAULT_MAX_ROLL_ANGLE_DEG),
+            max_pitch_angle=cap_data.get('max_pitch_angle', DEFAULT_MAX_PITCH_ANGLE_DEG),
             storage_capacity=cap_data.get('storage_capacity', DEFAULT_STORAGE_CAPACITY_GB),
             power_capacity=cap_data.get('power_capacity', DEFAULT_POWER_CAPACITY_WH),
             data_rate=cap_data.get('data_rate', DEFAULT_DATA_RATE_MBPS),

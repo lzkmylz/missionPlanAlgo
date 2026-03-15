@@ -287,10 +287,10 @@ class TestAttitudeCalculatorEdgeCases(unittest.TestCase):
             sat_type=SatelliteType.OPTICAL_1,
             orbit=Orbit(altitude=500000.0, inclination=97.4),
         )
-        satellite.capabilities.max_off_nadir = 30.0
+        satellite.capabilities.max_roll_angle= 30.0
 
         # 检查计算的姿态角是否在限制范围内
-        self.assertLessEqual(satellite.capabilities.max_off_nadir, 45.0)
+        self.assertLessEqual(satellite.capabilities.max_roll_angle, 45.0)
 
     def test_night_target_attitude(self):
         """测试夜间目标的姿态角计算"""

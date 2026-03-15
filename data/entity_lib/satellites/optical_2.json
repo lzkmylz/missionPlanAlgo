@@ -13,8 +13,10 @@
   },
   "capabilities": {
     "_comment": "卫星载荷能力配置 - 比optical_1更强的性能",
-    "max_off_nadir": 35.0,
-    "max_off_nadir_comment": "最大侧摆角度 35度 - 比optical_1更大的观测范围",
+    "max_roll_angle": 35.0,
+    "max_roll_angle_comment": "最大滚转角 ±35度 - 绕X轴侧摆（原侧摆角）",
+    "max_pitch_angle": 20.0,
+    "max_pitch_angle_comment": "最大俯仰角 ±20度 - 绕Y轴前后斜视",
     "storage_capacity": 800,
     "storage_capacity_comment": "存储容量 800GB - 更大的存储空间",
     "power_capacity": 2500,

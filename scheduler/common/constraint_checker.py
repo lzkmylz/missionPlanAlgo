@@ -96,7 +96,7 @@ class SlewChecker:
         agility = getattr(satellite.capabilities, 'agility', {}) or {}
         self._satellite_configs[satellite.id] = {
             'max_slew_rate': agility.get('max_slew_rate', 3.0),
-            'max_slew_angle': satellite.capabilities.max_off_nadir,
+            'max_slew_angle': satellite.capabilities.max_roll_angle,
             'settling_time': agility.get('settling_time', 5.0)
         }
 

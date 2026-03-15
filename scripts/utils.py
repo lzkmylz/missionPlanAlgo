@@ -159,13 +159,25 @@ def load_window_cache_from_json(cache_path: str, mission) -> 'VisibilityWindowCa
             if isinstance(end_time, str) and end_time.endswith('Z'):
                 end_time = end_time.replace('Z', '+00:00')
 
+            # 解析姿态采样数据（Java预计算）
+            attitude_feasible = w_data.get('attitude_feasible', True)
+            attitude_samples_raw = w_data.get('attitude_samples', [])
+            attitude_samples = None
+            if attitude_samples_raw:
+                attitude_samples = [
+                    (s.get('t', 0.0), s.get('r', 0.0), s.get('p', 0.0))
+                    for s in attitude_samples_raw
+                ]
+
             try:
                 window = VisibilityWindow(
                     satellite_id=sat_id,
                     target_id=target_id,
                     start_time=datetime.fromisoformat(start_time),
                     end_time=datetime.fromisoformat(end_time),
-                    max_elevation=max_elevation
+                    max_elevation=max_elevation,
+                    attitude_feasible=attitude_feasible,
+                    attitude_samples=attitude_samples
                 )
             except Exception:
                 continue
@@ -205,6 +217,16 @@ def load_window_cache_from_json(cache_path: str, mission) -> 'VisibilityWindowCa
             if target_id.startswith('GS:'):
                 continue
 
+            # 解析姿态采样数据（Java预计算）
+            attitude_feasible = w_data.get('attitude_feasible', True)
+            attitude_samples_raw = w_data.get('attitude_samples', [])
+            attitude_samples = None
+            if attitude_samples_raw:
+                attitude_samples = [
+                    (s.get('t', 0.0), s.get('r', 0.0), s.get('p', 0.0))
+                    for s in attitude_samples_raw
+                ]
+
             try:
                 # 处理ISO格式时间 (带Z后缀)
                 if isinstance(start_time, str) and start_time.endswith('Z'):
@@ -217,7 +239,9 @@ def load_window_cache_from_json(cache_path: str, mission) -> 'VisibilityWindowCa
                     target_id=target_id,
                     start_time=datetime.fromisoformat(start_time),
                     end_time=datetime.fromisoformat(end_time),
-                    max_elevation=max_el
+                    max_elevation=max_el,
+                    attitude_feasible=attitude_feasible,
+                    attitude_samples=attitude_samples
                 )
 
                 key = (sat_id, target_id)

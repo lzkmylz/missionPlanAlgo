@@ -274,7 +274,7 @@ class UnifiedManeuverChecker:
             )
 
         # 7. 检查机动能力约束（最大角度限制）
-        max_slew_angle = getattr(satellite.capabilities, 'max_off_nadir', 45.0)
+        max_slew_angle = getattr(satellite.capabilities, 'max_roll_angle', 45.0)
         if transition_result.slew_angle > max_slew_angle:
             return ManeuverCheckResult(
                 feasible=False,

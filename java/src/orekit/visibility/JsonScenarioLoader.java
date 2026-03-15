@@ -85,7 +85,11 @@ public class JsonScenarioLoader {
             // 获取能力参数
             JSONObject capabilities = satJson.getJSONObject("capabilities");
             double minElevation = 5.0; // 默认最小仰角
-            double maxOffNadir = capabilities.getDouble("max_off_nadir");
+
+            // 读取姿态限制参数
+            double maxRollAngle = capabilities.optDouble("max_roll_angle", 35.0);
+            double maxPitchAngle = capabilities.optDouble("max_pitch_angle",
+                    "sar".equalsIgnoreCase(satType) ? 30.0 : 20.0);
 
             // 构建卫星配置（使用轨道六根数存储在 SatelliteConfig 中）
             JSONObject orbit = satJson.getJSONObject("orbit");
@@ -138,7 +142,7 @@ public class JsonScenarioLoader {
             satellites.add(new ExtendedSatelliteConfig(
                 id, satType, semiMajorAxis, eccentricity,
                 inclination, raan, argOfPerigee, meanAnomaly,
-                minElevation, maxOffNadir, epoch,
+                minElevation, maxRollAngle, maxPitchAngle, epoch,
                 mass, dragArea, reflectivity, dragCoefficient
             ));
         }
@@ -290,11 +294,11 @@ public class JsonScenarioLoader {
                                        double semiMajorAxis, double eccentricity,
                                        double inclination, double raan,
                                        double argOfPerigee, double meanAnomaly,
-                                       double minElevation, double maxOffNadir,
+                                       double minElevation, double maxRollAngle, double maxPitchAngle,
                                        AbsoluteDate epoch,
                                        double mass, double dragArea,
                                        double reflectivity, double dragCoefficient) {
-            super(id, "", "", minElevation, maxOffNadir);
+            super(id, "", "", minElevation, 0.0, maxRollAngle, maxPitchAngle, satType);
             this.satType = satType;
             this.semiMajorAxis = semiMajorAxis;
             this.eccentricity = eccentricity;

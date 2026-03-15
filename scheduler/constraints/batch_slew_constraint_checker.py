@@ -303,7 +303,9 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
     ):
         """批量计算后更新状态跟踪
 
-        保持与基类的状态更新逻辑一致。
+        更新卫星状态到任务完成时刻，正确计算 next_prev_end_time：
+        - 不复位的情况：next_prev_end = imaging_end
+        - 复位的情况：next_prev_end = imaging_end + reset_time + settling_time
 
         Args:
             candidate: 候选
@@ -318,10 +320,32 @@ class BatchSlewConstraintChecker(PreciseSlewConstraintChecker):
                 candidate.satellite, candidate.target, sat_position
             )
 
-            # 更新状态跟踪
+            # 计算成像结束时间
+            # imaging_begin 是实际成像开始时间
+            # imaging_duration 是成像持续时间
+            imaging_end = candidate.imaging_begin + timedelta(
+                seconds=candidate.imaging_duration
+            )
+
+            # 计算下一任务的 prev_end_time
+            # 根据 time_interval 判断是否需要复位
+            time_interval = (candidate.imaging_begin - candidate.prev_end_time).total_seconds()
+
+            if time_interval >= 300.0:  # 5分钟以上，不复位
+                # 下一任务可以直接从当前姿态继续
+                next_prev_end = imaging_end
+            else:  # 需要复位到对地定向
+                # 复位时间包含在 result.reset_time 中
+                reset_time = result.reset_time or 0.0
+                settling_time = getattr(
+                    candidate.satellite.capabilities.agility, 'settling_time', 5.0
+                ) if candidate.satellite.capabilities.agility else 5.0
+                next_prev_end = imaging_end + timedelta(seconds=reset_time + settling_time)
+
+            # 更新状态跟踪到正确的下一任务起始时间
             self._update_satellite_state(
                 satellite_id=sat_id,
-                time=result.actual_start,
+                time=next_prev_end,
                 attitude=target_attitude,
                 angular_momentum=None  # 批量版本简化处理
             )

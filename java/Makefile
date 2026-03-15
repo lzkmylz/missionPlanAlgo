@@ -81,8 +81,13 @@ compile-initializer: compile-loader
 	@echo "$(YELLOW)编译 SmartOrbitInitializer.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/SmartOrbitInitializer.java
 
+# 编译AttitudeCalculator（需要在OptimizedVisibilityCalculator之前）
+compile-attitude: compile-initializer
+	@echo "$(YELLOW)编译 AttitudeCalculator.java...$(NC)"
+	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/AttitudeCalculator.java
+
 # 编译OrbitStateCache
-compile-cache: compile-initializer
+compile-cache: compile-attitude
 	@echo "$(YELLOW)编译 OrbitStateCache.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/OrbitStateCache.java
 
