@@ -23,6 +23,11 @@ from .batch_time_conflict_checker import BatchTimeConflictChecker
 from .batch_time_conflict_calculator import BatchTimeConflictCandidate, BatchTimeConflictResult
 from .batch_resource_checker import BatchResourceChecker
 from .batch_resource_calculator import BatchResourceCandidate, BatchResourceResult
+from .batch_orbit_constraint_checker import (
+    BatchOrbitConstraintChecker,
+    BatchOrbitConstraintCandidate,
+    BatchOrbitConstraintResult
+)
 
 from .slew_constraint_checker import SlewFeasibilityResult
 from .saa_constraint_checker import SAAFeasibilityResult
@@ -71,6 +76,7 @@ class UnifiedBatchResult:
     saa_result: Optional[SAAFeasibilityResult] = None
     time_result: Optional[BatchTimeConflictResult] = None
     resource_result: Optional[BatchResourceResult] = None
+    orbit_result: Optional[BatchOrbitConstraintResult] = None  # 新增：单圈约束结果
     reason: Optional[str] = None
 
     # 详细结果
@@ -78,6 +84,7 @@ class UnifiedBatchResult:
     saa_feasible: bool = True
     time_feasible: bool = True
     resource_feasible: bool = True
+    orbit_feasible: bool = True  # 新增：单圈约束是否满足
 
 
 class UnifiedBatchConstraintChecker:
@@ -132,6 +139,7 @@ class UnifiedBatchConstraintChecker:
             consider_power=consider_power,
             consider_storage=consider_storage
         )
+        self._orbit_checker = BatchOrbitConstraintChecker(mission)  # 新增：单圈约束检查器
 
         # 性能统计
         self._stats = {
@@ -262,6 +270,27 @@ class UnifiedBatchConstraintChecker:
             if not resource_result.feasible:
                 results[idx].feasible = False
                 results[idx].reason = f"Resource constraint: {resource_result.reason}"
+
+        # 早期终止检查
+        if early_termination:
+            active_indices = [i for i in active_indices if results[i].feasible]
+            if not active_indices:
+                return results
+
+        # 阶段5: 单圈约束检查（最后阶段，最耗时，前面约束通过后再检查）
+        orbit_candidates = self._convert_to_orbit_candidates(
+            [candidates[i] for i in active_indices]
+        )
+        orbit_results = self._orbit_checker.check_batch(
+            orbit_candidates, existing_tasks
+        )
+
+        for idx, orbit_result in zip(active_indices, orbit_results):
+            results[idx].orbit_result = orbit_result
+            results[idx].orbit_feasible = orbit_result.feasible
+            if not orbit_result.feasible:
+                results[idx].feasible = False
+                results[idx].reason = f"Orbit constraint: {orbit_result.reason}"
 
         return results
 
@@ -431,6 +460,21 @@ class UnifiedBatchConstraintChecker:
             for c in candidates
         ]
 
+    def _convert_to_orbit_candidates(
+        self,
+        candidates: List[UnifiedBatchCandidate]
+    ) -> List[BatchOrbitConstraintCandidate]:
+        """转换为单圈约束候选"""
+        return [
+            BatchOrbitConstraintCandidate(
+                sat_id=c.sat_id,
+                window_start=c.window_start,
+                window_end=c.window_end,
+                imaging_duration=c.imaging_duration
+            )
+            for c in candidates
+        ]
+
     def get_stats(self) -> Dict[str, Any]:
         """获取检查统计信息"""
         return {
@@ -438,7 +482,8 @@ class UnifiedBatchConstraintChecker:
             'slew_stats': self._slew_checker.get_batch_stats(),
             'saa_stats': self._saa_checker.get_batch_stats(),
             'time_stats': self._time_checker.get_batch_stats(),
-            'resource_stats': self._resource_checker.get_batch_stats()
+            'resource_stats': self._resource_checker.get_batch_stats(),
+            'orbit_stats': self._orbit_checker.get_batch_stats()
         }
 
     def reset_stats(self):
@@ -453,6 +498,7 @@ class UnifiedBatchConstraintChecker:
         self._saa_checker.reset_batch_stats()
         self._time_checker.reset_batch_stats()
         self._resource_checker.reset_batch_stats()
+        self._orbit_checker.reset_batch_stats()
 
     def _check_resolution_constraint(self, candidate: UnifiedBatchCandidate) -> bool:
         """

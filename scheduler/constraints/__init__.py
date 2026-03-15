@@ -53,6 +53,11 @@ from .batch_resource_calculator import (
     BatchResourceData
 )
 from .batch_resource_checker import BatchResourceChecker
+from .batch_orbit_constraint_checker import (
+    BatchOrbitConstraintChecker,
+    BatchOrbitConstraintCandidate,
+    BatchOrbitConstraintResult
+)
 from .unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker,
     UnifiedBatchCandidate,
@@ -85,6 +90,9 @@ __all__ = [
     'BatchResourceCandidate',
     'BatchResourceResult',
     'BatchResourceData',
+    'BatchOrbitConstraintChecker',  # 单圈约束批量检查器（新增）
+    'BatchOrbitConstraintCandidate',
+    'BatchOrbitConstraintResult',
     'UnifiedBatchConstraintChecker',  # 统一批量约束检查器
     'UnifiedBatchCandidate',
     'UnifiedBatchResult',

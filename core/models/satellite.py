@@ -273,6 +273,10 @@ class SatelliteCapabilities:
         'settling_time': 5.0  # 稳定时间（秒）
     })
 
+    # 单圈约束配置（新增）
+    max_starts_per_orbit: int = 5  # 单圈最大开机次数
+    max_work_time_per_orbit: float = 600.0  # 单圈最大工作时长（秒）
+
     # 存储和能源
     storage_capacity: float = DEFAULT_STORAGE_CAPACITY_GB  # GB
     power_capacity: float = DEFAULT_POWER_CAPACITY_WH  # Wh
@@ -565,6 +569,10 @@ class Satellite:
 
     def _get_position_simplified(self, dt: datetime) -> tuple:
         """简化的轨道位置计算（用于没有TLE的情况）"""
+        # 处理 naive datetime
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
         # 这是一个简化的圆轨道模型
         period = self.orbit.get_period()
         mean_motion = 2 * math.pi / period
@@ -667,6 +675,8 @@ class Satellite:
                 'imaging_modes': [m.value for m in self.capabilities.imaging_modes],
                 'max_roll_angle': self.capabilities.max_roll_angle,
                 'max_pitch_angle': self.capabilities.max_pitch_angle,
+                'max_starts_per_orbit': self.capabilities.max_starts_per_orbit,
+                'max_work_time_per_orbit': self.capabilities.max_work_time_per_orbit,
                 'storage_capacity': self.capabilities.storage_capacity,
                 'power_capacity': self.capabilities.power_capacity,
                 'data_rate': self.capabilities.data_rate,
@@ -805,6 +815,8 @@ class Satellite:
             imaging_modes=imaging_modes,
             max_roll_angle=cap_data.get('max_roll_angle', DEFAULT_MAX_ROLL_ANGLE_DEG),
             max_pitch_angle=cap_data.get('max_pitch_angle', DEFAULT_MAX_PITCH_ANGLE_DEG),
+            max_starts_per_orbit=cap_data.get('max_starts_per_orbit', 5),
+            max_work_time_per_orbit=cap_data.get('max_work_time_per_orbit', 600.0),
             storage_capacity=cap_data.get('storage_capacity', DEFAULT_STORAGE_CAPACITY_GB),
             power_capacity=cap_data.get('power_capacity', DEFAULT_POWER_CAPACITY_WH),
             data_rate=cap_data.get('data_rate', DEFAULT_DATA_RATE_MBPS),
