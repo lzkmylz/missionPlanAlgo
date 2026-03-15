@@ -6,11 +6,12 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime, timedelta
 import math
 
 from core.constants import EARTH_RADIUS_M as CONST_EARTH_RADIUS_M
+from core.quality.quality_config import QualityTier, QualityThresholds, DEFAULT_QUALITY_CONFIG
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,18 +25,27 @@ class VisibilityWindow:
         start_time: 窗口开始时间
         end_time: 窗口结束时间
         max_elevation: 最大仰角（度）
-        quality_score: 窗口质量评分（0-1）
+        quality_score: 窗口质量评分（0-1），向后兼容，综合评分
         attitude_feasible: 姿态可行性（由Java预计算）
         attitude_samples: 姿态采样数据列表 [(timestamp, roll, pitch), ...]
+        # 扩展质量评分字段（可选，用于详细分析）
+        quality_details: 详细质量评分信息，包含各维度评分
+        quality_tier: 质量等级，用于快速筛选
+        detailed_scores: 各维度评分字典
     """
     satellite_id: str
     target_id: str
     start_time: datetime
     end_time: datetime
     max_elevation: float = 90.0
-    quality_score: float = 1.0
+    quality_score: float = 1.0  # 向后兼容：综合评分
     attitude_feasible: bool = True
     attitude_samples: Optional[List[Tuple[float, float, float]]] = None
+
+    # 扩展质量评分字段（可选，用于详细分析）
+    quality_details: Optional[Dict[str, Any]] = None
+    quality_tier: QualityTier = QualityTier.MEDIUM
+    detailed_scores: Optional[Dict[str, float]] = None
 
     def duration(self) -> float:
         """窗口持续时间（秒）"""
@@ -44,6 +54,61 @@ class VisibilityWindow:
     def __lt__(self, other):
         """用于排序"""
         return self.start_time < other.start_time
+
+    def get_effective_quality(self) -> float:
+        """获取有效质量评分（向后兼容）"""
+        return self.quality_score
+
+    def is_high_quality(self, config: Optional[Any] = None) -> bool:
+        """
+        是否为高质量窗口
+
+        Args:
+            config: 质量评分配置，默认使用DEFAULT_QUALITY_CONFIG
+        """
+        cfg = config or DEFAULT_QUALITY_CONFIG
+        return self.quality_score >= cfg.thresholds.high_quality
+
+    def is_acceptable_quality(self, config: Optional[Any] = None) -> bool:
+        """
+        是否为可接受质量
+
+        Args:
+            config: 质量评分配置，默认使用DEFAULT_QUALITY_CONFIG
+        """
+        cfg = config or DEFAULT_QUALITY_CONFIG
+        return self.quality_score >= cfg.thresholds.low_quality
+
+    def get_quality_tier(self) -> QualityTier:
+        """获取质量等级"""
+        return self.quality_tier
+
+    def update_quality_scores(self, overall: float, details: Dict[str, float],
+                              tier: QualityTier = QualityTier.MEDIUM) -> 'VisibilityWindow':
+        """
+        创建更新质量评分后的新窗口对象
+
+        由于dataclass是frozen的，需要创建新对象
+
+        Args:
+            overall: 综合质量评分
+            details: 详细评分字典
+            tier: 质量等级 (QualityTier enum)
+
+        Returns:
+            更新后的VisibilityWindow
+        """
+        from dataclasses import replace
+        return replace(
+            self,
+            quality_score=overall,
+            detailed_scores=details,
+            quality_tier=tier,
+            quality_details={
+                'dimensions': details,
+                'tier': tier.value,
+            }
+        )
 
 
 class VisibilityCalculator(ABC):

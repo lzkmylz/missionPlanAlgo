@@ -26,6 +26,7 @@ from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
 from scheduler.common.config import ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
+from scheduler.common.quality_aware_mixin import QualityAwareMixin
 from scheduler.constraints.batch_slew_calculator import BatchSlewCandidate, BatchSlewCalculator
 from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstraintChecker
 from scheduler.constraints.unified_batch_constraint_checker import (
@@ -38,12 +39,13 @@ try:
 except ImportError:
     HAS_NUMPY = False
 from core.models.target import Target
+from core.quality.quality_config import QualityScoreConfig
 
 # 模块级别logger定义
 logger = logging.getLogger(__name__)
 
 
-class GreedyScheduler(BaseScheduler, ClusteringMixin):
+class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
     """
     Real Greedy Scheduler with full constraint checking
 
@@ -60,6 +62,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         consider_power: 是否考虑电量约束
         consider_storage: 是否考虑存储约束
         consider_time_conflicts: 是否考虑时间冲突
+        enable_quality_filtering: 是否启用质量筛选
+        quality_score_weight: 质量评分在启发式中的权重
     """
 
     # Default minimum time gap between tasks (slew time + settling time)
@@ -83,6 +87,10 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
                 - enable_clustering: Enable target clustering (default False)
                 - cluster_radius_km: Cluster radius in km (default 10.0)
                 - min_cluster_size: Minimum targets per cluster (default 2)
+                - quality_config: Quality scoring configuration (dict or QualityScoreConfig)
+                - enable_quality_filtering: Enable quality-based window filtering (default True)
+                - min_quality_threshold: Minimum quality threshold for window filtering (default 0.3)
+                - quality_score_weight: Weight of quality score in assignment scoring (default 20.0)
         """
         super().__init__("Greedy", config)
         ClusteringMixin.__init__(self, config)
@@ -91,6 +99,20 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
         self.consider_power = config.get('consider_power', True)
         self.consider_storage = config.get('consider_storage', True)
         self.consider_time_conflicts = config.get('consider_time_conflicts', True)
+
+        # Initialize quality-aware mixin
+        quality_config = config.get('quality_config')
+        if isinstance(quality_config, dict):
+            quality_config = QualityScoreConfig.from_dict(quality_config)
+        QualityAwareMixin.__init__(
+            self,
+            quality_config=quality_config,
+            enable_quality_filtering=config.get('enable_quality_filtering', True),
+            min_quality_threshold=config.get('min_quality_threshold', 0.3),
+        )
+
+        # 质量评分在启发式中的权重
+        self.quality_score_weight = config.get('quality_score_weight', 20.0)
 
         # Initialize imaging time calculator
         # 使用ImagingTimeCalculator的默认值（基于实际卫星数据）
@@ -137,6 +159,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             'consider_power': self.consider_power,
             'consider_storage': self.consider_storage,
             'consider_time_conflicts': self.consider_time_conflicts,
+            'enable_quality_filtering': self.enable_quality_filtering,
+            'min_quality_threshold': self.min_quality_threshold,
+            'quality_score_weight': self.quality_score_weight,
         }
         # Add clustering parameters
         params.update(self.get_clustering_config())
@@ -1385,6 +1410,24 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin):
             storage_ratio = 0.0
 
         score += (power_ratio + storage_ratio) * 5
+
+        # 窗口质量评分（新增）
+        try:
+            # 直接使用窗口的质量评分（VisibilityWindow总是有quality_score，默认1.0）
+            # 如果窗口是新生成的没有详细评分，使用evaluate_window_quality进行计算（带缓存）
+            window_quality = window.quality_score
+            if window_quality == 1.0 and not window.detailed_scores:
+                # 可能是默认评分，使用质量计算器获得更准确的评分
+                window_quality = self.calculate_quality_score_for_assignment(
+                    window, sat, task, self.mission
+                )
+
+            # 将质量评分加入总分（高质量获得加分）
+            score += window_quality * self.quality_score_weight
+
+        except Exception as e:
+            logger.debug(f"Failed to calculate quality score: {e}")
+            # 如果质量评分失败，不影响其他评分
 
         return score
 
