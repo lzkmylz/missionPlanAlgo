@@ -70,7 +70,22 @@
       "pixel_size": 0.00001,
       "pixel_size_comment": "探测器像元尺寸 10微米 - CCD/CMOS像元物理尺寸",
       "quantization": 16,
-      "quantization_comment": "量化位数 16bit - 图像灰度等级深度"
+      "quantization_comment": "量化位数 16bit - 图像灰度等级深度",
+      "fov_config": {
+        "_comment": "视场配置 - 支持圆锥或矩形视场",
+        "fov_type": "cone",
+        "fov_type_comment": "视场类型: cone(圆锥) 或 rectangular(矩形)",
+        "half_angle": 0.75,
+        "half_angle_comment": "圆锥视场半角 0.75度 - 在645km高度对应约17km幅宽",
+        "_comment_rectangular_example": "矩形视场示例配置:",
+        "_example_rectangular": {
+          "fov_type": "rectangular",
+          "half_angle_x": 0.5,
+          "half_angle_x_comment": "沿轨迹方向半角 0.5度",
+          "half_angle_y": 0.4,
+          "half_angle_y_comment": "垂直轨迹方向半角 0.4度"
+        }
+      }
     },
     "imaging_modes": [
       {

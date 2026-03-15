@@ -4,8 +4,8 @@ Footprint Calculator - Coverage Geometry Calculator
 Calculates satellite imaging footprint geometry and off-nadir angles.
 """
 
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import List, Tuple, Optional, Dict, Any
 import math
 
 from core.models import Target, TargetType, ImagingMode
@@ -16,9 +16,10 @@ from core.constants import EARTH_RADIUS_M as CONST_EARTH_RADIUS_M, METERS_TO_KM
 class Footprint:
     """地面成像条带足迹"""
     center: Tuple[float, float]  # (lon, lat)
-    polygon: List[Tuple[float, float]]  # 多边形顶点
+    polygon: List[Tuple[float, float]]  # 多边形顶点（四脚点）
     width_km: float
     length_km: float
+    fov_config: Optional[Dict[str, Any]] = None  # 使用的FOV配置
 
 
 class FootprintCalculator:
@@ -39,6 +40,79 @@ class FootprintCalculator:
             satellite_altitude_km: 卫星轨道高度（公里），默认500km（典型LEO）
         """
         self.satellite_altitude_km = satellite_altitude_km
+
+    def calculate_footprint_from_fov(
+        self,
+        satellite_position: Tuple[float, float, float],  # (x, y, z) in ECEF
+        nadir_position: Tuple[float, float],  # (lon, lat)
+        look_angle: float,  # degrees from nadir
+        look_direction: float,  # degrees, 0=north, 90=east
+        fov_config: Dict[str, Any],
+        imaging_mode: ImagingMode
+    ) -> Footprint:
+        """
+        基于FOV配置计算精确足迹
+
+        Args:
+            satellite_position: 卫星ECEF坐标（米）
+            nadir_position: 星下点经纬度（度）
+            look_angle: 观测角度（度，从星下点算起）
+            look_direction: 观测方向（度，0=北，90=东）
+            fov_config: FOV配置字典
+                - fov_type: 'cone' 或 'rectangular'
+                - half_angle: 圆锥视场半角（度）
+                - half_angle_x: 矩形视场X方向半角（度）
+                - half_angle_y: 矩形视场Y方向半角（度）
+            imaging_mode: 成像模式
+
+        Returns:
+            Footprint: 包含四脚点坐标的足迹对象
+        """
+        # 1. 计算卫星高度
+        sat_radius = math.sqrt(sum(x**2 for x in satellite_position))
+        altitude_m = sat_radius - self.EARTH_RADIUS_M
+        altitude_km = altitude_m / 1000.0
+
+        # 2. 根据FOV类型计算幅宽和长度
+        fov_type = fov_config.get('fov_type', 'cone')
+        if fov_type == 'cone':
+            half_angle = math.radians(fov_config.get('half_angle', 0.5))
+            # 圆锥视场：圆形 footprint，近似为矩形
+            swath_width_km = 2 * altitude_km * math.tan(half_angle)
+            length_km = swath_width_km  # 近似圆形
+        elif fov_type == 'rectangular':
+            half_angle_x = math.radians(fov_config.get('half_angle_x', 0.5))
+            half_angle_y = math.radians(fov_config.get('half_angle_y', 0.35))
+            # 矩形视场：沿轨迹方向（X）和垂直轨迹方向（Y）
+            swath_width_km = 2 * altitude_km * math.tan(half_angle_y)
+            length_km = 2 * altitude_km * math.tan(half_angle_x)
+        else:
+            # 回退到配置的swath_width
+            swath_width_km = fov_config.get('swath_width_km', 10.0)
+            length_km = self._calculate_footprint_length(swath_width_km, imaging_mode)
+
+        # 3. 计算足迹中心（考虑侧摆位移）
+        center_lon, center_lat = self._calculate_footprint_center(
+            nadir_position, look_angle
+        )
+
+        # 4. 计算精确四脚点坐标
+        corners = self._calculate_footprint_corners_precise(
+            center_lon=center_lon,
+            center_lat=center_lat,
+            swath_width_km=swath_width_km,
+            length_km=length_km,
+            look_direction=look_direction,
+            altitude_km=altitude_km
+        )
+
+        return Footprint(
+            center=(center_lon, center_lat),
+            polygon=corners,
+            width_km=swath_width_km,
+            length_km=length_km,
+            fov_config=fov_config
+        )
 
     def calculate_footprint(
         self,
@@ -304,6 +378,71 @@ class FootprintCalculator:
         lon_offset = self._km_to_lon(displacement_km, nadir_position[1])
 
         return (nadir_position[0] + lon_offset, nadir_position[1])
+
+    def _calculate_footprint_corners_precise(
+        self,
+        center_lon: float,
+        center_lat: float,
+        swath_width_km: float,
+        length_km: float,
+        look_direction: float,
+        altitude_km: float
+    ) -> List[Tuple[float, float]]:
+        """
+        计算足迹四脚点坐标（精确计算）
+
+        考虑地球曲率和观测几何，计算精确的经纬度坐标。
+        四脚点顺序：左前、右前、右后、左后（沿飞行方向）
+
+        Args:
+            center_lon: 中心经度
+            center_lat: 中心纬度
+            swath_width_km: 幅宽（公里）
+            length_km: 长度（公里，沿飞行方向）
+            look_direction: 观测方向（度，0=北，90=东）
+            altitude_km: 卫星高度（公里）
+
+        Returns:
+            List[Tuple[float, float]]: 四脚点坐标列表 [(lon1, lat1), (lon2, lat2), ...]
+        """
+        # 计算半幅宽和半长度
+        half_width_km = swath_width_km / 2
+        half_length_km = length_km / 2
+
+        # 将距离转换为角度（考虑纬度影响）
+        km_per_deg_lat = 111.32
+        km_per_deg_lon = 111.32 * math.cos(math.radians(center_lat))
+
+        if km_per_deg_lon < 0.001:
+            km_per_deg_lon = 0.001  # 避免除零
+
+        half_width_deg = half_width_km / km_per_deg_lon
+        half_length_deg = half_length_km / km_per_deg_lat
+
+        # 考虑观测方向的旋转
+        direction_rad = math.radians(look_direction)
+        cos_d = math.cos(direction_rad)
+        sin_d = math.sin(direction_rad)
+
+        # 计算四脚点（相对于中心，沿飞行方向）
+        # 顺序：左前、右前、右后、左后
+        corners_local = [
+            (-half_width_deg, half_length_deg),   # 左前
+            (half_width_deg, half_length_deg),    # 右前
+            (half_width_deg, -half_length_deg),   # 右后
+            (-half_width_deg, -half_length_deg),  # 左后
+        ]
+
+        # 应用旋转和平移
+        rotated_corners = []
+        for dx, dy in corners_local:
+            # 旋转
+            rot_x = dx * cos_d - dy * sin_d
+            rot_y = dx * sin_d + dy * cos_d
+            # 平移到中心
+            rotated_corners.append((center_lon + rot_x, center_lat + rot_y))
+
+        return rotated_corners
 
     def _calculate_footprint_polygon(
         self,

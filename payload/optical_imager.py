@@ -7,8 +7,15 @@
 
 from typing import List, Tuple, Dict, Any, Optional
 from enum import Enum
+import math
 
 from .base import Imager, ImagingMode
+from core.constants import (
+    DEFAULT_FOV_TYPE,
+    DEFAULT_FOV_HALF_ANGLE_DEG,
+    DEFAULT_FOV_HALF_ANGLE_X_DEG,
+    DEFAULT_FOV_HALF_ANGLE_Y_DEG,
+)
 
 
 class OpticalImagingMode(Enum):
@@ -22,6 +29,7 @@ class OpticalImager(Imager):
     光学成像器
 
     支持推扫（push_broom）和框幅（frame）成像模式
+    支持FOV配置，可基于视场半角计算精确幅宽
     """
 
     def __init__(
@@ -31,7 +39,12 @@ class OpticalImager(Imager):
         swath_width: float = 10.0,
         focal_length: Optional[float] = None,
         aperture: Optional[float] = None,
-        supported_modes: Optional[List[ImagingMode]] = None
+        supported_modes: Optional[List[ImagingMode]] = None,
+        # FOV配置参数（新增）
+        fov_type: Optional[str] = None,
+        fov_half_angle: Optional[float] = None,
+        fov_half_angle_x: Optional[float] = None,
+        fov_half_angle_y: Optional[float] = None,
     ):
         """
         初始化光学成像器
@@ -56,6 +69,12 @@ class OpticalImager(Imager):
 
         self.focal_length = focal_length
         self.aperture = aperture
+
+        # FOV配置（新增）
+        self.fov_type = fov_type or DEFAULT_FOV_TYPE
+        self.fov_half_angle = fov_half_angle or DEFAULT_FOV_HALF_ANGLE_DEG
+        self.fov_half_angle_x = fov_half_angle_x or DEFAULT_FOV_HALF_ANGLE_X_DEG
+        self.fov_half_angle_y = fov_half_angle_y or DEFAULT_FOV_HALF_ANGLE_Y_DEG
 
         # 推扫速度系数（米/秒）- 典型卫星轨道速度
         self._scan_velocity = 7000.0  # 约7km/s
@@ -117,8 +136,90 @@ class OpticalImager(Imager):
             'swath_width': self.swath_width,
             'focal_length': self.focal_length,
             'aperture': self.aperture,
-            'supported_modes': [m.value for m in self.supported_modes]
+            'supported_modes': [m.value for m in self.supported_modes],
+            'fov_type': self.fov_type,
+            'fov_half_angle': self.fov_half_angle,
+            'fov_half_angle_x': self.fov_half_angle_x,
+            'fov_half_angle_y': self.fov_half_angle_y,
         }
+
+    def calculate_swath_from_fov(
+        self,
+        altitude_km: float,
+        look_angle_deg: float = 0.0
+    ) -> float:
+        """
+        基于FOV和轨道高度计算幅宽
+
+        如果未配置FOV，则返回配置的swath_width。
+
+        Args:
+            altitude_km: 轨道高度（公里）
+            look_angle_deg: 观测角度（度，从星下点算起）
+
+        Returns:
+            float: 幅宽（公里）
+        """
+        h = altitude_km
+
+        if self.fov_type == 'cone':
+            # 圆锥视场：幅宽 = 2 * h * tan(fov_half_angle)
+            theta = math.radians(self.fov_half_angle)
+            phi = math.radians(look_angle_deg)
+
+            # 考虑观测角度的修正
+            # 在观测方向的地面投影
+            swath = 2 * h * math.tan(theta) / math.cos(phi)
+            return swath
+
+        elif self.fov_type == 'rectangular':
+            # 矩形视场：分别计算两个方向的幅宽
+            theta_x = math.radians(self.fov_half_angle_x)
+            theta_y = math.radians(self.fov_half_angle_y)
+
+            # 沿轨迹方向（X）和垂直轨迹方向（Y）
+            swath_x = 2 * h * math.tan(theta_x)
+            swath_y = 2 * h * math.tan(theta_y)
+
+            # 返回平均幅宽或根据观测方向选择
+            if abs(look_angle_deg) < 1.0:
+                # 星下点观测，使用垂直轨迹方向幅宽
+                return swath_y
+            else:
+                # 侧摆观测，使用两个方向的平均值
+                return (swath_x + swath_y) / 2
+
+        else:
+            # 未知FOV类型，回退到配置的幅宽
+            return self.swath_width
+
+    def get_effective_swath(
+        self,
+        altitude_km: Optional[float] = None,
+        look_angle_deg: float = 0.0
+    ) -> float:
+        """
+        获取有效幅宽
+
+        如果配置了FOV且提供了高度，基于FOV计算幅宽；
+        否则返回配置的swath_width。
+
+        Args:
+            altitude_km: 轨道高度（公里），可选
+            look_angle_deg: 观测角度（度），可选
+
+        Returns:
+            float: 有效幅宽（公里）
+        """
+        # 如果配置了FOV且提供了高度，使用FOV计算
+        if altitude_km is not None and altitude_km > 0:
+            fov_swath = self.calculate_swath_from_fov(altitude_km, look_angle_deg)
+            # 如果FOV计算成功（不等于配置的swath_width），使用FOV结果
+            if fov_swath != self.swath_width:
+                return fov_swath
+
+        # 回退到配置的幅宽
+        return self.swath_width
 
     def calculate_ground_sample_distance(
         self,

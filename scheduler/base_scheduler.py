@@ -128,6 +128,11 @@ class ScheduledTask:
     primary_target_id: Optional[str] = None    # 主目标ID
     covered_target_ids: List[str] = field(default_factory=list)  # 覆盖的所有目标ID列表
     covered_target_count: int = 0              # 覆盖目标数量
+    # 成像足迹相关字段（新增）
+    footprint_corners: List[Tuple[float, float]] = field(default_factory=list)  # 四脚点坐标 [(lon, lat), ...]
+    footprint_center: Optional[Tuple[float, float]] = None  # 中心点坐标 (lon, lat)
+    swath_width_km: float = 0.0                # 实际幅宽（公里）
+    fov_config: Dict[str, Any] = field(default_factory=dict)  # 使用的FOV配置
 
     def to_dict(self) -> Dict[str, Any]:
         # Calculate imaging_duration if not explicitly set
@@ -172,6 +177,11 @@ class ScheduledTask:
             'primary_target_id': self.primary_target_id,
             'covered_target_ids': self.covered_target_ids,
             'covered_target_count': self.covered_target_count,
+            # 成像足迹相关字段
+            'footprint_corners': self.footprint_corners,
+            'footprint_center': self.footprint_center,
+            'swath_width_km': self.swath_width_km,
+            'fov_config': self.fov_config,
         }
 
 

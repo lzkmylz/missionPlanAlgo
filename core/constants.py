@@ -109,6 +109,20 @@ DEFAULT_RESOLUTION_M = 10.0
 # 默认幅宽 (米)
 DEFAULT_SWATH_WIDTH_M = 10000.0
 
+# =============================================================================
+# FOV (视场) 默认值
+# =============================================================================
+
+# 默认FOV类型
+DEFAULT_FOV_TYPE = 'cone'
+
+# 默认圆锥视场半角 (度)
+DEFAULT_FOV_HALF_ANGLE_DEG = 0.5
+
+# 默认矩形视场半角 (度)
+DEFAULT_FOV_HALF_ANGLE_X_DEG = 0.5  # X方向（沿轨迹）
+DEFAULT_FOV_HALF_ANGLE_Y_DEG = 0.35  # Y方向（垂直轨迹）
+
 # 默认最大滚转角 (度) - 绕X轴旋转，控制侧摆
 DEFAULT_MAX_ROLL_ANGLE_DEG = 30.0
 

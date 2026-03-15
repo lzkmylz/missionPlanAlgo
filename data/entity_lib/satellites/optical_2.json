@@ -55,7 +55,16 @@
       "pixel_size": 0.0000065,
       "pixel_size_comment": "探测器像元尺寸 6.5微米 - 更小的像元实现高分辨率",
       "quantization": 12,
-      "quantization_comment": "量化位数 12bit - 更高的动态范围"
+      "quantization_comment": "量化位数 12bit - 更高的动态范围",
+      "fov_config": {
+        "_comment": "视场配置 - 矩形视场示例",
+        "fov_type": "rectangular",
+        "fov_type_comment": "视场类型: rectangular(矩形) - 区分沿轨和垂轨方向",
+        "half_angle_x": 0.44,
+        "half_angle_x_comment": "沿轨迹方向(X)半角 0.44度 - 在645km高度对应约10km",
+        "half_angle_y": 0.31,
+        "half_angle_y_comment": "垂直轨迹方向(Y)半角 0.31度 - 在645km高度对应约7km"
+      }
     },
     "imaging_modes": [
       {

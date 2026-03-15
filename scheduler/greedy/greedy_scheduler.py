@@ -1619,6 +1619,28 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 pitch_angle=pitch_angle
             )
 
+        # 计算成像足迹（新增）
+        footprint_corners = []
+        footprint_center = None
+        swath_width_km = 0.0
+        fov_config = {}
+        if sat:
+            try:
+                footprint_result = self._calculate_task_footprint(
+                    sat_id=sat_id,
+                    task=task,
+                    imaging_start=actual_start,
+                    roll_angle=roll_angle,
+                    pitch_angle=pitch_angle,
+                    imaging_mode=imaging_mode
+                )
+                footprint_corners = footprint_result.get('corners', [])
+                footprint_center = footprint_result.get('center')
+                swath_width_km = footprint_result.get('swath_width_km', 0.0)
+                fov_config = footprint_result.get('fov_config', {})
+            except Exception as e:
+                logger.warning(f"Failed to calculate footprint for task {task.id}: {e}")
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
@@ -1643,7 +1665,12 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             reset_time=reset_time,
             # 姿态角字段
             roll_angle=roll_angle,
-            pitch_angle=pitch_angle
+            pitch_angle=pitch_angle,
+            # 成像足迹字段
+            footprint_corners=footprint_corners,
+            footprint_center=footprint_center,
+            swath_width_km=swath_width_km,
+            fov_config=fov_config,
         )
 
         # 如果是聚类任务，记录聚类调度信息
@@ -1704,6 +1731,114 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         if self._enable_attitude_management:
             from core.dynamics.attitude_mode import AttitudeMode
             self._set_satellite_attitude_mode(sat_id, AttitudeMode.IMAGING)
+
+    def _calculate_task_footprint(
+        self,
+        sat_id: str,
+        task: Any,
+        imaging_start: datetime,
+        roll_angle: float,
+        pitch_angle: float,
+        imaging_mode: Any
+    ) -> Dict[str, Any]:
+        """
+        计算任务成像足迹
+
+        Args:
+            sat_id: 卫星ID
+            task: 目标任务
+            imaging_start: 成像开始时间
+            roll_angle: 滚转角（度）
+            pitch_angle: 俯仰角（度）
+            imaging_mode: 成像模式
+
+        Returns:
+            Dict: 包含footprint信息的字典
+                - corners: 四脚点坐标列表 [(lon, lat), ...]
+                - center: 中心点坐标 (lon, lat)
+                - swath_width_km: 幅宽（公里）
+                - fov_config: FOV配置
+        """
+        from core.coverage.footprint_calculator import FootprintCalculator
+        from core.models import ImagingMode
+
+        sat = self.mission.get_satellite_by_id(sat_id)
+        if not sat:
+            return {'corners': [], 'center': None, 'swath_width_km': 0.0, 'fov_config': {}}
+
+        # 获取卫星位置和星下点
+        try:
+            position, velocity = self._attitude_calculator._get_satellite_state(
+                sat, imaging_start
+            )
+        except Exception:
+            return {'corners': [], 'center': None, 'swath_width_km': 0.0, 'fov_config': {}}
+
+        # 计算星下点
+        sat_radius = math.sqrt(sum(x**2 for x in position))
+        altitude_km = (sat_radius - 6371000) / 1000.0
+
+        # 获取FOV配置（优先从imager配置）
+        imager_config = sat.capabilities.imager if hasattr(sat.capabilities, 'imager') else {}
+        fov_config = imager_config.get('fov_config', {}) if isinstance(imager_config, dict) else {}
+
+        # 如果没有FOV配置，基于swath_width构建
+        if not fov_config and hasattr(sat.capabilities, 'swath_width'):
+            swath_m = sat.capabilities.swath_width
+            fov_config = {
+                'fov_type': 'cone',
+                'half_angle': math.degrees(math.atan2(swath_m / 2000, altitude_km)),
+                'swath_width_km': swath_m / 1000.0
+            }
+
+        # 计算星下点经纬度（简化计算）
+        # 使用姿态计算器的方法
+        try:
+            nadir = self._attitude_calculator._calculate_nadir(position)
+            nadir_lon, nadir_lat = nadir.longitude, nadir.latitude
+        except Exception:
+            # 简化计算
+            x, y, z = position
+            r = math.sqrt(x*x + y*y + z*z)
+            lat = math.degrees(math.asin(z / r))
+            lon = math.degrees(math.atan2(y, x))
+            nadir_lon, nadir_lat = lon, lat
+
+        # 计算观测角度和方向
+        look_angle = math.sqrt(roll_angle**2 + pitch_angle**2)
+        # 观测方向：从姿态角计算（0=北，90=东）
+        look_direction = math.degrees(math.atan2(roll_angle, pitch_angle))
+
+        # 计算footprint
+        calculator = FootprintCalculator(satellite_altitude_km=altitude_km)
+
+        # 判断使用哪种计算方法
+        if fov_config:
+            footprint = calculator.calculate_footprint_from_fov(
+                satellite_position=position,
+                nadir_position=(nadir_lon, nadir_lat),
+                look_angle=look_angle,
+                look_direction=look_direction,
+                fov_config=fov_config,
+                imaging_mode=imaging_mode if isinstance(imaging_mode, ImagingMode) else ImagingMode.PUSH_BROOM
+            )
+        else:
+            # 回退到原始方法
+            swath_width_km = getattr(sat.capabilities, 'swath_width', 10000) / 1000.0
+            footprint = calculator.calculate_footprint(
+                satellite_position=position,
+                nadir_position=(nadir_lon, nadir_lat),
+                look_angle=look_angle,
+                swath_width_km=swath_width_km,
+                imaging_mode=imaging_mode if isinstance(imaging_mode, ImagingMode) else ImagingMode.PUSH_BROOM
+            )
+
+        return {
+            'corners': footprint.polygon,
+            'center': footprint.center,
+            'swath_width_km': footprint.width_km,
+            'fov_config': fov_config or footprint.fov_config or {}
+        }
 
     def _determine_failure_reason(self, task: Any) -> TaskFailureReason:
         """
