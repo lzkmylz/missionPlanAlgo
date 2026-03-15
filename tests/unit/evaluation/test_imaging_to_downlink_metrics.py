@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
-from evaluation.metrics import PerformanceMetrics, MetricsCalculator
+from evaluation import PerformanceMetrics, MetricsCalculator
 from scheduler.base_scheduler import ScheduleResult, ScheduledTask
 
 

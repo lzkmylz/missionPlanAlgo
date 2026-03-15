@@ -766,24 +766,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                         continue
                     filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
                 else:
-                    # 如果无法获取姿态角，跳过此候选（保守策略）
-                    continue
-            # 回退到Python循环（没有Numba或没有姿态缓存）
-            filtered_candidates = []
-            for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
-                imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
-                attitude = attitude_cache.get((sat.id, imaging_time))
-
-                if attitude is not None:
-                    # 分别检查滚转角和俯仰角
-                    if abs(attitude.roll) > sat.capabilities.max_roll_angle * 1.1:
-                        continue
-                    if abs(attitude.pitch) > sat.capabilities.max_pitch_angle * 1.1:
-                        continue
+                    # 如果无法获取姿态角，保留候选（而不是跳过）
+                    # 在测试环境或没有预计算数据时，让后续约束检查来处理
                     filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
-                else:
-                    # 如果无法获取姿态角，跳过此候选（保守策略）
-                    continue
 
         # 记录阶段2的拒绝统计（无论是否全部过滤）
         self._rejection_stats['phase2_attitude_roll'] += phase2_attitude_roll

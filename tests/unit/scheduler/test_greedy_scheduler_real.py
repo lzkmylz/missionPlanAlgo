@@ -831,14 +831,14 @@ class TestGreedySchedulerPriorityOrdering:
             sat_type=SatelliteType.OPTICAL_1
         )
 
-        # Targets with different priorities
+        # Targets with different priorities (lower value = higher priority)
         self.high_priority = Target(
             id="HIGH-PRIORITY",
             name="High Priority",
             target_type=TargetType.POINT,
             longitude=116.0,
             latitude=39.0,
-            priority=9
+            priority=1  # Highest priority (lowest value)
         )
 
         self.medium_priority = Target(
@@ -847,7 +847,7 @@ class TestGreedySchedulerPriorityOrdering:
             target_type=TargetType.POINT,
             longitude=116.5,
             latitude=39.5,
-            priority=5
+            priority=5  # Medium priority
         )
 
         self.low_priority = Target(
@@ -856,7 +856,7 @@ class TestGreedySchedulerPriorityOrdering:
             target_type=TargetType.POINT,
             longitude=117.0,
             latitude=40.0,
-            priority=1
+            priority=9  # Lowest priority (highest value)
         )
 
     def test_priority_sorting(self):

@@ -14,6 +14,10 @@ from .quality_metrics import (
     WindowQualityAnalysis,
     QualityMetricsCollector,
 )
+from .metrics import (
+    PerformanceMetrics,
+    MetricsCalculator,
+)
 
 __all__ = [
     'SchedulerBenchmark',
@@ -22,4 +26,6 @@ __all__ = [
     'ScheduleQualityAnalyzer',
     'WindowQualityAnalysis',
     'QualityMetricsCollector',
+    'PerformanceMetrics',
+    'MetricsCalculator',
 ]

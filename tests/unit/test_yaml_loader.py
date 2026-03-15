@@ -2,8 +2,12 @@
 YAML场景配置解析器的单元测试
 """
 
-import pytest
+import sys
 import os
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
+import pytest
 import tempfile
 from datetime import datetime
 from utils.yaml_loader import YamlLoader

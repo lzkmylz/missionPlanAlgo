@@ -129,6 +129,7 @@ class TestGroundStationPool:
             ant.elevation_min = 5.0
             ant.elevation_max = 90.0
             ant.data_rate = 300.0
+            ant.min_switch_time_seconds = 60.0  # Add required attribute
             antennas.append(ant)
         return antennas
 
@@ -272,6 +273,7 @@ class TestResourceAllocator:
             for j, ant in enumerate(gs.antennas):
                 ant.id = f'ANT-{i*2+j+1:02d}'
                 ant.ground_station_id = gs.id
+                ant.min_switch_time_seconds = 60.0  # Add required attribute
 
         return ResourceAllocator(satellites, stations)
 
