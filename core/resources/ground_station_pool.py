@@ -5,10 +5,14 @@ Manages antenna allocation and scheduling for ground station contacts.
 """
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from core.models.ground_station import GroundStation, Antenna
+from core.constants import (
+    DEFAULT_ACQUISITION_TIME_SECONDS,
+    DEFAULT_MIN_SWITCH_TIME_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,13 +177,15 @@ class GroundStationPool:
     def is_antenna_available(self,
                              antenna_id: str,
                              start_time: datetime,
-                             end_time: datetime) -> bool:
+                             end_time: datetime,
+                             switch_time_seconds: Optional[float] = None) -> bool:
         """Check if antenna is available in time window
 
         Args:
             antenna_id: Antenna ID to check
             start_time: Start of requested window
             end_time: End of requested window
+            switch_time_seconds: Optional switch time buffer to add before/after tasks
 
         Returns:
             True if antenna is available
@@ -187,10 +193,20 @@ class GroundStationPool:
         if antenna_id not in self._allocations:
             return False
 
+        # Get antenna's default switch time if not specified
+        if switch_time_seconds is None and antenna_id in self.antennas:
+            switch_time_seconds = self.antennas[antenna_id].min_switch_time_seconds
+        elif switch_time_seconds is None:
+            switch_time_seconds = 0.0
+
+        # Apply switch time buffer
+        buffered_start = start_time - timedelta(seconds=switch_time_seconds)
+        buffered_end = end_time + timedelta(seconds=switch_time_seconds)
+
         # Check for conflicts with existing allocations
         for alloc_start, alloc_end, _ in self._allocations[antenna_id]:
-            # Check for overlap
-            if start_time < alloc_end and end_time > alloc_start:
+            # Check for overlap with buffered window
+            if buffered_start < alloc_end and buffered_end > alloc_start:
                 # Time windows overlap
                 return False
 
@@ -247,6 +263,35 @@ class GroundStationPool:
             GroundStation or None
         """
         return self.stations.get(station_id)
+
+    def get_antenna_acquisition_time(self, antenna_id: str) -> float:
+        """Get acquisition time for an antenna
+
+        Args:
+            antenna_id: Antenna ID
+
+        Returns:
+            Acquisition time in seconds
+        """
+        if antenna_id in self.antennas:
+            return self.antennas[antenna_id].acquisition_time_seconds
+        return DEFAULT_ACQUISITION_TIME_SECONDS
+
+    def get_antenna_switch_time(self,
+                                antenna_id: str,
+                                same_satellite: bool = False) -> float:
+        """Get switch time for an antenna
+
+        Args:
+            antenna_id: Antenna ID
+            same_satellite: Whether switching between tasks for same satellite
+
+        Returns:
+            Switch time in seconds
+        """
+        if antenna_id in self.antennas:
+            return self.antennas[antenna_id].get_effective_switch_time(same_satellite)
+        return DEFAULT_MIN_SWITCH_TIME_SECONDS
 
     def get_allocation_status(self) -> Dict[str, Any]:
         """Get overall allocation status

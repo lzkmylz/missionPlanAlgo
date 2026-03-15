@@ -53,16 +53,16 @@ class TabuScheduler(MetaheuristicScheduler):
                 - random_seed: Random seed (optional)
         """
         config = config or {}
-        # 平衡模式: 默认50代
+        # 默认100代
         if 'max_iterations' not in config and 'generations' not in config:
-            config['max_iterations'] = 50
+            config['max_iterations'] = 100
 
         super().__init__("Tabu", config)
         config = config or {}
 
-        # Tabu-specific parameters - 平衡模式优化
+        # Tabu-specific parameters
         self.tabu_tenure = config.get('tabu_tenure', 10)
-        self.neighborhood_size = config.get('neighborhood_size', 15)  # 从20降低
+        self.neighborhood_size = config.get('neighborhood_size', 20)
         self.aspiration_threshold = config.get('aspiration_threshold', 0.05)
 
         # Validate tabu_tenure

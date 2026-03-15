@@ -287,7 +287,12 @@ class OrekitVisibilityCalculator(VisibilityCalculator):
 
         # Phase 3: 如果启用Java Orekit，尝试使用
         if self.use_java_orekit:
-            return self._propagate_with_java_orekit(satellite, dt)
+            try:
+                return self._propagate_with_java_orekit(satellite, dt)
+            except (RuntimeError, Exception) as e:
+                # JVM不可用或Java传播失败时，回退到简化模型
+                logger.debug(f"Java Orekit failed: {e}. Falling back to simplified model.")
+                return self._propagate_simplified(satellite, dt)
 
         # 使用简化轨道模型
         return self._propagate_simplified(satellite, dt)

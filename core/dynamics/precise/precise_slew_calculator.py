@@ -83,10 +83,15 @@ class SatelliteDynamicsConfig:
     def _update_trajectory_config(self):
         """更新轨迹规划配置以包含分轴限制"""
         self.trajectory_config.max_angular_velocity = self.max_angular_velocity
-        self.trajectory_config.max_roll_rate = self.max_roll_rate
-        self.trajectory_config.max_pitch_rate = self.max_pitch_rate
-        self.trajectory_config.max_roll_acceleration = self.max_roll_acceleration
-        self.trajectory_config.max_pitch_acceleration = self.max_pitch_acceleration
+        # 只有在设置了分轴限制时才更新，否则保留TrajectoryPlannerConfig的默认值
+        if self.max_roll_rate is not None:
+            self.trajectory_config.max_roll_rate = self.max_roll_rate
+        if self.max_pitch_rate is not None:
+            self.trajectory_config.max_pitch_rate = self.max_pitch_rate
+        if self.max_roll_acceleration is not None:
+            self.trajectory_config.max_roll_acceleration = self.max_roll_acceleration
+        if self.max_pitch_acceleration is not None:
+            self.trajectory_config.max_pitch_acceleration = self.max_pitch_acceleration
         self.trajectory_config.settling_time = self.settling_time
 
     @property

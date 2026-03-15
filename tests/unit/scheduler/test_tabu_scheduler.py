@@ -12,15 +12,36 @@ from scheduler.metaheuristic.tabu_scheduler import TabuScheduler, TabuSolution
 from scheduler.base_scheduler import ScheduleResult, TaskFailureReason
 
 
+class MockSatellite:
+    """用于测试的简单卫星模拟类"""
+    def __init__(self, sat_id="SAT-01"):
+        self.id = sat_id
+        self.mass = 100.0
+        self.physical_parameters = {
+            'mass': 100.0,
+            'dimensions': {'length': 1.0, 'width': 1.0, 'height': 1.0}
+        }
+
+        # Capabilities
+        self.capabilities = Mock()
+        self.capabilities.storage_capacity = 100
+        self.capabilities.max_roll_angle = 45.0
+        self.capabilities.max_pitch_angle = 30.0
+        self.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
+        self.capabilities.data_rate = 300.0  # Mbps, required by imaging_time_calculator
+        self.capabilities.power_capacity = 2000.0  # Required by power calculator
+        # Required by BatchOrbitConstraintChecker
+        self.capabilities.max_starts_per_orbit = 5
+        self.capabilities.max_work_time_per_orbit = 600.0
+
+        # Orbit - required by BatchOrbitConstraintChecker
+        self.orbit = Mock()
+        self.orbit.get_period = Mock(return_value=5400.0)  # ~90 minutes LEO period
+
+
 def create_mock_satellite(sat_id="SAT-01"):
     """创建带有完整capabilities的模拟卫星"""
-    sat = Mock()
-    sat.id = sat_id
-    sat.capabilities = Mock()
-    sat.capabilities.storage_capacity = 100
-    sat.capabilities.max_roll_angle= 45.0
-    sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
-    return sat
+    return MockSatellite(sat_id)
 
 
 class TestTabuSolution:
@@ -151,16 +172,12 @@ class TestTabuSchedulerWithCache:
             target = Mock()
             target.id = f"TARGET-{i:02d}"
             target.required_observations = 1
+            target.priority = 50  # Default priority
             targets.append(target)
 
         satellites = []
         for i in range(num_satellites):
-            sat = Mock()
-            sat.id = f"SAT-{i:02d}"
-            sat.capabilities = Mock()
-            sat.capabilities.storage_capacity = 100
-            sat.capabilities.max_roll_angle= 45.0
-            sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
+            sat = create_mock_satellite(f"SAT-{i:02d}")
             satellites.append(sat)
 
         mission = Mock()
@@ -363,12 +380,8 @@ class TestTabuSchedulerEdgeCases:
         mock_target.required_observations = 1
         mock_mission.targets = [mock_target]
 
-        mock_sat = Mock()
-        mock_sat.id = "SAT-01"
-        mock_sat.capabilities = Mock()
-        mock_sat.capabilities.storage_capacity = 100
-        mock_sat.capabilities.max_roll_angle= 45.0
-        mock_sat.capabilities.agility = {'max_slew_rate': 3.0, 'settling_time': 5.0}
+        # Use MockSatellite class which has all required attributes
+        mock_sat = create_mock_satellite("SAT-01")
         mock_mission.satellites = [mock_sat]
         mock_mission.start_time = datetime(2024, 1, 1)
 

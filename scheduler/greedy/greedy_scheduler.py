@@ -104,8 +104,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         quality_config = config.get('quality_config')
         if isinstance(quality_config, dict):
             quality_config = QualityScoreConfig.from_dict(quality_config)
-        QualityAwareMixin.__init__(
-            self,
+        self.__init_quality_aware__(
             quality_config=quality_config,
             enable_quality_filtering=config.get('enable_quality_filtering', True),
             min_quality_threshold=config.get('min_quality_threshold', 0.3),
@@ -381,7 +380,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         # ========== 空间换时间：姿态预计算缓存 ==========
         # 使用Java预计算的姿态采样数据，避免实时计算的性能开销
         # Java在可见性计算阶段已经计算了所有窗口的完整姿态采样（1秒步长）
-        if self.config.get('enable_attitude_precache', True):
+        if self.config.get('enable_attitude_precache', False):
             logger = logging.getLogger(__name__)
             logger.info("初始化姿态预计算缓存（使用Java预计算数据）...")
             t_precache = self._perf_start()

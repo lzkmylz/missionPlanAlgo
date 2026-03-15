@@ -18,7 +18,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
       "data_rate": 1500.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+      "data_rate_comment": "数据传输速率 1500Mbps - 该天线的最大接收速率",
+      "acquisition_time_seconds": 15.0,
+      "acquisition_time_comment": "建链时间 15秒 - 指向5秒 + 捕获5秒 + 同步5秒",
+      "min_switch_time_seconds": 30.0,
+      "min_switch_time_comment": "最小切换时间 30秒 - 天线重新指向和系统切换"
     },
     {
       "_comment": "天线配置 - 负责接收卫星下传数据",
@@ -29,7 +33,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
       "data_rate": 1500.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+      "data_rate_comment": "数据传输速率 1500Mbps - 该天线的最大接收速率",
+      "acquisition_time_seconds": 15.0,
+      "acquisition_time_comment": "建链时间 15秒 - 指向5秒 + 捕获5秒 + 同步5秒",
+      "min_switch_time_seconds": 30.0,
+      "min_switch_time_comment": "最小切换时间 30秒 - 天线重新指向和系统切换"
     },
     {
       "_comment": "天线配置 - 负责接收卫星下传数据",
@@ -40,7 +48,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
       "data_rate": 1500.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+      "data_rate_comment": "数据传输速率 1500Mbps - 该天线的最大接收速率",
+      "acquisition_time_seconds": 15.0,
+      "acquisition_time_comment": "建链时间 15秒 - 指向5秒 + 捕获5秒 + 同步5秒",
+      "min_switch_time_seconds": 30.0,
+      "min_switch_time_comment": "最小切换时间 30秒 - 天线重新指向和系统切换"
     },
     {
       "_comment": "天线配置 - 负责接收卫星下传数据",
@@ -51,7 +63,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 正头顶方向",
       "data_rate": 1500.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 该天线的最大接收速率"
+      "data_rate_comment": "数据传输速率 1500Mbps - 该天线的最大接收速率",
+      "acquisition_time_seconds": 15.0,
+      "acquisition_time_comment": "建链时间 15秒 - 指向5秒 + 捕获5秒 + 同步5秒",
+      "min_switch_time_seconds": 30.0,
+      "min_switch_time_comment": "最小切换时间 30秒 - 天线重新指向和系统切换"
     }
   ]
 }

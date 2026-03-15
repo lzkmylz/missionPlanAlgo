@@ -18,14 +18,14 @@ def get_project_root():
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
 
-class TestInstallOrekitDataScript:
-    """测试install_orekit_data.sh脚本"""
+class TestDownloadOrekitDataScript:
+    """测试download_orekit_data.sh脚本"""
 
     def test_script_file_exists(self):
         """测试脚本文件存在"""
         script_path = os.path.join(
             get_project_root(),
-            'scripts', 'install_orekit_data.sh'
+            'scripts', 'download_orekit_data.sh'
         )
         assert os.path.exists(script_path), f"脚本文件不存在: {script_path}"
 
@@ -33,7 +33,7 @@ class TestInstallOrekitDataScript:
         """测试脚本可执行"""
         script_path = os.path.join(
             get_project_root(),
-            'scripts', 'install_orekit_data.sh'
+            'scripts', 'download_orekit_data.sh'
         )
         if os.path.exists(script_path):
             assert os.access(script_path, os.X_OK), "脚本没有执行权限"
@@ -42,7 +42,7 @@ class TestInstallOrekitDataScript:
         """测试脚本包含必要的组件"""
         script_path = os.path.join(
             get_project_root(),
-            'scripts', 'install_orekit_data.sh'
+            'scripts', 'download_orekit_data.sh'
         )
 
         if not os.path.exists(script_path):
@@ -64,7 +64,7 @@ class TestInstallOrekitDataScript:
         """测试脚本有shebang行"""
         script_path = os.path.join(
             get_project_root(),
-            'scripts', 'install_orekit_data.sh'
+            'scripts', 'download_orekit_data.sh'
         )
 
         if not os.path.exists(script_path):
@@ -242,7 +242,7 @@ class TestScriptFunctionality:
         """测试安装脚本dry-run模式"""
         script_path = os.path.join(
             get_project_root(),
-            'scripts', 'install_orekit_data.sh'
+            'scripts', 'download_orekit_data.sh'
         )
 
         if not os.path.exists(script_path):
@@ -280,7 +280,7 @@ class TestScriptErrorHandling:
         """测试安装脚本处理下载失败"""
         script_path = os.path.join(
             get_project_root(),
-            'scripts', 'install_orekit_data.sh'
+            'scripts', 'download_orekit_data.sh'
         )
 
         if not os.path.exists(script_path):

@@ -12,6 +12,9 @@ import math
 from core.constants import (
     EARTH_RADIUS_M,
     DEFAULT_DATA_RATE_MBPS,
+    DEFAULT_ACQUISITION_TIME_SECONDS,
+    DEFAULT_MIN_SWITCH_TIME_SECONDS,
+    FAST_SWITCH_TIME_SECONDS,
 )
 
 
@@ -27,6 +30,8 @@ class Antenna:
         elevation_max: 最大仰角（度）
         data_rate: 数据传输速率（Mbps）
         slew_rate: 天线转动速率（度/秒）
+        acquisition_time_seconds: 建链耗时（秒）- 指向、捕获、同步
+        min_switch_time_seconds: 最小任务切换时间（秒）- 连续任务间缓冲
     """
     id: str
     name: str = ""
@@ -34,6 +39,8 @@ class Antenna:
     elevation_max: float = 90.0  # 度
     data_rate: float = DEFAULT_DATA_RATE_MBPS  # Mbps
     slew_rate: float = 10.0  # 度/秒
+    acquisition_time_seconds: float = DEFAULT_ACQUISITION_TIME_SECONDS  # 秒 - 建链耗时
+    min_switch_time_seconds: float = DEFAULT_MIN_SWITCH_TIME_SECONDS  # 秒 - 任务切换缓冲
 
     def can_track(self, elevation: float) -> bool:
         """检查是否可以在给定仰角跟踪"""
@@ -43,6 +50,21 @@ class Antenna:
         """计算转台时间（秒）"""
         return abs(azimuth_change) / self.slew_rate
 
+    def get_effective_switch_time(self, same_satellite: bool = False) -> float:
+        """
+        获取有效切换时间
+
+        Args:
+            same_satellite: 是否为同一卫星的连续任务
+
+        Returns:
+            切换时间（秒）
+        """
+        if same_satellite:
+            # 同一卫星连续任务，切换更快
+            return min(self.min_switch_time_seconds, FAST_SWITCH_TIME_SECONDS)
+        return self.min_switch_time_seconds
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'id': self.id,
@@ -51,6 +73,8 @@ class Antenna:
             'elevation_max': self.elevation_max,
             'data_rate': self.data_rate,
             'slew_rate': self.slew_rate,
+            'acquisition_time_seconds': self.acquisition_time_seconds,
+            'min_switch_time_seconds': self.min_switch_time_seconds,
         }
 
     @classmethod
@@ -62,6 +86,8 @@ class Antenna:
             elevation_max=data.get('elevation_max', 90.0),
             data_rate=data.get('data_rate', DEFAULT_DATA_RATE_MBPS),
             slew_rate=data.get('slew_rate', 10.0),
+            acquisition_time_seconds=data.get('acquisition_time_seconds', DEFAULT_ACQUISITION_TIME_SECONDS),
+            min_switch_time_seconds=data.get('min_switch_time_seconds', DEFAULT_MIN_SWITCH_TIME_SECONDS),
         )
 
 

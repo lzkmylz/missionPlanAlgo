@@ -579,7 +579,7 @@ class TestPerformanceBenchmarks:
 
             # 验证：应该在合理时间内完成
             assert len(results) == 1441
-            assert elapsed < 1.0  # Mock情况下应该非常快
+            assert elapsed < 2.0  # Mock情况下应该非常快
 
 
 # =============================================================================

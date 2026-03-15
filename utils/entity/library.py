@@ -263,7 +263,9 @@ class EntityLibrary:
                         "id": "BJ-ANT-01",
                         "elevation_min": 5.0,
                         "elevation_max": 90.0,
-                        "data_rate": 450.0
+                        "data_rate": 450.0,
+                        "acquisition_time_seconds": 15.0,
+                        "min_switch_time_seconds": 30.0
                     }
                 ]
             },
@@ -278,7 +280,9 @@ class EntityLibrary:
                         "id": "KS-ANT-01",
                         "elevation_min": 5.0,
                         "elevation_max": 90.0,
-                        "data_rate": 300.0
+                        "data_rate": 300.0,
+                        "acquisition_time_seconds": 20.0,
+                        "min_switch_time_seconds": 45.0
                     }
                 ]
             }

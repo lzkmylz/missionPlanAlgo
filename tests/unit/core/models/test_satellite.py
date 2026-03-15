@@ -547,7 +547,8 @@ class TestSatelliteInitialization:
             sat_type=SatelliteType.OPTICAL_1
         )
         assert ImagingMode.PUSH_BROOM in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_roll_angle== 30.0
+        assert satellite.capabilities.max_roll_angle == 35.0  # 光学卫星: 35°滚转
+        assert satellite.capabilities.max_pitch_angle == 20.0  # 光学卫星: 20°俯仰
         assert satellite.capabilities.resolution == 10.0
         assert satellite.capabilities.storage_capacity == 500.0
         assert satellite.capabilities.power_capacity == 2000.0
@@ -562,7 +563,8 @@ class TestSatelliteInitialization:
         )
         assert ImagingMode.PUSH_BROOM in satellite.capabilities.imaging_modes
         assert ImagingMode.FRAME in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_roll_angle== 45.0
+        assert satellite.capabilities.max_roll_angle == 35.0  # 光学卫星: 35°滚转
+        assert satellite.capabilities.max_pitch_angle == 20.0  # 光学卫星: 20°俯仰
         assert satellite.capabilities.resolution == 5.0
         assert satellite.capabilities.storage_capacity == 800.0
         assert satellite.capabilities.power_capacity == 2500.0
@@ -577,7 +579,8 @@ class TestSatelliteInitialization:
         assert ImagingMode.SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.SLIDING_SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.STRIPMAP in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_roll_angle== 35.0
+        assert satellite.capabilities.max_roll_angle == 45.0  # SAR卫星: 45°滚转
+        assert satellite.capabilities.max_pitch_angle == 30.0  # SAR卫星: 30°俯仰
         assert satellite.capabilities.resolution == 3.0
         assert satellite.capabilities.storage_capacity == 1000.0
         assert satellite.capabilities.power_capacity == 3000.0
@@ -592,7 +595,8 @@ class TestSatelliteInitialization:
         assert ImagingMode.SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.SLIDING_SPOTLIGHT in satellite.capabilities.imaging_modes
         assert ImagingMode.STRIPMAP in satellite.capabilities.imaging_modes
-        assert satellite.capabilities.max_roll_angle== 50.0
+        assert satellite.capabilities.max_roll_angle == 45.0  # SAR卫星: 45°滚转
+        assert satellite.capabilities.max_pitch_angle == 30.0  # SAR卫星: 30°俯仰
         assert satellite.capabilities.resolution == 1.0
         assert satellite.capabilities.storage_capacity == 1500.0
         assert satellite.capabilities.power_capacity == 4000.0

@@ -18,7 +18,12 @@ from scheduler.base_scheduler import ScheduledTask
 
 from .storage import StorageState
 from .downlink_task import DownlinkTask
-from .utils import calculate_downlink_duration, DEFAULT_LINK_SETUP_TIME_SECONDS
+from .utils import (
+    calculate_downlink_duration,
+    DEFAULT_LINK_SETUP_TIME_SECONDS,
+    calculate_downlink_duration_with_antenna,
+    calculate_required_time_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,17 +114,53 @@ class GroundStationScheduler:
         self,
         ground_station_id: str,
         antenna_id: str,
-        time_window: Tuple[datetime, datetime]
+        time_window: Tuple[datetime, datetime],
+        switch_time_seconds: Optional[float] = None,
+        satellite_id: Optional[str] = None
     ) -> bool:
-        """检查指定天线在指定时间窗口是否有冲突"""
+        """
+        检查指定天线在指定时间窗口是否有冲突
+
+        考虑切换时间缓冲：新任务开始前需要 min_switch_time_seconds
+
+        Args:
+            ground_station_id: 地面站ID
+            antenna_id: 天线ID
+            time_window: (start, end) 时间窗口
+            switch_time_seconds: 切换时间（秒），默认使用天线配置
+            satellite_id: 卫星ID，用于判断是否为同一卫星连续任务
+        """
         key = (ground_station_id, antenna_id)
         if key not in self._downlink_allocations:
             return False
 
         start_time, end_time = time_window
 
+        # 获取切换时间
+        if switch_time_seconds is None:
+            gs = self.ground_station_pool.get_station(ground_station_id)
+            if gs:
+                for ant in gs.antennas:
+                    if ant.id == antenna_id:
+                        # 判断是否为同一卫星
+                        same_sat = False
+                        if self._downlink_allocations[key]:
+                            last_alloc = self._downlink_allocations[key][-1]
+                            last_sat_id = last_alloc[2]  # satellite_id is at index 2
+                            same_sat = (last_sat_id == satellite_id)
+                        switch_time_seconds = ant.get_effective_switch_time(same_sat)
+                        break
+                else:
+                    switch_time_seconds = 30.0
+            else:
+                switch_time_seconds = 30.0
+
+        # 应用切换时间缓冲
+        buffered_start = start_time - timedelta(seconds=switch_time_seconds)
+        buffered_end = end_time + timedelta(seconds=switch_time_seconds)
+
         for alloc_start, alloc_end, _, _ in self._downlink_allocations[key]:
-            if start_time < alloc_end and end_time > alloc_start:
+            if buffered_start < alloc_end and buffered_end > alloc_start:
                 return True
 
         return False
@@ -127,16 +168,43 @@ class GroundStationScheduler:
     def find_available_antenna(
         self,
         ground_station_id: str,
-        time_window: Tuple[datetime, datetime]
+        time_window: Tuple[datetime, datetime],
+        satellite_id: Optional[str] = None,
+        data_size_gb: Optional[float] = None
     ) -> Optional[Tuple[str, float]]:
-        """查找地面站中可用的天线"""
+        """
+        查找地面站中可用的天线
+
+        Args:
+            ground_station_id: 地面站ID
+            time_window: (start, end) 时间窗口
+            satellite_id: 卫星ID，用于切换时间优化
+            data_size_gb: 数据量（GB），用于验证窗口是否足够
+
+        Returns:
+            (antenna_id, data_rate) 或 None
+        """
         gs = self.ground_station_pool.get_station(ground_station_id)
         if not gs:
             return None
 
         for antenna in gs.antennas:
-            if not self.has_antenna_conflict(ground_station_id, antenna.id, time_window):
+            # 检查冲突（考虑切换时间）
+            if not self.has_antenna_conflict(
+                ground_station_id, antenna.id, time_window,
+                satellite_id=satellite_id
+            ):
                 effective_data_rate = antenna.data_rate if antenna.data_rate > 0 else self.data_rate_mbps
+
+                # 如果需要，验证窗口是否足够长
+                if data_size_gb is not None:
+                    required_duration = calculate_downlink_duration_with_antenna(
+                        data_size_gb, effective_data_rate, antenna
+                    )
+                    available_duration = (time_window[1] - time_window[0]).total_seconds()
+                    if required_duration > available_duration:
+                        continue  # 窗口不够长，尝试下一个天线
+
                 return (antenna.id, effective_data_rate)
 
         return None
@@ -189,7 +257,9 @@ class GroundStationScheduler:
 
         # 步骤4: 选择地面站和天线
         antenna_selection = self._select_antenna(
-            ground_station_id, downlink_start, downlink_end
+            ground_station_id, downlink_start, downlink_end,
+            satellite_id=imaging_task.satellite_id,
+            data_size_gb=data_size_gb
         )
         if antenna_selection is None:
             return None
@@ -256,20 +326,33 @@ class GroundStationScheduler:
         # 回退到全局默认值
         return self.data_rate_mbps
 
-    def _calculate_downlink_duration_with_setup(self, data_size_gb: float, satellite_id: Optional[str] = None) -> float:
-        """计算数传所需时长（含链路建立时间）
+    def _calculate_downlink_duration_with_setup(
+        self,
+        data_size_gb: float,
+        satellite_id: Optional[str] = None,
+        antenna: Optional[Any] = None
+    ) -> float:
+        """计算数传所需时长（含建链时间）
+
+        优先使用天线特定的建链时间
 
         Args:
             data_size_gb: 数据大小 (GB)
             satellite_id: 卫星ID (用于获取该卫星的数据率，可选)
+            antenna: 天线对象 (可选，用于获取天线特定的建链时间)
 
         Returns:
             数传时长（秒）
         """
-        # 如果指定了卫星ID，使用该卫星的数据率
         data_rate = self._get_satellite_data_rate(satellite_id) if satellite_id else self.data_rate_mbps
+
+        # 使用天线特定的建链时间
+        acquisition_time = self.link_setup_time_seconds
+        if antenna is not None:
+            acquisition_time = antenna.acquisition_time_seconds
+
         return calculate_downlink_duration(
-            data_size_gb, data_rate, self.link_setup_time_seconds
+            data_size_gb, data_rate, acquisition_time
         )
 
     def _check_visibility_duration(
@@ -306,9 +389,18 @@ class GroundStationScheduler:
         self,
         ground_station_id: Optional[str],
         downlink_start: datetime,
-        downlink_end: datetime
+        downlink_end: datetime,
+        satellite_id: Optional[str] = None,
+        data_size_gb: Optional[float] = None
     ) -> Optional[Tuple[str, str, float]]:
         """选择地面站和可用天线
+
+        Args:
+            ground_station_id: 指定地面站ID（可选）
+            downlink_start: 数传开始时间
+            downlink_end: 数传结束时间
+            satellite_id: 卫星ID（用于切换时间优化）
+            data_size_gb: 数据量（用于验证窗口）
 
         Returns:
             (ground_station_id, antenna_id, data_rate) 元组
@@ -316,13 +408,19 @@ class GroundStationScheduler:
         time_window = (downlink_start, downlink_end)
 
         if ground_station_id:
-            antenna_info = self.find_available_antenna(ground_station_id, time_window)
+            antenna_info = self.find_available_antenna(
+                ground_station_id, time_window,
+                satellite_id=satellite_id, data_size_gb=data_size_gb
+            )
             if antenna_info:
                 return (ground_station_id, antenna_info[0], antenna_info[1])
             return None
 
         for gs_id in self.ground_station_pool.stations:
-            antenna_info = self.find_available_antenna(gs_id, time_window)
+            antenna_info = self.find_available_antenna(
+                gs_id, time_window,
+                satellite_id=satellite_id, data_size_gb=data_size_gb
+            )
             if antenna_info:
                 return (gs_id, antenna_info[0], antenna_info[1])
 
@@ -393,6 +491,24 @@ class GroundStationScheduler:
         data_rate: float
     ) -> DownlinkTask:
         """创建数传任务"""
+        # 获取天线的建链时间和切换时间
+        acquisition_time = self.link_setup_time_seconds
+        switch_time = 0.0
+
+        gs = self.ground_station_pool.get_station(ground_station_id)
+        if gs:
+            for ant in gs.antennas:
+                if ant.id == antenna_id:
+                    acquisition_time = ant.acquisition_time_seconds
+                    # 计算与前任务的切换时间
+                    key = (ground_station_id, antenna_id)
+                    if self._downlink_allocations.get(key):
+                        last_alloc = self._downlink_allocations[key][-1]
+                        last_sat_id = last_alloc[2]
+                        same_sat = (last_sat_id == imaging_task.satellite_id)
+                        switch_time = ant.get_effective_switch_time(same_sat)
+                    break
+
         return DownlinkTask(
             task_id=f"DL-{imaging_task.task_id}",
             satellite_id=imaging_task.satellite_id,
@@ -403,7 +519,8 @@ class GroundStationScheduler:
             antenna_id=antenna_id,
             related_imaging_task_id=imaging_task.task_id,
             effective_data_rate=data_rate,
-            link_setup_time_seconds=self.link_setup_time_seconds
+            acquisition_time_seconds=acquisition_time,
+            switch_time_seconds=switch_time
         )
 
     # ==================== 批量调度方法 ====================

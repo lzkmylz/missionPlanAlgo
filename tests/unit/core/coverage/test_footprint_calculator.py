@@ -156,11 +156,11 @@ class TestCalculateFootprint:
         return R * c
 
 
-class TestCalculateOffNadirAngle:
-    """Test off-nadir angle calculation"""
+class TestCalculateRequiredRollAngle:
+    """Test required roll angle calculation (formerly off-nadir)"""
 
     def test_off_nadir_at_nadir(self):
-        """Test off-nadir angle for target directly below satellite"""
+        """Test roll angle for target directly below satellite"""
         from core.coverage.footprint_calculator import FootprintCalculator
 
         calc = FootprintCalculator(satellite_altitude_km=500.0)
@@ -169,13 +169,13 @@ class TestCalculateOffNadirAngle:
         satellite_position = (6371000.0 + 500000.0, 0.0, 0.0)  # ECEF (m)
         target_position = (0.0, 0.0)  # (lon, lat) at nadir
 
-        angle = calc.calculate_off_nadir_angle(satellite_position, target_position)
+        angle = calc.calculate_required_roll_angle(satellite_position, target_position)
 
         # Should be approximately 0 degrees
         assert abs(angle) < 0.1  # Allow small numerical error
 
     def test_off_nadir_with_displacement(self):
-        """Test off-nadir angle for displaced target"""
+        """Test roll angle for displaced target"""
         from core.coverage.footprint_calculator import FootprintCalculator
 
         calc = FootprintCalculator(satellite_altitude_km=500.0)
@@ -187,14 +187,14 @@ class TestCalculateOffNadirAngle:
         # At equator, 1 degree longitude ~ 111km
         target_position = (0.45, 0.0)  # (lon, lat)
 
-        angle = calc.calculate_off_nadir_angle(satellite_position, target_position)
+        angle = calc.calculate_required_roll_angle(satellite_position, target_position)
 
         # Expected angle: atan2(50, 500) ~ 5.7 degrees
         expected_angle = math.degrees(math.atan2(50, 500))
         assert abs(angle - expected_angle) < 1.0  # Allow 1 degree tolerance
 
     def test_off_nadir_symmetry(self):
-        """Test off-nadir angle is symmetric for left/right displacement"""
+        """Test roll angle is symmetric for left/right displacement"""
         from core.coverage.footprint_calculator import FootprintCalculator
 
         calc = FootprintCalculator(satellite_altitude_km=500.0)
@@ -205,8 +205,8 @@ class TestCalculateOffNadirAngle:
         target_left = (-0.45, 0.0)
         target_right = (0.45, 0.0)
 
-        angle_left = calc.calculate_off_nadir_angle(satellite_position, target_left)
-        angle_right = calc.calculate_off_nadir_angle(satellite_position, target_right)
+        angle_left = calc.calculate_required_roll_angle(satellite_position, target_left)
+        angle_right = calc.calculate_required_roll_angle(satellite_position, target_right)
 
         # Absolute angles should be equal
         assert abs(abs(angle_left) - abs(angle_right)) < 0.1
@@ -436,7 +436,7 @@ class TestEdgeCases:
         calc = FootprintCalculator()
 
         with pytest.raises((ValueError, TypeError)):
-            calc.calculate_off_nadir_angle(None, (0.0, 0.0))
+            calc.calculate_required_roll_angle(None, (0.0, 0.0))
 
     def test_invalid_target_type(self):
         """Test handling of area target (not point)"""

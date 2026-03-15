@@ -16,7 +16,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
       "data_rate": 450.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率",
+      "acquisition_time_seconds": 18.0,
+      "acquisition_time_comment": "建链时间 18秒 - 指向6秒 + 捕获6秒 + 同步6秒",
+      "min_switch_time_seconds": 35.0,
+      "min_switch_time_comment": "最小切换时间 35秒 - 天线重新指向和系统切换"
     },
     {
       "id": "SY-ANT-02",
@@ -25,7 +29,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
       "data_rate": 450.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率",
+      "acquisition_time_seconds": 18.0,
+      "acquisition_time_comment": "建链时间 18秒 - 指向6秒 + 捕获6秒 + 同步6秒",
+      "min_switch_time_seconds": 35.0,
+      "min_switch_time_comment": "最小切换时间 35秒 - 天线重新指向和系统切换"
     },
     {
       "id": "SY-ANT-03",
@@ -34,7 +42,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
       "data_rate": 450.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率",
+      "acquisition_time_seconds": 18.0,
+      "acquisition_time_comment": "建链时间 18秒 - 指向6秒 + 捕获6秒 + 同步6秒",
+      "min_switch_time_seconds": 35.0,
+      "min_switch_time_comment": "最小切换时间 35秒 - 天线重新指向和系统切换"
     },
     {
       "id": "SY-ANT-04",
@@ -43,7 +55,11 @@
       "elevation_max": 90.0,
       "elevation_max_comment": "最大仰角 90度 - 天线最高工作角度(天顶)",
       "data_rate": 450.0,
-      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率"
+      "data_rate_comment": "数据传输速率 450Mbps - 单天线最大传输速率",
+      "acquisition_time_seconds": 18.0,
+      "acquisition_time_comment": "建链时间 18秒 - 指向6秒 + 捕获6秒 + 同步6秒",
+      "min_switch_time_seconds": 35.0,
+      "min_switch_time_comment": "最小切换时间 35秒 - 天线重新指向和系统切换"
     }
   ],
   "antennas_comment": "4副天线 - 支持多星同时接收"
