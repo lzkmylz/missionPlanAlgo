@@ -24,6 +24,9 @@ public class AttitudeCalculator {
     // 地球半径（米）
     private static final double EARTH_RADIUS = Constants.WGS84_EARTH_EQUATORIAL_RADIUS;
 
+    // 默认容差系数（1.1表示10%容差）
+    private static final double DEFAULT_TOLERANCE = 1.1;
+
     /**
      * 姿态角结果
      */
@@ -60,6 +63,14 @@ public class AttitudeCalculator {
             double targetLat,
             double targetLon,
             double targetAlt) {
+
+        // 输入验证
+        if (satPosition == null || satPosition.length != 3) {
+            throw new IllegalArgumentException("satPosition must be non-null array of length 3");
+        }
+        if (satVelocity == null || satVelocity.length != 3) {
+            throw new IllegalArgumentException("satVelocity must be non-null array of length 3");
+        }
 
         // 1. 构建LVLH坐标系
         LVLHFrame lvlh = constructLVLHFrame(
@@ -220,6 +231,6 @@ public class AttitudeCalculator {
     public static boolean checkAttitudeConstraints(
             double roll, double pitch,
             double maxRoll, double maxPitch) {
-        return checkAttitudeConstraints(roll, pitch, maxRoll, maxPitch, 1.1);
+        return checkAttitudeConstraints(roll, pitch, maxRoll, maxPitch, DEFAULT_TOLERANCE);
     }
 }

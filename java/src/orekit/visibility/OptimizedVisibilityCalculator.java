@@ -24,8 +24,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 优化版可见性计算器
@@ -51,6 +55,13 @@ public class OptimizedVisibilityCalculator {
     // 地球半径
     private static final double EARTH_RADIUS = Constants.WGS84_EARTH_EQUATORIAL_RADIUS;
     private static final double EARTH_FLATTENING = Constants.WGS84_EARTH_FLATTENING;
+
+    // SLF4J日志
+    private static final Logger logger = LoggerFactory.getLogger(OptimizedVisibilityCalculator.class);
+
+    // 线程安全的调试计数器
+    private static final AtomicInteger debugCount = new AtomicInteger(0);
+    private static final int MAX_DEBUG_MESSAGES = 10;
 
     public OptimizedVisibilityCalculator() {
         this.orbitCache = new OrbitStateCache();
@@ -495,8 +506,6 @@ public class OptimizedVisibilityCalculator {
         return samples;
     }
 
-    private static int debugCount = 0;
-
     /**
      * 姿态约束时段类 - 记录满足约束的子时段
      */
@@ -565,23 +574,25 @@ public class OptimizedVisibilityCalculator {
                         intervals.add(new AttitudeFeasibleInterval(
                             intervalStart, intervalEnd, new ArrayList<>(currentSamples)));
 
-                        if (debugCount < 10) {
-                            System.out.println("[INTERVAL] " + satId + " -> " + targetId +
-                                ": found feasible interval " + String.format("%.0f", intervalStart) +
-                                "s to " + String.format("%.0f", intervalEnd) + "s (" +
-                                String.format("%.0f", intervalEnd - intervalStart) + "s)");
-                            debugCount++;
+                        if (debugCount.getAndIncrement() < MAX_DEBUG_MESSAGES) {
+                            logger.debug("[INTERVAL] {} -> {}: found feasible interval {}s to {}s ({}s)",
+                                satId, targetId,
+                                String.format("%.0f", intervalStart),
+                                String.format("%.0f", intervalEnd),
+                                String.format("%.0f", intervalEnd - intervalStart));
                         }
                     }
                     currentSamples.clear();
                 }
 
                 // 打印被过滤的采样点（用于调试）
-                if (debugCount < 10) {
-                    System.out.println("[FILTERED] " + satId + " -> " + targetId +
-                        ": roll=" + String.format("%.1f", roll) + "°, pitch=" + String.format("%.1f", pitch) +
-                        "° (limit: " + maxRoll + "/" + maxPitch + ") at t=" + String.format("%.0f", sample.timestamp) + "s");
-                    debugCount++;
+                if (debugCount.getAndIncrement() < MAX_DEBUG_MESSAGES) {
+                    logger.debug("[FILTERED] {} -> {}: roll={}°, pitch={}° (limit: {}/{}) at t={}s",
+                        satId, targetId,
+                        String.format("%.1f", roll),
+                        String.format("%.1f", pitch),
+                        maxRoll, maxPitch,
+                        String.format("%.0f", sample.timestamp));
                 }
             }
         }
