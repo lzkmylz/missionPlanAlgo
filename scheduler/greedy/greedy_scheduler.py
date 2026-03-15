@@ -444,7 +444,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         for task_idx, task in enumerate(pending_tasks):
             # 每100个任务报告进度
             if (task_idx + 1) % 100 == 0:
-                elapsed = time.perf_counter() - self._start_time if hasattr(self, '_start_time') and self._start_time else 0
+                elapsed = time.time() - self._start_time if hasattr(self, '_start_time') and self._start_time else 0
                 logger.info(f"调度进度: {task_idx + 1}/{total_tasks} 任务, 已调度 {len(scheduled_tasks)}, 耗时 {elapsed:.1f}s")
 
             task_t = self._perf_start()
@@ -741,33 +741,36 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             else:
                 self._task_count = 1
         else:
-            # 回退到实时批量计算（原逻辑）
-            attitude_cache = {}
-            if self._attitude_calculator is not None:
-                attitude_candidates = []
-                for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
-                    imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
-                    attitude_candidates.append((sat, task, imaging_time))
-
-                if attitude_candidates:
-                    attitude_cache = self._batch_precalculate_attitudes(attitude_candidates)
-
-            # 姿态预筛选
+            # 使用Java预计算的姿态角数据，禁止Python重新计算
             filtered_candidates = []
             for sat, window, imaging_mode, imaging_duration, window_start, window_end in candidates:
-                imaging_time = window_start + timedelta(seconds=(window_end - window_start).total_seconds() / 2)
-                attitude = attitude_cache.get((sat.id, imaging_time))
+                # 优先使用Java预计算的姿态采样数据
+                attitude_roll = None
+                attitude_pitch = None
 
-                if attitude is not None:
-                    # 分别检查滚转角和俯仰角（严格检查，不允许超出名义约束）
-                    if abs(attitude.roll) > sat.capabilities.max_roll_angle:
+                # 从window的attitude_samples获取姿态角
+                if hasattr(window, 'attitude_samples') and window.attitude_samples:
+                    # attitude_samples格式: [(timestamp, roll, pitch), ...]
+                    # 使用第一个采样点（窗口开始附近）的姿态角
+                    samples = window.attitude_samples
+                    if samples:
+                        # 取中间时刻的采样点
+                        mid_idx = len(samples) // 2
+                        attitude_roll = samples[mid_idx][1]
+                        attitude_pitch = samples[mid_idx][2]
+
+                if attitude_roll is not None and attitude_pitch is not None:
+                    # 使用Java预计算的姿态角进行约束检查
+                    if abs(attitude_roll) > sat.capabilities.max_roll_angle:
+                        phase2_attitude_roll += 1
                         continue
-                    if abs(attitude.pitch) > sat.capabilities.max_pitch_angle:
+                    if abs(attitude_pitch) > sat.capabilities.max_pitch_angle:
+                        phase2_attitude_pitch += 1
                         continue
                     filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
                 else:
-                    # 如果无法获取姿态角，保留候选（而不是跳过）
-                    # 在测试环境或没有预计算数据时，让后续约束检查来处理
+                    # 没有预计算姿态数据，保留候选让后续阶段处理
+                    # 注意：姿态约束会在阶段4的精确检查中再次验证
                     filtered_candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
 
         # 记录阶段2的拒绝统计（无论是否全部过滤）
