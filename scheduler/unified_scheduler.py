@@ -37,6 +37,7 @@ from scheduler.metaheuristic.tabu_scheduler import TabuScheduler
 from scheduler.ground_station.scheduler import (
     GroundStationScheduler, GroundStationScheduleResult
 )
+from scheduler.ground_station.downlink_task import DownlinkTask
 from scheduler.relay.scheduler import (
     RelayScheduler, RelayScheduleResult
 )
@@ -412,7 +413,6 @@ class UnifiedScheduler:
 
     def _convert_relay_to_gs_task(self, relay_task: RelayDownlinkTask) -> DownlinkTask:
         """将中继任务转换为地面站任务格式（用于结果合并）"""
-        from scheduler.ground_station.downlink_task import DownlinkTask
         return DownlinkTask(
             task_id=relay_task.task_id,
             satellite_id=relay_task.satellite_id,
