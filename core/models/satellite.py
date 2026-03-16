@@ -76,6 +76,17 @@ from core.constants import (
     SAR_MAX_PITCH_RATE_DEG_S,
     SAR_MAX_ROLL_ACCEL_DEG_S2,
     SAR_MAX_PITCH_ACCEL_DEG_S2,
+    # 成像模式特定功耗和数据率
+    OPTICAL_PUSH_BROOM_POWER_W,
+    OPTICAL_PUSH_BROOM_DATA_RATE_MBPS,
+    SAR_STRIPMAP_POWER_W,
+    SAR_STRIPMAP_DATA_RATE_MBPS,
+    SAR_SPOTLIGHT_POWER_W,
+    SAR_SPOTLIGHT_DATA_RATE_MBPS,
+    SAR_SCAN_POWER_W,
+    SAR_SCAN_DATA_RATE_MBPS,
+    SAR_SLIDING_SPOTLIGHT_POWER_W,
+    SAR_SLIDING_SPOTLIGHT_DATA_RATE_MBPS,
 )
 
 
@@ -306,7 +317,7 @@ class SatelliteCapabilities:
     power_capacity: float = DEFAULT_POWER_CAPACITY_WH  # Wh
     data_rate: float = DEFAULT_DATA_RATE_MBPS  # Mbps
 
-    # 成像参数
+    # 成像参数（deprecated: 请使用 payload_config 获取模式特定参数）
     resolution: float = DEFAULT_RESOLUTION_M  # 分辨率（米）
     swath_width: float = DEFAULT_SWATH_WIDTH_M  # 幅宽（米）
 
@@ -322,8 +333,11 @@ class SatelliteCapabilities:
         default_factory=dict
     )
 
+    # 载荷配置（新增）- 支持多成像模式
+    payload_config: Optional[Any] = None  # PayloadConfiguration 类型（避免循环导入）
+
     def __post_init__(self):
-        """初始化后确保分轴限制存在（向后兼容）"""
+        """初始化后确保分轴限制存在（向后兼容）并初始化payload_config"""
         # 如果agility中缺少分轴限制字段，从标量限制派生
         scalar_rate = self.agility.get('max_slew_rate', DEFAULT_MAX_ROLL_RATE_DEG_S)
         scalar_accel = self.agility.get('slew_acceleration', DEFAULT_MAX_ROLL_ACCEL_DEG_S2)
@@ -341,6 +355,10 @@ class SatelliteCapabilities:
         if 'max_pitch_acceleration' not in self.agility:
             # 俯仰通常比滚转慢（默认使用标量的2/3）
             self.agility['max_pitch_acceleration'] = scalar_accel * 0.67
+
+        # 初始化payload_config（如果未设置）
+        if self.payload_config is None:
+            self._initialize_default_payload_config()
 
     def get_effective_limits(self, rotation_axis: Optional[tuple] = None) -> Dict[str, float]:
         """
@@ -398,6 +416,240 @@ class SatelliteCapabilities:
             result['effective_acceleration'] = effective_accel
 
         return result
+
+    def _initialize_default_payload_config(self) -> None:
+        """根据现有配置初始化默认的payload_config"""
+        from .imaging_mode import ImagingModeConfig
+        from .payload_config import PayloadConfiguration
+
+        # 根据成像模式确定payload_type
+        if self.imaging_modes:
+            first_mode = self.imaging_modes[0]
+            if first_mode in [ImagingMode.PUSH_BROOM, ImagingMode.FRAME]:
+                payload_type = 'optical'
+            else:
+                payload_type = 'sar'
+        else:
+            payload_type = 'optical'  # 默认
+
+        # 创建默认模式配置
+        if payload_type == 'optical':
+            default_mode = 'push_broom'
+            modes = {
+                'push_broom': ImagingModeConfig(
+                    resolution_m=self.resolution,
+                    swath_width_m=self.swath_width,
+                    power_consumption_w=OPTICAL_PUSH_BROOM_POWER_W,
+                    data_rate_mbps=OPTICAL_PUSH_BROOM_DATA_RATE_MBPS,
+                    min_duration_s=OPTICAL_IMAGING_MIN_DURATION_S,
+                    max_duration_s=OPTICAL_IMAGING_MAX_DURATION_S,
+                    mode_type='optical',
+                    fov_config=self.imager.get('fov', {}),
+                    characteristics={'spectral_bands': ['PAN', 'RGB', 'NIR']}
+                )
+            }
+        else:  # sar
+            default_mode = 'stripmap'
+            modes = {}
+            for mode in self.imaging_modes:
+                if mode == ImagingMode.STRIPMAP:
+                    modes['stripmap'] = ImagingModeConfig(
+                        resolution_m=3.0,
+                        swath_width_m=30000,
+                        power_consumption_w=SAR_STRIPMAP_POWER_W,
+                        data_rate_mbps=SAR_STRIPMAP_DATA_RATE_MBPS,
+                        min_duration_s=SAR_1_STRIPMAP_MIN_DURATION_S,
+                        max_duration_s=SAR_1_STRIPMAP_MAX_DURATION_S,
+                        mode_type='sar',
+                        fov_config={},
+                        characteristics={}
+                    )
+                elif mode == ImagingMode.SPOTLIGHT:
+                    modes['spotlight'] = ImagingModeConfig(
+                        resolution_m=1.0,
+                        swath_width_m=10000,
+                        power_consumption_w=SAR_SPOTLIGHT_POWER_W,
+                        data_rate_mbps=SAR_SPOTLIGHT_DATA_RATE_MBPS,
+                        min_duration_s=SAR_1_SPOTLIGHT_MIN_DURATION_S,
+                        max_duration_s=SAR_1_SPOTLIGHT_MAX_DURATION_S,
+                        mode_type='sar',
+                        fov_config={},
+                        characteristics={}
+                    )
+                elif mode == ImagingMode.SCAN:
+                    modes['scan'] = ImagingModeConfig(
+                        resolution_m=10.0,
+                        swath_width_m=100000,
+                        power_consumption_w=SAR_SCAN_POWER_W,
+                        data_rate_mbps=SAR_SCAN_DATA_RATE_MBPS,
+                        min_duration_s=8.0,
+                        max_duration_s=20.0,
+                        mode_type='sar',
+                        fov_config={},
+                        characteristics={}
+                    )
+                elif mode == ImagingMode.SLIDING_SPOTLIGHT:
+                    modes['sliding_spotlight'] = ImagingModeConfig(
+                        resolution_m=1.5,
+                        swath_width_m=20000,
+                        power_consumption_w=SAR_SLIDING_SPOTLIGHT_POWER_W,
+                        data_rate_mbps=SAR_SLIDING_SPOTLIGHT_DATA_RATE_MBPS,
+                        min_duration_s=SAR_1_SLIDING_SPOTLIGHT_MIN_DURATION_S,
+                        max_duration_s=SAR_1_SLIDING_SPOTLIGHT_MAX_DURATION_S,
+                        mode_type='sar',
+                        fov_config={},
+                        characteristics={}
+                    )
+
+            if not modes:
+                # 如果没有匹配的模式，创建默认条带模式
+                modes = {
+                    'stripmap': ImagingModeConfig(
+                        resolution_m=self.resolution,
+                        swath_width_m=self.swath_width,
+                        power_consumption_w=SAR_STRIPMAP_POWER_W,
+                        data_rate_mbps=SAR_STRIPMAP_DATA_RATE_MBPS,
+                        min_duration_s=5.0,
+                        max_duration_s=15.0,
+                        mode_type='sar',
+                        fov_config={},
+                        characteristics={}
+                    )
+                }
+
+        self.payload_config = PayloadConfiguration(
+            payload_type=payload_type,
+            default_mode=default_mode,
+            modes=modes,
+            common_fov=self.imager.get('fov') if self.imager else None
+        )
+
+    # ==========================================================================
+    # 新增：通过 payload_config 访问成像模式特定参数
+    # ==========================================================================
+
+    def get_mode_config(self, mode: Optional[str] = None) -> Any:
+        """
+        获取指定成像模式的配置
+
+        Args:
+            mode: 成像模式名称，None则使用默认模式
+
+        Returns:
+            ImagingModeConfig
+        """
+        if self.payload_config is None:
+            raise RuntimeError("payload_config is not initialized")
+        return self.payload_config.get_mode_config(mode)
+
+    def get_mode_resolution(self, mode: Optional[str] = None) -> float:
+        """
+        获取指定成像模式的分辨率
+
+        Args:
+            mode: 成像模式名称
+
+        Returns:
+            分辨率（米）
+        """
+        if self.payload_config:
+            return self.payload_config.get_resolution(mode)
+        # Fallback to legacy method
+        return self._get_legacy_mode_resolution(mode)
+
+    def get_mode_swath_width(self, mode: Optional[str] = None) -> float:
+        """
+        获取指定成像模式的幅宽
+
+        Args:
+            mode: 成像模式名称
+
+        Returns:
+            幅宽（米）
+        """
+        if self.payload_config:
+            return self.payload_config.get_swath_width(mode)
+        return self.swath_width
+
+    def get_mode_power_consumption(self, mode: Optional[str] = None) -> float:
+        """
+        获取指定成像模式的功耗
+
+        Args:
+            mode: 成像模式名称
+
+        Returns:
+            功耗（瓦特）
+        """
+        if self.payload_config:
+            return self.payload_config.get_power_consumption(mode)
+        # 默认值
+        return OPTICAL_PUSH_BROOM_POWER_W if self.payload_config and self.payload_config.payload_type == 'optical' else SAR_STRIPMAP_POWER_W
+
+    def get_mode_data_rate(self, mode: Optional[str] = None) -> float:
+        """
+        获取指定成像模式的数据率
+
+        Args:
+            mode: 成像模式名称
+
+        Returns:
+            数据率（Mbps）
+        """
+        if self.payload_config:
+            return self.payload_config.get_data_rate(mode)
+        return self.data_rate
+
+    def get_mode_duration_constraints(self, mode: Optional[str] = None) -> Dict[str, float]:
+        """
+        获取指定成像模式的时长约束
+
+        Args:
+            mode: 成像模式名称
+
+        Returns:
+            {'min_duration': float, 'max_duration': float}
+        """
+        if self.payload_config:
+            config = self.payload_config.get_mode_config(mode)
+            return {'min_duration': config.min_duration_s, 'max_duration': config.max_duration_s}
+        # Fallback to legacy constraints
+        return self._get_legacy_mode_constraints(mode)
+
+    def _get_legacy_mode_resolution(self, mode: Optional[Any] = None) -> Optional[float]:
+        """遗留方法：从imaging_mode_details获取分辨率"""
+        mode_value = None
+        if isinstance(mode, ImagingMode):
+            mode_value = mode.value
+        elif isinstance(mode, str):
+            mode_value = mode
+        else:
+            return self.resolution
+
+        for detail in self.imaging_mode_details:
+            detail_mode_id = detail.get('mode_id')
+            if detail_mode_id == mode_value:
+                return float(detail.get('resolution', self.resolution))
+
+        return self.resolution
+
+    def _get_legacy_mode_constraints(self, mode: Optional[Any] = None) -> Dict[str, float]:
+        """遗留方法：从imaging_mode_constraints获取时长约束"""
+        if isinstance(mode, str):
+            try:
+                mode = ImagingMode(mode)
+            except ValueError:
+                return {'min_duration': 5.0, 'max_duration': 15.0}
+
+        if mode and mode in self.imaging_mode_constraints:
+            constraints = self.imaging_mode_constraints[mode]
+            return {
+                'min_duration': constraints.get('min_duration', 5.0),
+                'max_duration': constraints.get('max_duration', 15.0)
+            }
+
+        # 返回默认约束
+        return {'min_duration': 5.0, 'max_duration': 15.0}
 
     def supports_mode(self, mode: ImagingMode) -> bool:
         """检查是否支持指定成像模式"""
@@ -781,25 +1033,32 @@ class Satellite:
         if 'max_pitch_acceleration' not in agility_dict:
             agility_dict['max_pitch_acceleration'] = scalar_accel * 0.67
 
+        # 准备capabilities字典
+        capabilities_dict = {
+            'imaging_modes': [m.value for m in self.capabilities.imaging_modes],
+            'max_roll_angle': self.capabilities.max_roll_angle,
+            'max_pitch_angle': self.capabilities.max_pitch_angle,
+            'max_starts_per_orbit': self.capabilities.max_starts_per_orbit,
+            'max_work_time_per_orbit': self.capabilities.max_work_time_per_orbit,
+            'storage_capacity': self.capabilities.storage_capacity,
+            'power_capacity': self.capabilities.power_capacity,
+            'data_rate': self.capabilities.data_rate,
+            'imager': self.capabilities.imager,
+            'imaging_mode_details': self.capabilities.imaging_mode_details,
+            'imaging_mode_constraints': constraints_dict,
+            'agility': agility_dict,
+        }
+
+        # 添加payload_config（如果存在）
+        if self.capabilities.payload_config is not None:
+            capabilities_dict['payload_config'] = self.capabilities.payload_config.to_dict()
+
         return {
             'id': self.id,
             'name': self.name,
             'sat_type': self.sat_type.value,
             'orbit': orbit_dict,
-            'capabilities': {
-                'imaging_modes': [m.value for m in self.capabilities.imaging_modes],
-                'max_roll_angle': self.capabilities.max_roll_angle,
-                'max_pitch_angle': self.capabilities.max_pitch_angle,
-                'max_starts_per_orbit': self.capabilities.max_starts_per_orbit,
-                'max_work_time_per_orbit': self.capabilities.max_work_time_per_orbit,
-                'storage_capacity': self.capabilities.storage_capacity,
-                'power_capacity': self.capabilities.power_capacity,
-                'data_rate': self.capabilities.data_rate,
-                'imager': self.capabilities.imager,
-                'imaging_mode_details': self.capabilities.imaging_mode_details,
-                'imaging_mode_constraints': constraints_dict,
-                'agility': agility_dict,
-            }
+            'capabilities': capabilities_dict,
         }
 
     @classmethod
@@ -942,6 +1201,15 @@ class Satellite:
         agility_dict['max_roll_acceleration'] = raw_agility.get('max_roll_acceleration', agility_dict['slew_acceleration'])
         agility_dict['max_pitch_acceleration'] = raw_agility.get('max_pitch_acceleration', agility_dict['slew_acceleration'] * 0.67)
 
+        # 解析payload_config（如果存在）
+        payload_config = None
+        if 'payload_config' in cap_data:
+            from .payload_config import PayloadConfiguration
+            try:
+                payload_config = PayloadConfiguration.from_dict(cap_data['payload_config'])
+            except (ValueError, KeyError) as e:
+                warnings.warn(f"Failed to parse payload_config: {e}", UserWarning)
+
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
             max_roll_angle=cap_data.get('max_roll_angle', DEFAULT_MAX_ROLL_ANGLE_DEG),
@@ -957,6 +1225,7 @@ class Satellite:
             imaging_mode_details=imaging_mode_details,
             imaging_mode_constraints=imaging_mode_constraints,
             agility=agility_dict,
+            payload_config=payload_config,
         )
 
         # 读取TLE（支持多种格式）

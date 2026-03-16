@@ -1,7 +1,7 @@
 {
   "name": "台湾本岛区域目标拼幅覆盖场景",
   "description": "60颗卫星(30光学+30SAR)覆盖台湾本岛大范围区域，测试区域目标拼幅覆盖功能",
-  "version": "1.0",
+  "version": "1.0+payload_config",
   "generated_at": "2026-03-16T00:00:00+00:00",
   "duration": {
     "start": "2024-03-15T00:00:00Z",
@@ -42,7 +42,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -79,7 +108,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -116,7 +174,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -153,7 +240,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -190,7 +306,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -227,7 +372,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -264,7 +438,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -301,7 +504,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -338,7 +570,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -375,7 +636,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -412,7 +702,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -449,7 +768,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -486,7 +834,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -523,7 +900,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -560,7 +966,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -597,7 +1032,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -634,7 +1098,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -671,7 +1164,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -708,7 +1230,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -745,7 +1296,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -782,7 +1362,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -819,7 +1428,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -856,7 +1494,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -893,7 +1560,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -930,7 +1626,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -967,7 +1692,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1004,7 +1758,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1041,7 +1824,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1078,7 +1890,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1115,7 +1956,36 @@
             "multispectral"
           ],
           "bit_depth": 12
-        }
+        },
+        "payload_config": {
+          "payload_type": "optical",
+          "default_mode": "push_broom",
+          "description": "光学载荷，分辨率1.0m，幅宽15.0km，被动推扫成像",
+          "modes": {
+            "push_broom": {
+              "resolution_m": 1.0,
+              "swath_width_m": 15000.0,
+              "power_consumption_w": 180.0,
+              "data_rate_mbps": 300.0,
+              "min_duration_s": 6.0,
+              "max_duration_s": 12.0,
+              "mode_type": "optical",
+              "fov_config": {
+                "cross_track_fov_deg": 1.72,
+                "along_track_fov_deg": 0.34
+              },
+              "characteristics": {
+                "spectral_bands": [
+                  "panchromatic",
+                  "multispectral"
+                ],
+                "description": "被动推扫式成像，适合大范围条带成像"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1156,7 +2026,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1197,7 +2130,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1238,7 +2234,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1279,7 +2338,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1320,7 +2442,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1361,7 +2546,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1402,7 +2650,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1443,7 +2754,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1484,7 +2858,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1525,7 +2962,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1566,7 +3066,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1607,7 +3170,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1648,7 +3274,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1689,7 +3378,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1730,7 +3482,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1771,7 +3586,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1812,7 +3690,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1853,7 +3794,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1894,7 +3898,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1935,7 +4002,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -1976,7 +4106,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2017,7 +4210,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2058,7 +4314,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2099,7 +4418,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2140,7 +4522,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2181,7 +4626,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2222,7 +4730,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2263,7 +4834,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2304,7 +4938,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     },
     {
@@ -2345,7 +5042,70 @@
             "VH",
             "VV"
           ]
-        }
+        },
+        "payload_config": {
+          "payload_type": "sar",
+          "default_mode": "stripmap",
+          "description": "SAR载荷，支持stripmap/spotlight/sliding_spotlight模式",
+          "modes": {
+            "stripmap": {
+              "resolution_m": 2.0,
+              "swath_width_m": 30000.0,
+              "power_consumption_w": 300.0,
+              "data_rate_mbps": 400.0,
+              "min_duration_s": 15.0,
+              "max_duration_s": 40.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV",
+                "incidence_angle_range": [
+                  20,
+                  45
+                ],
+                "description": "条带模式，标准SAR成像，中等分辨率大范围"
+              }
+            },
+            "spotlight": {
+              "resolution_m": 1.0,
+              "swath_width_m": 9000.0,
+              "power_consumption_w": 500.0,
+              "data_rate_mbps": 800.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 20.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV+VH",
+                "incidence_angle_range": [
+                  25,
+                  50
+                ],
+                "description": "聚束模式，高分辨率成像，适合精细目标"
+              }
+            },
+            "sliding_spotlight": {
+              "resolution_m": 1.4,
+              "swath_width_m": 21000.0,
+              "power_consumption_w": 450.0,
+              "data_rate_mbps": 700.0,
+              "min_duration_s": 10.0,
+              "max_duration_s": 25.0,
+              "mode_type": "sar",
+              "fov_config": {},
+              "characteristics": {
+                "polarization": "HH+HV+VV",
+                "incidence_angle_range": [
+                  22,
+                  48
+                ],
+                "description": "滑动聚束模式，平衡分辨率和幅宽"
+              }
+            }
+          },
+          "common_fov": null
+        },
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
       }
     }
   ],
@@ -2552,5 +5312,7 @@
     "area_overlap_ratio": 0.15,
     "min_area_coverage_ratio": 0.95,
     "tile_priority_mode": "center_first"
-  }
+  },
+  "migrated_at": "2026-03-16T22:26:56.701880",
+  "migration_note": "已迁移到payload_config格式，支持多成像模式配置"
 }

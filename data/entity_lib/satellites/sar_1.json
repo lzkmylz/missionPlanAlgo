@@ -38,16 +38,11 @@
     "storage_capacity_comment": "存储容量 1000GB = 1TB - SAR数据量更大，需要更多存储",
     "power_capacity": 3000,
     "power_capacity_comment": "电源容量 3000Wh - SAR功耗较高，需要更大电池",
-    "data_rate": 300,
-    "data_rate_comment": "数据传输速率 300Mbps",
+    "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
     "imager": {
-      "_comment": "SAR成像器详细配置",
+      "_comment": "SAR成像器详细配置 - FOV配置被payload_config引用",
       "imager_type": "sar",
       "imager_type_comment": "成像器类型: sar(合成孔径雷达)",
-      "resolution": 3.0,
-      "resolution_comment": "距离向分辨率 3米 - SAR图像分辨率",
-      "swath_width": 30.0,
-      "swath_width_comment": "成像幅宽 30公里 - SAR典型幅宽",
       "band": "X",
       "band_comment": "雷达频段 X波段(9.6GHz) - 典型SAR频段",
       "wavelength": 0.031,
@@ -62,61 +57,148 @@
       "min_look_angle_comment": "最小观测视角 20度 - 避免远距模糊",
       "max_look_angle": 50.0,
       "max_look_angle_comment": "最大观测视角 50度 - 避免近距模糊",
+      "prf_min": 1000,
+      "prf_min_comment": "最小脉冲重复频率 1000Hz",
+      "prf_max": 6000,
+      "prf_max_comment": "最大脉冲重复频率 6000Hz",
       "fov_config": {
-        "_comment": "视场配置 - 基于距离向和方位向视场半角定义",
+        "_comment": "视场配置 - 被payload_config引用",
         "range_half_angle": 1.36,
         "range_half_angle_comment": "距离向视场半角 1.36度 - cross-track方向，在631km高度对应约30km幅宽",
         "azimuth_half_angle": 0.91,
         "azimuth_half_angle_comment": "方位向视场半角 0.91度 - along-track方向，在631km高度对应约20km场景长度",
         "azimuth_exclusion_angle": 0.3,
         "azimuth_exclusion_angle_comment": "方位向排除角 0.3度 - 沿飞行方向的观测盲区"
-      },
-      "prf_min": 1000,
-      "prf_min_comment": "最小脉冲重复频率 1000Hz",
-      "prf_max": 6000,
-      "prf_max_comment": "最大脉冲重复频率 6000Hz"
-    },
-    "imaging_modes": [
-      {
-        "_comment": "条带模式 - 标准SAR成像，中等分辨率大范围",
-        "mode_id": "stripmap",
-        "mode_name": "条带模式",
-        "description": "标准条带SAR成像，天线指向固定",
-        "resolution": 3.0,
-        "resolution_comment": "分辨率 3米 - 距离向分辨率",
-        "azimuth_resolution": 3.0,
-        "azimuth_resolution_comment": "方位向分辨率 3米",
-        "swath_width": 30.0,
-        "swath_width_comment": "幅宽 30公里",
-        "integration_factor": 1.0,
-        "integration_factor_comment": "积分因子 1.0 - 标准合成孔径时间",
-        "min_imaging_duration": 4,
-        "min_imaging_duration_comment": "最短成像时长 4秒 - 对应30km场景 (30km / 7km/s ≈ 4s)",
-        "max_imaging_duration": 72,
-        "max_imaging_duration_comment": "最长成像时长 72秒 - 对应500km场景 (500km / 7km/s ≈ 71s, 取整为72s)",
-        "typical_velocity": 7000,
-        "typical_velocity_comment": "典型速度 7000m/s"
-      },
-      {
-        "_comment": "扫描模式 - 大范围快速成像，分辨率较低",
-        "mode_id": "scan",
-        "mode_name": "扫描模式",
-        "description": "ScanSAR模式，通过波束扫描实现超大幅宽",
-        "resolution": 15.0,
-        "resolution_comment": "分辨率 15米 - 牺牲分辨率换取幅宽",
-        "azimuth_resolution": 15.0,
-        "azimuth_resolution_comment": "方位向分辨率 15米",
-        "swath_width": 100.0,
-        "swath_width_comment": "幅宽 100公里 - 超大幅宽",
-        "integration_factor": 0.3,
-        "integration_factor_comment": "积分因子 0.3 - 缩短合成孔径时间",
-        "min_imaging_duration": 14,
-        "min_imaging_duration_comment": "最短成像时长 14秒 - 对应100km场景 (100km / 7km/s ≈ 14s)",
-        "max_imaging_duration": 143,
-        "max_imaging_duration_comment": "最长成像时长 143秒 - 对应1000km场景 (1000km / 7km/s ≈ 143s)",
-        "burst_duration": 0.5,
-        "burst_duration_comment": "Burst持续时间 0.5秒 - 每个子条带照射时间"
       }
-    ]
+    },
+    "payload_config": {
+      "_comment": "载荷配置 - 定义SAR成像模式及其参数（新增核心配置）",
+      "payload_type": "sar",
+      "payload_type_comment": "载荷类型: sar(合成孔径雷达)",
+      "default_mode": "stripmap",
+      "default_mode_comment": "默认成像模式: 条带模式",
+      "description": "SAR载荷，支持条带/聚束/扫描/滑动聚束模式",
+      "modes": {
+        "stripmap": {
+          "resolution_m": 3.0,
+          "resolution_m_comment": "分辨率 3米 - 距离向分辨率",
+          "swath_width_m": 30000,
+          "swath_width_m_comment": "幅宽 30公里",
+          "power_consumption_w": 300.0,
+          "power_consumption_w_comment": "功耗 300瓦特 - 条带模式平均功耗",
+          "data_rate_mbps": 400.0,
+          "data_rate_mbps_comment": "数据率 400Mbps - 条带模式数据生成速率",
+          "min_duration_s": 15.0,
+          "min_duration_s_comment": "最短成像时长 15秒",
+          "max_duration_s": 40.0,
+          "max_duration_s_comment": "最长成像时长 40秒",
+          "mode_type": "sar",
+          "mode_type_comment": "模式类型: sar(合成孔径雷达)",
+          "fov_config": {
+            "range_half_angle_deg": 1.36,
+            "azimuth_half_angle_deg": 0.91
+          },
+          "characteristics": {
+            "polarization": "HH+HV",
+            "polarization_comment": "极化方式: 水平发射，水平/垂直接收",
+            "incidence_angle_range": [20, 45],
+            "incidence_angle_range_comment": "入射角范围 20-45度",
+            "description": "条带模式，标准SAR成像，中等分辨率大范围"
+          }
+        },
+        "spotlight": {
+          "resolution_m": 1.0,
+          "resolution_m_comment": "分辨率 1米 - 聚束模式高分辨率",
+          "swath_width_m": 10000,
+          "swath_width_m_comment": "幅宽 10公里 - 聚束模式场景大小",
+          "power_consumption_w": 500.0,
+          "power_consumption_w_comment": "功耗 500瓦特 - 聚束模式功耗（更高）",
+          "data_rate_mbps": 800.0,
+          "data_rate_mbps_comment": "数据率 800Mbps - 聚束模式数据率（更高）",
+          "min_duration_s": 10.0,
+          "min_duration_s_comment": "最短成像时长 10秒",
+          "max_duration_s": 25.0,
+          "max_duration_s_comment": "最长成像时长 25秒",
+          "mode_type": "sar",
+          "mode_type_comment": "模式类型: sar(合成孔径雷达)",
+          "fov_config": {
+            "range_half_angle_deg": 0.5,
+            "azimuth_half_angle_deg": 0.5
+          },
+          "characteristics": {
+            "polarization": "HH+HV+VV+VH",
+            "polarization_comment": "极化方式: 全极化",
+            "incidence_angle_range": [25, 50],
+            "incidence_angle_range_comment": "入射角范围 25-50度",
+            "description": "聚束模式，高分辨率成像，适合精细目标"
+          }
+        },
+        "scan": {
+          "resolution_m": 15.0,
+          "resolution_m_comment": "分辨率 15米 - 扫描模式分辨率较低",
+          "swath_width_m": 100000,
+          "swath_width_m_comment": "幅宽 100公里 - 超大幅宽",
+          "power_consumption_w": 400.0,
+          "power_consumption_w_comment": "功耗 400瓦特 - 扫描模式功耗",
+          "data_rate_mbps": 600.0,
+          "data_rate_mbps_comment": "数据率 600Mbps - 扫描模式数据率",
+          "min_duration_s": 8.0,
+          "min_duration_s_comment": "最短成像时长 8秒",
+          "max_duration_s": 20.0,
+          "max_duration_s_comment": "最长成像时长 20秒",
+          "mode_type": "sar",
+          "mode_type_comment": "模式类型: sar(合成孔径雷达)",
+          "fov_config": {
+            "range_half_angle_deg": 10.0,
+            "azimuth_half_angle_deg": 1.5
+          },
+          "characteristics": {
+            "polarization": "HH+HV",
+            "polarization_comment": "极化方式: 水平发射，水平/垂直接收",
+            "incidence_angle_range": [15, 55],
+            "incidence_angle_range_comment": "入射角范围 15-55度",
+            "burst_duration_s": 0.5,
+            "burst_duration_s_comment": "Burst持续时间 0.5秒 - 每个子条带照射时间",
+            "description": "扫描模式，超大幅宽成像，适合大范围快速普查"
+          }
+        },
+        "sliding_spotlight": {
+          "resolution_m": 1.5,
+          "resolution_m_comment": "分辨率 1.5米 - 滑动聚束模式分辨率",
+          "swath_width_m": 20000,
+          "swath_width_m_comment": "幅宽 20公里 - 滑动聚束模式场景大小",
+          "power_consumption_w": 450.0,
+          "power_consumption_w_comment": "功耗 450瓦特 - 滑动聚束模式功耗",
+          "data_rate_mbps": 700.0,
+          "data_rate_mbps_comment": "数据率 700Mbps - 滑动聚束模式数据率",
+          "min_duration_s": 10.0,
+          "min_duration_s_comment": "最短成像时长 10秒",
+          "max_duration_s": 30.0,
+          "max_duration_s_comment": "最长成像时长 30秒",
+          "mode_type": "sar",
+          "mode_type_comment": "模式类型: sar(合成孔径雷达)",
+          "fov_config": {
+            "range_half_angle_deg": 1.0,
+            "azimuth_half_angle_deg": 0.8
+          },
+          "characteristics": {
+            "polarization": "HH+HV+VV",
+            "polarization_comment": "极化方式: 三极化",
+            "incidence_angle_range": [22, 48],
+            "incidence_angle_range_comment": "入射角范围 22-48度",
+            "description": "滑动聚束模式，平衡分辨率和幅宽"
+          }
+        }
+      },
+      "common_fov": {
+        "_comment": "共享FOV配置（各模式可继承或覆盖）",
+        "range_half_angle": 1.36,
+        "range_half_angle_comment": "距离向视场半角 1.36度",
+        "azimuth_half_angle": 0.91,
+        "azimuth_half_angle_comment": "方位向视场半角 0.91度",
+        "azimuth_exclusion_angle": 0.3,
+        "azimuth_exclusion_angle_comment": "方位向排除角 0.3度"
+      }
+    }
   }
 }

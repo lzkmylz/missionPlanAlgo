@@ -125,6 +125,8 @@ class ImagingTimeCalculator:
         """
         获取卫星特定成像模式的约束
 
+        优先使用新的 payload_config 格式，如果不存在则回退到旧格式
+
         Args:
             satellite: 卫星对象（可选）
             mode: 成像模式
@@ -139,6 +141,19 @@ class ImagingTimeCalculator:
             return None
 
         capabilities = satellite.capabilities
+
+        # 优先使用新的 payload_config 格式
+        if hasattr(capabilities, 'payload_config') and capabilities.payload_config is not None:
+            try:
+                mode_config = capabilities.get_mode_config(mode.value)
+                return {
+                    'min_duration': mode_config.min_duration_s,
+                    'max_duration': mode_config.max_duration_s,
+                }
+            except (ValueError, AttributeError):
+                pass  # 回退到旧格式
+
+        # 回退到旧格式
         if not hasattr(capabilities, 'get_imaging_constraints'):
             return None
 
@@ -396,46 +411,75 @@ class ImagingTimeCalculator:
                               target: Target,
                               mode: ImagingMode,
                               power_capacity: float,
-                              profile: PowerProfile = None) -> float:
+                              profile: PowerProfile = None,
+                              satellite: Optional[Any] = None) -> float:
         """
         计算成像功率消耗
+
+        优先使用 payload_config 中的模式特定功耗，如果不存在则使用默认计算
 
         Args:
             target: 目标对象
             mode: 成像模式
             power_capacity: 卫星功率容量（Wh）
             profile: 功率配置文件（可选）
+            satellite: 卫星对象（可选），用于获取 payload_config
 
         Returns:
             float: 功率消耗（Wh）
         """
+        duration_hours = self.calculate(target, mode, satellite) / 3600.0
+
+        # 优先使用 payload_config 中的模式特定功耗
+        if satellite and hasattr(satellite, 'capabilities'):
+            capabilities = satellite.capabilities
+            if hasattr(capabilities, 'payload_config') and capabilities.payload_config is not None:
+                try:
+                    mode_config = capabilities.get_mode_config(mode.value)
+                    # 功耗 = 功率(W) * 时间(h) / 1000 = Wh
+                    return mode_config.power_consumption_w * duration_hours / 1000.0
+                except (ValueError, AttributeError):
+                    pass  # 回退到默认计算
+
+        # 回退到默认计算
         if profile is None:
             profile = PowerProfile()
 
-        duration_hours = self.calculate(target, mode) / 3600.0
         coefficient = profile.get_coefficient_for_mode(mode)
-
         return power_capacity * coefficient * duration_hours
 
     def get_storage_consumption(self,
                                  target: Target,
                                  mode: ImagingMode,
-                                 data_rate_mbps: float = 300.0) -> float:
+                                 data_rate_mbps: float = 300.0,
+                                 satellite: Optional[Any] = None) -> float:
         """
         计算成像固存消耗
 
-        固存消耗根据成像时长和数据率动态计算：
-        storage_gb = data_rate_mbps * duration_sec / 8 / 1024
+        优先使用 payload_config 中的模式特定数据率。
+        固存消耗计算公式：storage_gb = data_rate_mbps * duration_sec / 8 / 1024
 
         Args:
             target: 目标对象
             mode: 成像模式
-            data_rate_mbps: 数据率（Mbps），默认300
+            data_rate_mbps: 默认数据率（Mbps），如果 satellite 未提供 payload_config 则使用
+            satellite: 卫星对象（可选），用于获取 payload_config
 
         Returns:
             float: 固存消耗（GB）
         """
-        duration_sec = self.calculate(target, mode)
+        duration_sec = self.calculate(target, mode, satellite)
+
+        # 优先使用 payload_config 中的模式特定数据率
+        effective_data_rate = data_rate_mbps
+        if satellite and hasattr(satellite, 'capabilities'):
+            capabilities = satellite.capabilities
+            if hasattr(capabilities, 'payload_config') and capabilities.payload_config is not None:
+                try:
+                    mode_config = capabilities.get_mode_config(mode.value)
+                    effective_data_rate = mode_config.data_rate_mbps
+                except (ValueError, AttributeError):
+                    pass  # 使用传入的 data_rate_mbps
 
         # 根据成像模式调整数据量（高分辨率模式产生更多数据）
         mode_multipliers = {
@@ -449,6 +493,6 @@ class ImagingTimeCalculator:
         multiplier = mode_multipliers.get(mode, 1.0)
 
         # 计算固存消耗: Mbps * sec / 8 = MByte, / 1024 = GByte
-        storage_gb = (data_rate_mbps * duration_sec * multiplier) / 8 / 1024
+        storage_gb = (effective_data_rate * duration_sec * multiplier) / 8 / 1024
 
         return storage_gb

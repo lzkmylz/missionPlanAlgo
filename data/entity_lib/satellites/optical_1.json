@@ -5,11 +5,11 @@
   "sat_type": "optical_1",
   "orbit": {
     "_comment": "轨道参数 - SSO太阳同步轨道，适合对地观测",
-    "orbit_type": "SSO",
     "_comment_orbit_config": "支持三种轨道配置格式，优先级: TLE > 六根数 > 简化参数",
     "_comment_format_1": "方式1: TLE两行根数（最精确）",
     "_comment_format_2": "方式2: 轨道六根数（经典开普勒元素）",
     "_comment_format_3": "方式3: 简化参数（仅高度和倾角）",
+    "orbit_type": "SSO",
     "source": "elements",
     "source_comment": "轨道数据来源: elements/tle/simplified",
     "semi_major_axis": 7016000,
@@ -53,16 +53,12 @@
     "storage_capacity_comment": "存储容量 1000GB - 星上固态存储器容量",
     "power_capacity": 2000,
     "power_capacity_comment": "电源容量 2000Wh - 电池组总容量",
-    "data_rate": 700,
-    "data_rate_comment": "数据传输速率 700Mbps - 对地或星间链路传输速率",
+    "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+    "_comment_imaging_modes": "注意: imaging_modes已移至payload_config中",
     "imager": {
-      "_comment": "光学成像器详细配置",
+      "_comment": "光学成像器详细配置 - FOV配置被payload_config引用",
       "imager_type": "optical",
       "imager_type_comment": "成像器类型: optical(光学)",
-      "resolution": 0.5,
-      "resolution_comment": "地面分辨率 0.5米 - 像元对应地面实际距离",
-      "swath_width": 15.0,
-      "swath_width_comment": "成像幅宽 15公里 - 单次成像覆盖地面宽度",
       "focal_length": 5.8,
       "focal_length_comment": "光学焦距 5.8米 - 望远镜焦距长度",
       "aperture": 0.6,
@@ -72,40 +68,59 @@
       "quantization": 16,
       "quantization_comment": "量化位数 16bit - 图像灰度等级深度",
       "fov_config": {
-        "_comment": "视场配置 - 支持圆锥或矩形视场",
+        "_comment": "视场配置 - 被payload_config引用",
         "fov_type": "cone",
         "fov_type_comment": "视场类型: cone(圆锥) 或 rectangular(矩形)",
         "half_angle": 0.75,
-        "half_angle_comment": "圆锥视场半角 0.75度 - 在645km高度对应约17km幅宽",
-        "_comment_rectangular_example": "矩形视场示例配置:",
-        "_example_rectangular": {
-          "fov_type": "rectangular",
-          "half_angle_x": 0.5,
-          "half_angle_x_comment": "沿轨迹方向半角 0.5度",
-          "half_angle_y": 0.4,
-          "half_angle_y_comment": "垂直轨迹方向半角 0.4度"
-        }
+        "half_angle_comment": "圆锥视场半角 0.75度 - 在645km高度对应约17km幅宽"
       }
     },
-    "imaging_modes": [
-      {
-        "_comment": "推扫式成像模式 - 连续扫描，适合大范围条带成像",
-        "mode_id": "push_broom",
-        "mode_name": "推扫模式",
-        "description": "推扫式成像，卫星飞行方向连续扫描",
-        "integration_time": 0.0002,
-        "integration_time_comment": "积分时间 0.2毫秒 - 探测器曝光时间",
-        "readout_time": 0.0001,
-        "readout_time_comment": "读出时间 0.1毫秒 - 图像数据读出时间",
-        "snr_target": 100,
-        "snr_target_comment": "目标信噪比 100 - 图像质量指标",
-        "min_imaging_duration": 6,
-        "min_imaging_duration_comment": "最短成像时长 6秒",
-        "max_imaging_duration": 12,
-        "max_imaging_duration_comment": "最长成像时长 12秒",
-        "typical_velocity": 7000,
-        "typical_velocity_comment": "典型扫描速度 7000m/s - 卫星星下点速度"
+    "payload_config": {
+      "_comment": "载荷配置 - 定义成像模式及其参数（新增核心配置）",
+      "payload_type": "optical",
+      "payload_type_comment": "载荷类型: optical(光学)",
+      "default_mode": "push_broom",
+      "default_mode_comment": "默认成像模式: 被动推扫",
+      "description": "光学载荷，分辨率0.5m，幅宽15km，被动推扫成像",
+      "modes": {
+        "push_broom": {
+          "resolution_m": 0.5,
+          "resolution_m_comment": "分辨率 0.5米 - 地面像元分辨率",
+          "swath_width_m": 15000,
+          "swath_width_m_comment": "幅宽 15公里 - 单次成像覆盖地面宽度",
+          "power_consumption_w": 150.0,
+          "power_consumption_w_comment": "功耗 150瓦特 - 成像时平均功耗",
+          "data_rate_mbps": 200.0,
+          "data_rate_mbps_comment": "数据率 200Mbps - 原始数据生成速率",
+          "min_duration_s": 6.0,
+          "min_duration_s_comment": "最短成像时长 6秒",
+          "max_duration_s": 12.0,
+          "max_duration_s_comment": "最长成像时长 12秒",
+          "mode_type": "optical",
+          "mode_type_comment": "模式类型: optical(光学)",
+          "fov_config": {
+            "cross_track_fov_deg": 2.5,
+            "cross_track_fov_deg_comment": "垂直轨迹视场半角 2.5度",
+            "along_track_fov_deg": 0.5,
+            "along_track_fov_deg_comment": "沿轨迹视场半角 0.5度"
+          },
+          "characteristics": {
+            "spectral_bands": ["PAN", "RGB", "NIR"],
+            "spectral_bands_comment": "光谱波段: 全色、RGB、近红外",
+            "integration_time_ms": 0.2,
+            "integration_time_ms_comment": "积分时间 0.2毫秒",
+            "snr_target": 100,
+            "snr_target_comment": "目标信噪比 100",
+            "description": "被动推扫式成像，适合大范围条带成像"
+          }
+        }
+      },
+      "common_fov": {
+        "_comment": "共享FOV配置（各模式可继承或覆盖）",
+        "fov_type": "cone",
+        "half_angle": 0.75,
+        "half_angle_comment": "圆锥视场半角 0.75度"
       }
-    ]
+    }
   }
 }

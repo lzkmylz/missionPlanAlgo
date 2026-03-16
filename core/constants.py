@@ -201,6 +201,30 @@ SAR_2_STRIPMAP_MIN_DURATION_S = 15.0
 SAR_2_STRIPMAP_MAX_DURATION_S = 56.0
 
 # =============================================================================
+# 成像模式特定功耗和数据率默认值
+# =============================================================================
+
+# 光学 - 被动推扫模式
+OPTICAL_PUSH_BROOM_POWER_W = 150.0           # 功耗 (瓦特)
+OPTICAL_PUSH_BROOM_DATA_RATE_MBPS = 200.0    # 数据率 (Mbps)
+
+# SAR - 条带模式 (Stripmap)
+SAR_STRIPMAP_POWER_W = 300.0                 # 功耗 (瓦特)
+SAR_STRIPMAP_DATA_RATE_MBPS = 400.0          # 数据率 (Mbps)
+
+# SAR - 聚束模式 (Spotlight)
+SAR_SPOTLIGHT_POWER_W = 500.0                # 功耗 (瓦特)
+SAR_SPOTLIGHT_DATA_RATE_MBPS = 800.0         # 数据率 (Mbps)
+
+# SAR - 扫描模式 (Scan)
+SAR_SCAN_POWER_W = 400.0                     # 功耗 (瓦特)
+SAR_SCAN_DATA_RATE_MBPS = 600.0              # 数据率 (Mbps)
+
+# SAR - 滑动聚束模式 (Sliding Spotlight)
+SAR_SLIDING_SPOTLIGHT_POWER_W = 450.0        # 功耗 (瓦特)
+SAR_SLIDING_SPOTLIGHT_DATA_RATE_MBPS = 700.0 # 数据率 (Mbps)
+
+# =============================================================================
 # 姿态机动默认值
 # =============================================================================
 

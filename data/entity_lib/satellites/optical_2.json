@@ -38,16 +38,11 @@
     "storage_capacity_comment": "存储容量 800GB - 更大的存储空间",
     "power_capacity": 2500,
     "power_capacity_comment": "电源容量 2500Wh - 更强的电力供应",
-    "data_rate": 400,
-    "data_rate_comment": "数据传输速率 400Mbps - 更快的数据下传速度",
+    "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
     "imager": {
-      "_comment": "光学成像器详细配置",
+      "_comment": "光学成像器详细配置 - FOV配置被payload_config引用",
       "imager_type": "optical",
       "imager_type_comment": "成像器类型: optical(光学)",
-      "resolution": 0.5,
-      "resolution_comment": "地面分辨率 0.5米 - 亚米级高分辨率成像",
-      "swath_width": 10.0,
-      "swath_width_comment": "成像幅宽 10公里 - 高分辨率下仍保持较大幅宽",
       "focal_length": 8.5,
       "focal_length_comment": "光学焦距 8.5米 - 长焦距实现高分辨率",
       "aperture": 0.8,
@@ -57,7 +52,7 @@
       "quantization": 12,
       "quantization_comment": "量化位数 12bit - 更高的动态范围",
       "fov_config": {
-        "_comment": "视场配置 - 矩形视场示例",
+        "_comment": "视场配置 - 矩形视场，被payload_config引用",
         "fov_type": "rectangular",
         "fov_type_comment": "视场类型: rectangular(矩形) - 区分沿轨和垂轨方向",
         "half_angle_x": 0.44,
@@ -66,25 +61,56 @@
         "half_angle_y_comment": "垂直轨迹方向(Y)半角 0.31度 - 在645km高度对应约7km"
       }
     },
-    "imaging_modes": [
-      {
-        "_comment": "框幅式成像模式 - 单帧曝光，适合点目标精细成像",
-        "mode_id": "frame",
-        "mode_name": "框幅模式",
-        "description": "框幅式成像，单帧高分辨率拍摄",
-        "integration_time": 0.001,
-        "integration_time_comment": "积分时间 1毫秒 - 较长曝光时间提高信噪比",
-        "readout_time": 0.005,
-        "readout_time_comment": "读出时间 5毫秒 - 高分辨率图像读出时间较长",
-        "snr_target": 150,
-        "snr_target_comment": "目标信噪比 150 - 高信噪比保证图像质量",
-        "min_imaging_duration": 1,
-        "min_imaging_duration_comment": "最短成像时长 1秒 - 对应7km场景 (7km / 7km/s = 1s)",
-        "max_imaging_duration": 2,
-        "max_imaging_duration_comment": "最长成像时长 2秒 - 对应10km场景 (10km / 7km/s ≈ 1.4s, 取整为2s)",
-        "frame_rate": 1.0,
-        "frame_rate_comment": "帧率 1fps - 每秒拍摄帧数"
+    "payload_config": {
+      "_comment": "载荷配置 - 定义成像模式及其参数（新增核心配置）",
+      "payload_type": "optical",
+      "payload_type_comment": "载荷类型: optical(光学)",
+      "default_mode": "frame",
+      "default_mode_comment": "默认成像模式: 框幅模式",
+      "description": "光学载荷，分辨率0.5m，幅宽10km，框幅式成像",
+      "modes": {
+        "frame": {
+          "resolution_m": 0.5,
+          "resolution_m_comment": "分辨率 0.5米 - 亚米级高分辨率成像",
+          "swath_width_m": 10000,
+          "swath_width_m_comment": "幅宽 10公里 - 高分辨率下仍保持较大幅宽",
+          "power_consumption_w": 180.0,
+          "power_consumption_w_comment": "功耗 180瓦特 - 框幅模式功耗",
+          "data_rate_mbps": 250.0,
+          "data_rate_mbps_comment": "数据率 250Mbps - 框幅模式数据生成速率",
+          "min_duration_s": 1.0,
+          "min_duration_s_comment": "最短成像时长 1秒",
+          "max_duration_s": 2.0,
+          "max_duration_s_comment": "最长成像时长 2秒",
+          "mode_type": "optical",
+          "mode_type_comment": "模式类型: optical(光学)",
+          "fov_config": {
+            "cross_track_fov_deg": 0.88,
+            "cross_track_fov_deg_comment": "垂直轨迹视场半角 0.88度",
+            "along_track_fov_deg": 0.62,
+            "along_track_fov_deg_comment": "沿轨迹视场半角 0.62度"
+          },
+          "characteristics": {
+            "spectral_bands": ["PAN", "RGB", "NIR"],
+            "spectral_bands_comment": "光谱波段: 全色、RGB、近红外",
+            "integration_time_ms": 1.0,
+            "integration_time_ms_comment": "积分时间 1毫秒",
+            "snr_target": 150,
+            "snr_target_comment": "目标信噪比 150",
+            "frame_rate_fps": 1.0,
+            "frame_rate_fps_comment": "帧率 1fps - 每秒拍摄帧数",
+            "description": "框幅式成像，单帧高分辨率拍摄，适合点目标精细成像"
+          }
+        }
+      },
+      "common_fov": {
+        "_comment": "共享FOV配置（各模式可继承或覆盖）",
+        "fov_type": "rectangular",
+        "half_angle_x": 0.44,
+        "half_angle_x_comment": "沿轨迹方向半角 0.44度",
+        "half_angle_y": 0.31,
+        "half_angle_y_comment": "垂直轨迹方向半角 0.31度"
       }
-    ]
+    }
   }
 }

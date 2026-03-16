@@ -403,7 +403,7 @@ class TestSatelliteJsonFileLoading:
     """测试从实际JSON文件加载卫星配置"""
 
     def test_load_optical_1_json_template(self):
-        """测试加载optical_1.json模板文件"""
+        """测试加载optical_1.json模板文件（新payload_config格式）"""
         import json
         import os
 
@@ -430,23 +430,26 @@ class TestSatelliteJsonFileLoading:
         assert satellite.name == "光学卫星1型"
         assert satellite.sat_type == SatelliteType.OPTICAL_1
 
-        # 验证imager配置被加载
+        # 验证新的 payload_config 格式
+        assert satellite.capabilities.payload_config is not None
+        assert satellite.capabilities.payload_config.payload_type == "optical"
+        assert satellite.capabilities.payload_config.default_mode == "push_broom"
+
+        # 验证成像模式配置
+        mode_config = satellite.capabilities.get_mode_config("push_broom")
+        assert mode_config.resolution_m == 0.5
+        assert mode_config.swath_width_m == 15000
+        assert mode_config.power_consumption_w == 150.0
+        assert mode_config.data_rate_mbps == 200.0
+
+        # 验证imager配置（FOV等）
         assert satellite.capabilities.imager is not None
         assert satellite.capabilities.imager.get("imager_type") == "optical"
-        assert satellite.capabilities.imager.get("resolution") == 0.5
         assert satellite.capabilities.imager.get("focal_length") == 5.8
         assert satellite.capabilities.imager.get("aperture") == 0.6
 
-        # 验证详细成像模式
-        assert len(satellite.capabilities.imaging_mode_details) >= 1
-        mode = satellite.capabilities.imaging_mode_details[0]
-        assert mode.get("mode_id") == "push_broom"
-        assert "integration_time" in mode
-        assert "readout_time" in mode
-        assert "snr_target" in mode
-
     def test_load_sar_1_json_template(self):
-        """测试加载sar_1.json模板文件"""
+        """测试加载sar_1.json模板文件（新payload_config格式）"""
         import json
         import os
 
@@ -468,14 +471,35 @@ class TestSatelliteJsonFileLoading:
         # 转换为Satellite对象
         satellite = Satellite.from_dict(data)
 
-        # 验证imager配置被加载
+        # 验证新的 payload_config 格式
+        assert satellite.capabilities.payload_config is not None
+        assert satellite.capabilities.payload_config.payload_type == "sar"
+        assert satellite.capabilities.payload_config.default_mode == "stripmap"
+
+        # 验证SAR多模式配置
+        assert satellite.capabilities.payload_config.has_mode("stripmap")
+        assert satellite.capabilities.payload_config.has_mode("spotlight")
+        assert satellite.capabilities.payload_config.has_mode("scan")
+        assert satellite.capabilities.payload_config.has_mode("sliding_spotlight")
+
+        # 验证条带模式参数
+        stripmap = satellite.capabilities.get_mode_config("stripmap")
+        assert stripmap.resolution_m == 3.0
+        assert stripmap.swath_width_m == 30000
+        assert stripmap.power_consumption_w == 300.0
+        assert stripmap.data_rate_mbps == 400.0
+
+        # 验证聚束模式参数（功耗和数据率更高）
+        spotlight = satellite.capabilities.get_mode_config("spotlight")
+        assert spotlight.resolution_m == 1.0
+        assert spotlight.power_consumption_w == 500.0  # 聚束模式功耗更高
+        assert spotlight.data_rate_mbps == 800.0  # 聚束模式数据率更高
+
+        # 验证imager配置（天线等）
         assert satellite.capabilities.imager.get("imager_type") == "sar"
         assert satellite.capabilities.imager.get("band") == "X"
         assert satellite.capabilities.imager.get("polarization") == "VV"
         assert satellite.capabilities.imager.get("antenna_length") == 6.0
-
-        # 验证多个成像模式
-        assert len(satellite.capabilities.imaging_mode_details) >= 2
 
 
 class TestOrbit:
