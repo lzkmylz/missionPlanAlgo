@@ -204,6 +204,7 @@ mpa config set task_backend.broker_url redis://localhost:6379/0
 - **姿态预计算缓存**：调度前预计算所有窗口姿态角，O(1)查询，1227倍加速
 - **批量约束检查**：Numba向量化优化，约束检查性能提升5-10倍
 - **精确姿态机动模型**：基于刚体动力学的时间最优轨迹规划
+- **成像中心点距离优化**：非聚类任务成像中心更靠近目标坐标（偏差降低8.3%）
 - **星载边缘计算支持**：在轨数据预处理，减少下传压力
 - **完整实验流程**：场景配置 → 可见性计算 → 算法执行 → 结果验证 → 性能评估 → 批量对比
 
@@ -468,6 +469,42 @@ checker = PreciseSlewConstraintChecker(
 
 **约束检查**：分别检查滚转角和俯仰角（替代原来的合成角度检查）
 
+### 5. 成像中心点距离优化
+
+在任务调度评分中引入成像中心点与目标坐标的距离因子，使非聚类任务的成像中心更靠近目标：
+
+**评分模型**：
+```python
+score = exp(-distance / scale)  # 指数衰减模型
+# 0°偏差 = 1.0分, 3°偏差 ≈ 0.37分, 10°+ = 0分
+```
+
+**配置方式**：
+```python
+config = {
+    'enable_center_distance_score': True,   # 启用优化
+    'center_distance_weight': 15.0,         # 评分权重（分/度）
+}
+scheduler = GreedyScheduler(config)
+```
+
+**优化效果**（60卫星×1000目标场景）：
+| 指标 | 优化前 | 优化后 | 改善 |
+|------|--------|--------|------|
+| 平均偏差 | 6.51° | 5.97° | **8.3%** ↓ |
+| 最小偏差 | 3.80° | 0.16° | **95.8%** ↓ |
+| 高精度任务占比(<2°) | - | 9.5% | 新增 |
+
+**设计特点**：
+- 仅对非聚类任务启用（聚类任务覆盖多目标，无法定义单一最佳中心）
+- 防御性编程：无效参数自动回退到默认值
+- 失败安全：任何异常返回中等评分0.5，不中断调度流程
+
+**权重调参建议**：
+- 保守配置（15.0）：默认推荐，平衡精度与覆盖率
+- 平衡配置（20.0）：科学观测场景，轻微提升精度
+- 激进配置（25.0）：高精度需求，可能牺牲部分边缘任务
+
 ---
 
 ## 支持的算法
@@ -630,7 +667,7 @@ from core.dynamics.attitude_precache import AttitudePrecacheManager
 # 加载任务场景
 mission = Mission.load("scenarios/point_group_50sats.json")
 
-# 配置调度器（启用姿态预计算缓存）
+# 配置调度器（启用姿态预计算缓存和成像中心优化）
 config = {
     'name': 'Greedy-EDD',
     'enable_attitude_precache': True,      # 启用姿态预计算
@@ -638,6 +675,8 @@ config = {
     'use_batch_constraints': True,          # 使用批量约束检查
     'consider_frequency': True,             # 考虑频次约束
     'enable_downlink': True,                # 启用数传规划
+    'enable_center_distance_score': True,   # 启用成像中心点距离优化
+    'center_distance_weight': 15.0,         # 距离评分权重（分/度）
 }
 
 # 选择调度算法
@@ -809,6 +848,7 @@ python -m experiments.runner \
 - [x] **姿态预计算缓存**（O(1)查询，调度加速5.1倍）
 - [x] **批量约束检查**（Numba向量化，约束检查加速5-10倍）
 - [x] **精确姿态机动模型**（刚体动力学，时间最优轨迹）
+- [x] **成像中心点距离优化**（非聚类任务偏差降低8.3%）
 - [x] 轨道传播与可见性计算（SGP4 / STK HPOP / Orekit）
 - [x] 地面站窗口计算（Java后端默认计算）
 - [x] 基础调度算法（贪心、EDD、SPT）
@@ -1077,6 +1117,29 @@ from scheduler.constraints import BatchSlewConstraintChecker
 checker = BatchSlewConstraintChecker(mission)
 results = checker.check_slew_feasibility_batch(candidates)
 ```
+
+### Q: 成像中心点距离优化是什么？
+
+**A:** 在任务调度评分中引入成像中心点与目标坐标的距离因子，使非聚类任务的成像中心更靠近目标坐标。
+
+**启用方式**：
+```python
+config = {
+    'enable_center_distance_score': True,   # 启用优化
+    'center_distance_weight': 15.0,         # 评分权重（分/度）
+}
+scheduler = GreedyScheduler(config)
+```
+
+**优化效果**：
+- 平均偏差降低8.3%（6.51° → 5.97°）
+- 最小偏差降低95.8%（3.80° → 0.16°）
+- 9.5%的任务实现高精度成像（偏差 < 2°）
+
+**注意事项**：
+- 仅对非聚类任务启用（聚类任务覆盖多目标）
+- 权重范围建议：10-25（默认15）
+- 过高权重可能牺牲任务覆盖率
 
 ### Q: 为什么地面站窗口计算从Java后端输出？
 
