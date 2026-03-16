@@ -38,6 +38,13 @@ class ConstraintConfig:
     enable_center_distance_score: bool = True  # 是否启用成像中心点距离评分
     center_distance_weight: float = 15.0  # 距离评分权重（分/度）
 
+    # 区域目标拼幅覆盖配置
+    enable_area_coverage: bool = True  # 是否启用区域目标拼幅覆盖
+    area_coverage_strategy: str = 'max_coverage'  # 'max_coverage' 或 'max_profit'
+    area_overlap_ratio: float = 0.15  # 瓦片重叠比例（10-20%）
+    area_priority_mode: str = 'center_first'  # 'uniform', 'center_first', 'edge_first', 'corner_first'
+    min_area_coverage_ratio: float = 0.95  # 最小覆盖率要求（95%）
+
     def __post_init__(self):
         """Validate configuration."""
         # 高精度要求：不接受简化模式

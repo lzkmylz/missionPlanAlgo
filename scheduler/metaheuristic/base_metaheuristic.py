@@ -20,6 +20,14 @@ from scheduler.common.footprint_utils import fill_footprint_to_task
 from payload.imaging_time_calculator import ImagingTimeCalculator
 from core.models import Mission, ImagingMode
 
+# Area coverage imports
+from scheduler.area_task_utils import (
+    AreaObservationTask, MixedTaskList,
+    create_mixed_task_list, calculate_coverage_fitness
+)
+from scheduler.coverage_tracker import CoverageTracker
+from core.decomposer import MosaicPlanner
+
 # 批量约束检查器导入 - 与greedy调度器保持一致
 from scheduler.constraints.unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker, UnifiedBatchCandidate
@@ -142,6 +150,19 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         self._feasibility_matrices: Optional[FeasibilityMatrices] = None
         self._use_fast_evaluation = config.get('use_fast_evaluation', True) if config else True
 
+        # ========== 区域目标拼幅覆盖配置 ==========
+        self.enable_area_coverage = config.get('enable_area_coverage', True)
+        self.area_coverage_strategy = config.get('area_coverage_strategy', 'max_coverage')
+        self.area_overlap_ratio = config.get('area_overlap_ratio', 0.15)
+        self.area_priority_mode = config.get('area_priority_mode', 'center_first')
+        self.min_area_coverage_ratio = config.get('min_area_coverage_ratio', 0.95)
+
+        # Area coverage state (initialized in schedule())
+        self._mosaic_planner: Optional[MosaicPlanner] = None
+        self._coverage_tracker: Optional[CoverageTracker] = None
+        self._mixed_task_list: Optional[MixedTaskList] = None
+        self._area_coverage_plans: Dict[str, Any] = {}
+
     def _convert_config(self, config: Dict[str, Any]) -> MetaheuristicConfig:
         """Convert legacy config dict to MetaheuristicConfig."""
         # Extract constraint settings
@@ -228,7 +249,11 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         if self.enable_clustering:
             self.tasks = self._get_clustered_tasks()
         else:
-            self.tasks = self._create_frequency_aware_tasks()
+            # Check if area coverage is enabled
+            if self.enable_area_coverage:
+                self.tasks = self._create_mixed_tasks_with_area_coverage()
+            else:
+                self.tasks = self._create_frequency_aware_tasks()
         self.satellites = list(self.mission.satellites)
         self.task_count = len(self.tasks)
         self.sat_count = len(self.satellites)
@@ -862,7 +887,53 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         # Add frequency satisfaction reward
         score = self._calculate_frequency_fitness(state.target_obs_count, score)
 
+        # Add area coverage fitness if applicable
+        if self.enable_area_coverage and self._area_coverage_plans:
+            coverage_fitness = self._calculate_area_coverage_fitness(state)
+            score += coverage_fitness
+
         return score
+
+    def _calculate_area_coverage_fitness(self, state: EvaluationState) -> float:
+        """Calculate area coverage fitness component.
+
+        Args:
+            state: Current evaluation state
+
+        Returns:
+            Area coverage fitness score
+        """
+        if not self._area_coverage_plans:
+            return 0.0
+
+        # Count area tasks scheduled
+        area_task_count = 0
+        for task_idx in range(min(len(self.tasks), len(state.sat_task_times))):
+            task = self.tasks[task_idx]
+            if isinstance(task, AreaObservationTask):
+                # Check if this task is scheduled by any satellite
+                for sat_tasks in state.sat_task_times.values():
+                    if any(t[0] == task_idx for t in sat_tasks if isinstance(t, tuple)):
+                        area_task_count += 1
+                        break
+
+        # Calculate coverage fitness
+        total_area_tasks = len([t for t in self.tasks if isinstance(t, AreaObservationTask)])
+        if total_area_tasks == 0:
+            return 0.0
+
+        coverage_ratio = area_task_count / total_area_tasks
+
+        # Base fitness from coverage ratio
+        fitness = coverage_ratio * 100.0
+
+        # Bonus for meeting min coverage requirement
+        for plan in self._area_coverage_plans.values():
+            if coverage_ratio >= plan.min_coverage_ratio:
+                fitness += 50.0  # Bonus for meeting requirement
+                break
+
+        return fitness
 
     def _calculate_priority_bonus(self, state: EvaluationState) -> float:
         """Calculate priority bonus for scheduled tasks.
@@ -1107,3 +1178,92 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         if not isinstance(value, (int, float)) or value < 0 or value > 1:
             raise ValueError(f"{name} must be between 0 and 1, got {value}")
         return float(value)
+
+    # ========== Area Coverage Support ==========
+
+    def _create_mixed_tasks_with_area_coverage(self) -> List[Any]:
+        """
+        Create mixed task list (point targets + area targets).
+
+        Returns:
+            List[Any]: Unified task list (ObservationTask and AreaObservationTask)
+        """
+        # Get all targets
+        targets = self.mission.targets if hasattr(self.mission, 'targets') else []
+        satellites = self.mission.satellites if hasattr(self.mission, 'satellites') else []
+
+        if not targets:
+            return []
+
+        # Initialize mosaic planner
+        if self._mosaic_planner is None:
+            self._mosaic_planner = MosaicPlanner(
+                default_overlap_ratio=self.area_overlap_ratio,
+                default_strategy=self.area_coverage_strategy
+            )
+
+        # Create mixed task list
+        self._mixed_task_list = create_mixed_task_list(
+            targets=targets,
+            satellites=satellites,
+            mosaic_planner=self._mosaic_planner,
+            enable_area_coverage=self.enable_area_coverage,
+            area_coverage_config={
+                'strategy': self.area_coverage_strategy,
+                'overlap_ratio': self.area_overlap_ratio,
+                'priority_mode': self.area_priority_mode,
+                'min_coverage_ratio': self.min_area_coverage_ratio,
+            }
+        )
+
+        # Save area coverage plans
+        self._area_coverage_plans = self._mixed_task_list.area_coverage_plans
+
+        # Initialize coverage tracker
+        if self._area_coverage_plans:
+            self._coverage_tracker = CoverageTracker(
+                coverage_plans=self._area_coverage_plans,
+                max_overlap_ratio=self.area_overlap_ratio
+            )
+
+        logger.info(f"Mixed tasks created: {len(self._mixed_task_list.point_tasks)} point tasks, "
+                   f"{len(self._mixed_task_list.area_tasks)} area tasks")
+
+        return self._mixed_task_list.get_all_tasks()
+
+    def _register_area_task_completion(self, task: AreaObservationTask,
+                                       scheduled_task: ScheduledTask) -> None:
+        """
+        Register area task completion.
+
+        Args:
+            task: Area observation task
+            scheduled_task: Scheduled task
+        """
+        if self._coverage_tracker is None:
+            return
+
+        try:
+            effective_coverage = self._coverage_tracker.register_scheduled_tile(
+                tile=task.tile,
+                task_id=scheduled_task.task_id,
+                satellite_id=scheduled_task.satellite_id,
+                timestamp=scheduled_task.imaging_start
+            )
+
+            logger.debug(f"Area task {task.task_id} completed, effective coverage: {effective_coverage:.2f} km²")
+
+        except Exception as e:
+            logger.warning(f"Failed to register area task completion: {e}")
+
+    def _get_area_coverage_statistics(self) -> Dict[str, Any]:
+        """
+        Get area coverage statistics.
+
+        Returns:
+            Statistics dictionary
+        """
+        if self._coverage_tracker is None:
+            return {}
+
+        return self._coverage_tracker.get_coverage_statistics()

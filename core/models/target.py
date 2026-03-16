@@ -91,6 +91,32 @@ class Target:
     # 状态（运行时被更新）
     completed_observations: int = 0
 
+    # ========== 拼幅覆盖相关字段 ==========
+    # 是否启用拼幅覆盖（仅区域目标有效）
+    mosaic_required: bool = False
+
+    # 拼幅策略: "strip"条带 / "grid"网格 / "auto"自动
+    mosaic_strategy: str = "auto"
+
+    # 最小覆盖率要求 (0-1)，默认95%
+    min_coverage_ratio: float = 0.95
+
+    # 最大允许重叠比例 (0-1)，默认15%（10-20%范围）
+    max_overlap_ratio: float = 0.15
+
+    # 瓦片优先级模式: "uniform"统一 / "center_first"中心优先 /
+    #                 "edge_first"边缘优先 / "corner_first"角落优先
+    tile_priority_mode: str = "center_first"
+
+    # 是否启用动态瓦片大小
+    dynamic_tile_sizing: bool = True
+
+    # 覆盖策略: "max_coverage"最大覆盖 / "max_profit"最高收益
+    coverage_strategy: str = "max_coverage"
+
+    # 区域目标参考分辨率（米），用于动态瓦片计算
+    target_resolution_m: float = 10.0
+
     def __post_init__(self):
         """验证数据一致性"""
         if self.target_type == TargetType.POINT:
@@ -100,6 +126,12 @@ class Target:
             if len(self.area_vertices) < 3:
                 raise ValueError("Area target must have at least 3 vertices")
 
+        # 验证比率字段范围
+        if not 0 <= self.min_coverage_ratio <= 1:
+            raise ValueError(f"min_coverage_ratio must be between 0 and 1, got {self.min_coverage_ratio}")
+        if not 0 <= self.max_overlap_ratio <= 1:
+            raise ValueError(f"max_overlap_ratio must be between 0 and 1, got {self.max_overlap_ratio}")
+
     def get_center(self) -> Tuple[float, float]:
         """获取目标中心坐标"""
         if self.target_type == TargetType.POINT:
@@ -108,6 +140,8 @@ class Target:
             # 计算多边形中心
             lons = [v[0] for v in self.area_vertices]
             lats = [v[1] for v in self.area_vertices]
+            if not lons:
+                return (0.0, 0.0)
             return (sum(lons) / len(lons), sum(lats) / len(lats))
 
     def get_area(self) -> float:

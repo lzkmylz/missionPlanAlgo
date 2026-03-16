@@ -195,6 +195,7 @@ class ScheduleResult:
     iterations: int
     convergence_curve: List[float] = field(default_factory=list)
     failure_summary: Optional[Dict[TaskFailureReason, int]] = None
+    area_coverage_stats: Optional[Dict[str, Any]] = None  # 区域覆盖统计
 
     def get_demand_satisfaction_rate(self, total_tasks: int) -> float:
         if total_tasks == 0:

@@ -8,6 +8,7 @@ from .base_decomposer import BaseDecomposer, DecompositionStrategy
 from .grid_decomposer import GridDecomposer
 from .strip_decomposer import StripDecomposer
 from .decomposer_factory import DecomposerFactory
+from .mosaic_planner import MosaicPlanner
 
 __all__ = [
     'BaseDecomposer',
@@ -15,4 +16,5 @@ __all__ = [
     'GridDecomposer',
     'StripDecomposer',
     'DecomposerFactory',
+    'MosaicPlanner',
 ]

@@ -21,6 +21,12 @@ from collections import defaultdict
 
 from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskFailureReason
 from ..frequency_utils import ObservationTask, create_observation_tasks
+from ..area_task_utils import (
+    AreaObservationTask, MixedTaskList,
+    create_mixed_task_list, create_area_observation_tasks,
+    calculate_area_coverage_score
+)
+from ..coverage_tracker import CoverageTracker
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 from ..constraints import SlewConstraintChecker, SlewFeasibilityResult
 from scheduler.common.constraint_checker import ConstraintChecker, ConstraintContext
@@ -34,6 +40,7 @@ from scheduler.constraints.unified_batch_constraint_checker import (
 )
 from scheduler.common.footprint_utils import calculate_center_distance_score
 from core.dynamics.attitude_precache import get_attitude_precache_manager
+from core.decomposer import MosaicPlanner
 try:
     import numpy as np
     HAS_NUMPY = True
@@ -152,6 +159,19 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         }
         self._last_task_rejection_reason = None  # 最后一个任务的拒绝原因
 
+        # ========== 区域目标拼幅覆盖相关配置 ==========
+        self.enable_area_coverage = config.get('enable_area_coverage', True)
+        self.area_coverage_strategy = config.get('area_coverage_strategy', 'max_coverage')
+        self.area_overlap_ratio = config.get('area_overlap_ratio', 0.15)  # 默认15%重叠
+        self.area_priority_mode = config.get('area_priority_mode', 'center_first')
+        self.min_area_coverage_ratio = config.get('min_area_coverage_ratio', 0.95)
+
+        # 区域目标相关状态（延迟初始化）
+        self._mosaic_planner: Optional[MosaicPlanner] = None
+        self._coverage_tracker: Optional[CoverageTracker] = None
+        self._mixed_task_list: Optional[MixedTaskList] = None
+        self._area_coverage_plans: Dict[str, Any] = {}
+
     def get_parameters(self) -> Dict[str, Any]:
         """Return algorithm configurable parameters"""
         params = {
@@ -162,6 +182,11 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             'enable_quality_filtering': self.enable_quality_filtering,
             'min_quality_threshold': self.min_quality_threshold,
             'quality_score_weight': self.quality_score_weight,
+            # Area coverage parameters
+            'enable_area_coverage': self.enable_area_coverage,
+            'area_coverage_strategy': self.area_coverage_strategy,
+            'area_overlap_ratio': self.area_overlap_ratio,
+            'min_area_coverage_ratio': self.min_area_coverage_ratio,
         }
         # Add clustering parameters
         params.update(self.get_clustering_config())
@@ -425,7 +450,11 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         if self.enable_clustering:
             pending_tasks = self._sort_tasks(self._get_clustered_tasks())
         else:
-            pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
+            # 检查是否启用区域目标拼幅覆盖
+            if self.enable_area_coverage:
+                pending_tasks = self._sort_tasks(self._create_mixed_tasks_with_area_coverage())
+            else:
+                pending_tasks = self._sort_tasks(self._create_frequency_aware_tasks())
         self._perf_end('create_and_sort_tasks', t)
 
         scheduled_tasks: List[ScheduledTask] = []
@@ -479,6 +508,10 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 self._update_resource_usage(sat_id, task, window, scheduled_task)
                 self._perf_end('update_resource_usage', t)
 
+                # 如果是区域任务，注册覆盖状态
+                if isinstance(task, AreaObservationTask):
+                    self._register_area_task_completion(task, scheduled_task)
+
                 self._add_convergence_point(len(scheduled_tasks))
             else:
                 # Record failure reason
@@ -513,6 +546,11 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         # Calculate frequency-aware fitness score
         frequency_fitness = self._calculate_frequency_fitness(target_obs_count, base_score=len(scheduled_tasks))
 
+        # Calculate area coverage statistics if applicable
+        area_coverage_stats = self._get_area_coverage_statistics()
+        if area_coverage_stats:
+            logger.info(f"区域覆盖统计: {area_coverage_stats}")
+
         return ScheduleResult(
             scheduled_tasks=scheduled_tasks,
             unscheduled_tasks=unscheduled,
@@ -520,8 +558,102 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             computation_time=computation_time,
             iterations=self._iterations,
             convergence_curve=self._convergence_curve,
-            failure_summary=failure_summary
+            failure_summary=failure_summary,
+            area_coverage_stats=area_coverage_stats
         )
+
+    def _create_mixed_tasks_with_area_coverage(self) -> List[Any]:
+        """
+        创建混合任务列表（点目标 + 区域目标）
+
+        为区域目标生成拼幅覆盖计划，创建对瓦片的观测任务。
+        与点目标任务一起返回统一的任务列表。
+
+        Returns:
+            List[Any]: 统一任务列表（包含 ObservationTask 和 AreaObservationTask）
+        """
+        # 获取所有目标
+        targets = self.mission.targets if hasattr(self.mission, 'targets') else []
+        satellites = self.mission.satellites if hasattr(self.mission, 'satellites') else []
+
+        if not targets:
+            return []
+
+        # 初始化拼幅规划器
+        if self._mosaic_planner is None:
+            self._mosaic_planner = MosaicPlanner(
+                default_overlap_ratio=self.area_overlap_ratio,
+                default_strategy=self.area_coverage_strategy
+            )
+
+        # 创建混合任务列表
+        self._mixed_task_list = create_mixed_task_list(
+            targets=targets,
+            satellites=satellites,
+            mosaic_planner=self._mosaic_planner,
+            enable_area_coverage=self.enable_area_coverage,
+            area_coverage_config={
+                'strategy': self.area_coverage_strategy,
+                'overlap_ratio': self.area_overlap_ratio,
+                'priority_mode': self.area_priority_mode,
+                'min_coverage_ratio': self.min_area_coverage_ratio,
+            }
+        )
+
+        # 保存区域覆盖计划
+        self._area_coverage_plans = self._mixed_task_list.area_coverage_plans
+
+        # 初始化覆盖追踪器
+        if self._area_coverage_plans:
+            self._coverage_tracker = CoverageTracker(
+                coverage_plans=self._area_coverage_plans,
+                max_overlap_ratio=self.area_overlap_ratio
+            )
+
+        logger.info(f"混合任务创建完成: {len(self._mixed_task_list.point_tasks)} 点任务, "
+                   f"{len(self._mixed_task_list.area_tasks)} 区域任务")
+
+        return self._mixed_task_list.get_all_tasks()
+
+    def _register_area_task_completion(self, task: AreaObservationTask,
+                                       scheduled_task: ScheduledTask) -> None:
+        """
+        注册区域任务完成
+
+        更新覆盖追踪器的状态。
+
+        Args:
+            task: 区域观测任务
+            scheduled_task: 已调度任务
+        """
+        if self._coverage_tracker is None:
+            return
+
+        try:
+            effective_coverage = self._coverage_tracker.register_scheduled_tile(
+                tile=task.tile,
+                task_id=scheduled_task.task_id,
+                satellite_id=scheduled_task.satellite_id,
+                timestamp=scheduled_task.imaging_start,
+                footprint_area_km2=task.area_km2
+            )
+
+            logger.debug(f"区域任务 {task.task_id} 完成，有效覆盖: {effective_coverage:.2f} km²")
+
+        except Exception as e:
+            logger.warning(f"注册区域任务完成状态失败: {e}")
+
+    def _get_area_coverage_statistics(self) -> Dict[str, Any]:
+        """
+        获取区域覆盖统计信息
+
+        Returns:
+            统计信息字典
+        """
+        if self._coverage_tracker is None:
+            return {}
+
+        return self._coverage_tracker.get_coverage_statistics()
 
     def _sort_tasks(self, tasks: List[Any]) -> List[Any]:
         """

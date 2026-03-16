@@ -47,6 +47,18 @@ class VisibilityWindow:
     quality_tier: QualityTier = QualityTier.MEDIUM
     detailed_scores: Optional[Dict[str, float]] = None
 
+    # ========== 区域目标拼幅相关字段 ==========
+    # 瓦片相关（用于区域目标拼幅覆盖）
+    tile_id: Optional[str] = None  # 瓦片ID，如 "AREA-001-T001"
+    is_mosaic_window: bool = False  # 是否为拼幅窗口
+    area_coverage_fraction: float = 1.0  # 足迹对瓦片的覆盖比例（点目标为1.0）
+
+    # 预测的足迹信息（用于区域覆盖）
+    footprint_at_start: Optional[List[Tuple[float, float]]] = None  # 窗口开始时的足迹角点
+    footprint_at_end: Optional[List[Tuple[float, float]]] = None  # 窗口结束时的足迹角点
+    footprint_center_at_start: Optional[Tuple[float, float]] = None  # 开始时的足迹中心
+    footprint_center_at_end: Optional[Tuple[float, float]] = None  # 结束时的足迹中心
+
     def duration(self) -> float:
         """窗口持续时间（秒）"""
         return (self.end_time - self.start_time).total_seconds()

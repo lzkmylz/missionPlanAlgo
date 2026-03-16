@@ -1,0 +1,134 @@
+{
+  "name": "区域目标拼幅覆盖演示场景",
+  "description": "演示区域目标拼幅覆盖功能，包含1个区域目标和3个点目标",
+  "start_time": "2024-01-01T00:00:00",
+  "end_time": "2024-01-02T00:00:00",
+  "satellites": [
+    {
+      "id": "SAT-OPT-001",
+      "name": "光学卫星1号",
+      "type": "optical",
+      "capabilities": {
+        "imaging_modes": ["pushbroom"],
+        "max_roll_angle": 35.0,
+        "max_pitch_angle": 20.0,
+        "max_slew_rate": 3.0,
+        "settling_time": 5.0,
+        "power_capacity": 2000.0,
+        "storage_capacity": 100.0
+      },
+      "orbit": {
+        "type": "sun_synchronous",
+        "altitude": 500,
+        "inclination": 97.4,
+        "local_time_of_ascending_node": "10:30"
+      }
+    },
+    {
+      "id": "SAT-SAR-001",
+      "name": "SAR卫星1号",
+      "type": "sar",
+      "capabilities": {
+        "imaging_modes": ["stripmap", "spotlight"],
+        "max_roll_angle": 45.0,
+        "max_pitch_angle": 30.0,
+        "max_slew_rate": 2.0,
+        "settling_time": 8.0,
+        "power_capacity": 3000.0,
+        "storage_capacity": 150.0
+      },
+      "orbit": {
+        "type": "sun_synchronous",
+        "altitude": 550,
+        "inclination": 97.6,
+        "local_time_of_ascending_node": "06:00"
+      }
+    }
+  ],
+  "targets": [
+    {
+      "id": "AREA-CITY-001",
+      "name": "城市区域A",
+      "target_type": "area",
+      "area_vertices": [
+        [116.2, 39.8],
+        [116.5, 39.8],
+        [116.5, 40.0],
+        [116.2, 40.0]
+      ],
+      "priority": 1,
+      "required_observations": 2,
+      "resolution_required": 10.0,
+      "mosaic_required": true,
+      "mosaic_strategy": "auto",
+      "min_coverage_ratio": 0.95,
+      "max_overlap_ratio": 0.15,
+      "tile_priority_mode": "center_first",
+      "coverage_strategy": "max_coverage"
+    },
+    {
+      "id": "AREA-FOREST-001",
+      "name": "森林监测区B",
+      "target_type": "area",
+      "area_vertices": [
+        [117.0, 39.5],
+        [117.3, 39.5],
+        [117.4, 39.7],
+        [117.1, 39.8],
+        [116.9, 39.6]
+      ],
+      "priority": 2,
+      "required_observations": 1,
+      "resolution_required": 30.0,
+      "mosaic_required": true,
+      "mosaic_strategy": "grid",
+      "min_coverage_ratio": 0.90,
+      "max_overlap_ratio": 0.20,
+      "tile_priority_mode": "uniform",
+      "coverage_strategy": "max_profit"
+    },
+    {
+      "id": "POINT-001",
+      "name": "重要设施C",
+      "target_type": "point",
+      "location": [116.35, 39.92],
+      "priority": 1,
+      "required_observations": 3,
+      "resolution_required": 5.0
+    },
+    {
+      "id": "POINT-002",
+      "name": "监测站D",
+      "target_type": "point",
+      "location": [116.45, 39.88],
+      "priority": 3,
+      "required_observations": 2,
+      "resolution_required": 10.0
+    }
+  ],
+  "ground_stations": [
+    {
+      "id": "GS-BEIJING",
+      "name": "北京地面站",
+      "location": [116.4, 39.9],
+      "elevation": 0.05,
+      "antennas": [
+        {
+          "id": "ANT-001",
+          "frequency_band": "X",
+          "max_data_rate": 300.0
+        }
+      ]
+    }
+  ],
+  "scheduling_config": {
+    "algorithm": "greedy",
+    "heuristic": "priority",
+    "consider_power": true,
+    "consider_storage": true,
+    "enable_area_coverage": true,
+    "area_coverage_strategy": "max_coverage",
+    "area_overlap_ratio": 0.15,
+    "min_area_coverage_ratio": 0.95
+  }
+}

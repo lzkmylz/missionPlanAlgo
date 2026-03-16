@@ -196,6 +196,7 @@ mpa config set task_backend.broker_url redis://localhost:6379/0
 
 - **大规模星座支持**：60颗异构卫星（30光学 + 30 SAR）
 - **多类型目标**：点群目标、大区域目标（支持网格/条带分解）
+- **区域目标拼幅覆盖**：大范围区域自动分解为瓦片，支持最大覆盖/最高收益策略
 - **多成像模式**：聚束/滑动聚束/条带（SAR）、推扫/框幅（光学）
 - **地面站资源调度**：多地理位置、多天线约束、频次约束
 - **算法即插即用**：统一接口支持贪心、EDD、SPT、GA、SA、ACO、PSO、禁忌搜索等
@@ -505,6 +506,128 @@ scheduler = GreedyScheduler(config)
 - 平衡配置（20.0）：科学观测场景，轻微提升精度
 - 激进配置（25.0）：高精度需求，可能牺牲部分边缘任务
 
+### 6. 区域目标拼幅覆盖
+
+大范围区域目标（如城市、湖泊、农田）需要分解为多个瓦片（Tiles）进行完整覆盖。系统支持自动分解、动态瓦片大小和两种覆盖策略：
+
+#### 6.1 核心概念
+
+| 概念 | 说明 |
+|------|------|
+| **MosaicTile** | 单个拼幅瓦片，包含顶点、中心、面积、覆盖状态 |
+| **AreaCoveragePlan** | 区域覆盖计划，管理所有瓦片和覆盖策略 |
+| **CoverageStrategy** | 覆盖策略：MAX_COVERAGE（最大覆盖）、MAX_PROFIT（最高收益） |
+| **CoverageTracker** | 覆盖追踪器，实时追踪调度过程中的覆盖进度 |
+| **TilePriorityMode** | 瓦片优先级模式：CENTER_FIRST、EDGE_FIRST、UNIFORM |
+
+#### 6.2 动态瓦片大小
+
+根据卫星FOV和轨道高度自动计算最优瓦片大小：
+
+```python
+from core.decomposer.mosaic_planner import MosaicPlanner
+
+planner = MosaicPlanner(satellites)
+plan = planner.create_coverage_plan(
+    target=area_target,
+    strategy=CoverageStrategy.MAX_COVERAGE,
+    overlap_ratio=0.15,  # 15%重叠余量
+    dynamic_sizing=True   # 启用动态大小
+)
+```
+
+**计算逻辑**：
+- 基于卫星最大滚转角（35°光学 / 45°SAR）计算视场宽度
+- 考虑15%重叠余量确保无缝覆盖
+- 瓦片大小范围：2-50km（根据卫星能力自适应）
+
+#### 6.3 覆盖策略
+
+**最大覆盖（MAX_COVERAGE）**：
+- 目标：尽可能覆盖更多面积
+- 瓦片选择：优先大面积瓦片
+- 适用场景：灾害监测、环境普查
+
+**最高收益（MAX_PROFIT）**：
+- 目标：平衡覆盖面积和任务收益
+- 瓦片选择：高优先级 × 大面积
+- 适用场景：商业遥感、重点目标监视
+
+```python
+# 策略配置
+config = {
+    'area_coverage_strategy': 'max_coverage',  # 或 'max_profit'
+    'area_overlap_ratio': 0.15,                # 重叠余量10-20%
+    'tile_priority_mode': 'center_first',      # 从中心向外覆盖
+}
+```
+
+#### 6.4 混合规划（点目标+区域目标）
+
+支持点目标和区域目标在同一个调度任务中混合规划：
+
+```python
+from scheduler.area_task_utils import create_mixed_task_list
+
+# 自动识别目标类型并创建混合任务列表
+mixed_tasks = create_mixed_task_list(
+    targets=targets,                    # 包含点目标和区域目标
+    satellites=satellites,
+    visibility_windows=windows,
+    enable_area_coverage=True,
+    area_coverage_strategy='max_coverage'
+)
+
+# 区域目标自动分解为瓦片任务
+# 点目标保持原有处理方式
+```
+
+#### 6.5 覆盖追踪
+
+实时追踪覆盖进度，支持调度过程中的动态决策：
+
+```python
+from scheduler.coverage_tracker import CoverageTracker
+
+tracker = CoverageTracker(coverage_plans)
+
+# 注册已调度的瓦片
+effective_coverage = tracker.register_scheduled_tile(
+    tile=tile,
+    task_id=task.id,
+    satellite_id=sat.id
+)
+
+# 查询覆盖状态
+ratio = tracker.get_coverage_ratio(target_id)
+uncovered = tracker.get_uncovered_tiles(target_id)
+is_complete = tracker.is_area_fully_covered(target_id)
+```
+
+#### 6.6 场景配置示例
+
+```json
+{
+  "targets": [
+    {
+      "id": "AREA-001",
+      "name": "测试区域",
+      "target_type": "AREA",
+      "boundary": {
+        "type": "Polygon",
+        "coordinates": [[[116.0, 40.0], [116.5, 40.0], [116.5, 40.5], [116.0, 40.5], [116.0, 40.0]]]
+      },
+      "priority": 1,
+      "mosaic_required": true,
+      "min_coverage_ratio": 0.95,
+      "max_overlap_ratio": 0.15,
+      "coverage_strategy": "max_coverage",
+      "tile_priority_mode": "center_first"
+    }
+  ]
+}
+```
+
 ---
 
 ## 支持的算法
@@ -700,7 +823,41 @@ print(f"求解时间: {metrics.computation_time:.2f} 秒")
 print(f"频次满足率: {result.frequency_satisfaction:.2%}")
 ```
 
----
+### 区域目标拼幅覆盖示例
+
+```python
+from core.models import Mission, Target, TargetType
+from core.decomposer.mosaic_planner import MosaicPlanner, CoverageStrategy
+from scheduler.area_task_utils import create_mixed_task_list
+from scheduler.greedy import GreedyScheduler
+from scheduler.coverage_tracker import CoverageTracker
+
+# 加载包含区域目标的场景
+mission = Mission.load("scenarios/area_coverage_scenario.json")
+
+# 配置区域覆盖参数
+config = {
+    'enable_area_coverage': True,
+    'area_coverage_strategy': 'max_coverage',  # 或 'max_profit'
+    'area_overlap_ratio': 0.15,                # 15%重叠余量
+    'tile_priority_mode': 'center_first',      # 中心优先
+}
+
+# 创建调度器并启用区域覆盖
+scheduler = GreedyScheduler(config)
+scheduler.initialize(mission)
+
+# 运行调度（自动处理点目标和区域目标）
+result = scheduler.schedule()
+
+# 查看区域覆盖统计
+for target_id, plan in scheduler.coverage_tracker.plans.items():
+    print(f"区域 {target_id}:")
+    print(f"  总瓦片数: {plan.statistics.total_tiles}")
+    print(f"  已覆盖: {plan.statistics.covered_tiles}")
+    print(f"  覆盖率: {plan.statistics.coverage_ratio:.1%}")
+    print(f"  有效覆盖面积: {plan.statistics.effective_coverage_km2:.1f} km²")
+```
 
 ---
 
@@ -849,6 +1006,7 @@ python -m experiments.runner \
 - [x] **批量约束检查**（Numba向量化，约束检查加速5-10倍）
 - [x] **精确姿态机动模型**（刚体动力学，时间最优轨迹）
 - [x] **成像中心点距离优化**（非聚类任务偏差降低8.3%）
+- [x] **区域目标拼幅覆盖**（动态瓦片分解、最大覆盖/最高收益策略）
 - [x] 轨道传播与可见性计算（SGP4 / STK HPOP / Orekit）
 - [x] 地面站窗口计算（Java后端默认计算）
 - [x] 基础调度算法（贪心、EDD、SPT）
@@ -1140,6 +1298,107 @@ scheduler = GreedyScheduler(config)
 - 仅对非聚类任务启用（聚类任务覆盖多目标）
 - 权重范围建议：10-25（默认15）
 - 过高权重可能牺牲任务覆盖率
+
+### Q: 什么是区域目标拼幅覆盖？
+
+**A:** 区域目标拼幅覆盖用于大范围区域（如城市、湖泊、农田）的完整观测，将区域自动分解为多个瓦片（Tiles），每个瓦片作为一个观测任务进行调度。
+
+**核心特性**：
+- **动态瓦片大小**：根据卫星FOV和轨道高度自动计算最优瓦片大小
+- **两种覆盖策略**：最大覆盖（MAX_COVERAGE）vs 最高收益（MAX_PROFIT）
+- **重叠处理**：支持10-20%重叠余量（默认15%），确保无缝覆盖
+- **混合规划**：点目标和区域目标可在同一个调度任务中混合处理
+
+**使用方式**：
+```python
+config = {
+    'enable_area_coverage': True,
+    'area_coverage_strategy': 'max_coverage',  # 或 'max_profit'
+    'area_overlap_ratio': 0.15,
+}
+scheduler = GreedyScheduler(config)
+```
+
+### Q: 如何选择区域覆盖策略？
+
+**A:** 根据应用场景选择：
+
+| 策略 | 目标 | 适用场景 | 瓦片选择 |
+|------|------|---------|---------|
+| **MAX_COVERAGE** | 最大覆盖面积 | 灾害监测、环境普查 | 优先大面积瓦片 |
+| **MAX_PROFIT** | 最高收益 | 商业遥感、重点目标监视 | 高优先级×大面积 |
+
+**配置示例**：
+```json
+{
+  "targets": [{
+    "id": "AREA-001",
+    "target_type": "AREA",
+    "coverage_strategy": "max_coverage",
+    "min_coverage_ratio": 0.95,
+    "max_overlap_ratio": 0.15
+  }]
+}
+```
+
+### Q: 瓦片优先级模式有什么区别？
+
+**A:** 系统支持四种瓦片优先级模式：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|---------|
+| **CENTER_FIRST** | 从区域中心向外覆盖 | 重点区域中心优先 |
+| **EDGE_FIRST** | 从区域边缘向内覆盖 | 边界敏感场景 |
+| **CORNER_FIRST** | 从角落开始覆盖 | 特定扫描模式 |
+| **UNIFORM** | 统一优先级 | 均匀覆盖需求 |
+
+**配置方式**：
+```json
+{
+  "tile_priority_mode": "center_first"
+}
+```
+
+### Q: 如何查看区域覆盖进度？
+
+**A:** 使用 `CoverageTracker` 实时追踪覆盖状态：
+
+```python
+from scheduler.coverage_tracker import CoverageTracker
+
+tracker = CoverageTracker(coverage_plans)
+
+# 查询覆盖状态
+ratio = tracker.get_coverage_ratio(target_id)
+uncovered = tracker.get_uncovered_tiles(target_id)
+is_complete = tracker.is_area_fully_covered(target_id)
+
+# 获取统计信息
+stats = tracker.get_coverage_statistics(target_id)
+print(f"总瓦片数: {stats['total_tiles']}")
+print(f"已覆盖: {stats['covered_tiles']}")
+print(f"覆盖率: {stats['coverage_ratio']:.1%}")
+```
+
+### Q: 区域目标和点目标可以混合规划吗？
+
+**A:** 可以。系统自动识别目标类型并创建混合任务列表：
+
+```python
+from scheduler.area_task_utils import create_mixed_task_list
+
+mixed_tasks = create_mixed_task_list(
+    targets=targets,
+    satellites=satellites,
+    visibility_windows=windows,
+    enable_area_coverage=True,
+    area_coverage_strategy='max_coverage'
+)
+```
+
+**调度器自动处理**：
+- 点目标 → 直接创建观测任务
+- 区域目标 → 分解为瓦片 → 创建瓦片观测任务
 
 ### Q: 为什么地面站窗口计算从Java后端输出？
 

@@ -1543,3 +1543,170 @@ class OrekitJavaBridge:
             }
 
         return result
+
+    # ========== 区域目标拼幅覆盖支持 ==========
+
+    @ensure_jvm_attached
+    @translate_java_exception
+    def compute_area_visibility_batch(self,
+                                      satellites: List[Any],
+                                      area_targets: List[Any],
+                                      start_time: datetime,
+                                      end_time: datetime,
+                                      tile_resolution_m: float = 100.0,
+                                      **kwargs) -> Dict[str, Any]:
+        """
+        批量计算区域目标的可见性窗口（拼幅覆盖）
+
+        这是compute_visibility_batch的扩展，支持将区域目标分解为瓦片后
+        批量计算所有瓦片的可见性。
+
+        Args:
+            satellites: 卫星配置列表
+            area_targets: 区域目标列表（每个包含area_vertices）
+            start_time: 计算开始时间
+            end_time: 计算结束时间
+            tile_resolution_m: 瓦片分辨率（米）
+            **kwargs: 额外参数
+                - coarse_step: 粗扫描步长（秒）
+                - fine_step: 精扫描步长（秒）
+                - min_elevation: 最小仰角（度）
+                - overlap_ratio: 瓦片重叠比例
+
+        Returns:
+            Dict with structure:
+            {
+                'tileWindows': [  # 瓦片可见窗口列表
+                    {
+                        'satelliteId': str,
+                        'tileId': str,  # 格式: "target_id-T####"
+                        'targetId': str,  # 原始区域目标ID
+                        'startTime': str,
+                        'endTime': str,
+                        'maxElevation': float,
+                        'centerLon': float,
+                        'centerLat': float,
+                    },
+                    ...
+                ],
+                'stats': {
+                    'nSatellites': int,
+                    'nAreaTargets': int,
+                    'nTiles': int,
+                    'nWindowsFound': int,
+                    'computationTimeMs': int,
+                }
+            }
+
+        Note:
+            此方法是compute_visibility_batch的包装，在Java端区域目标
+            会被自动分解为瓦片并计算可见性。如果Java端不支持区域目标，
+            将回退到Python端分解后逐点计算。
+        """
+        self._ensure_jvm_started()
+
+        # 首先尝试使用Java端的区域目标计算
+        # 如果Java端支持BatchVisibilityCalculator.computeAreaVisibility，使用它
+        # 否则，在Python端分解后调用compute_visibility_batch
+
+        # 当前实现：使用Python端分解（与MosaicPlanner一致）
+        from core.decomposer import MosaicPlanner
+        from core.models import Target, MosaicTile
+
+        mosaic_planner = MosaicPlanner()
+        tile_windows = []
+
+        # 分解区域目标并收集瓦片
+        all_tiles = []
+        tile_to_target_map = {}
+
+        for target in area_targets:
+            if isinstance(target, dict):
+                # 从字典创建临时Target对象
+                target_obj = Target(
+                    id=target.get('id', 'unknown'),
+                    name=target.get('name', ''),
+                    target_type='area',
+                    area_vertices=target.get('area_vertices', []),
+                    priority=target.get('priority', 1),
+                    required_observations=target.get('required_observations', 1),
+                )
+            else:
+                target_obj = target
+
+            # 创建覆盖计划
+            plan = mosaic_planner.create_coverage_plan(
+                target=target_obj,
+                satellites=satellites,
+                overlap_ratio=kwargs.get('overlap_ratio', 0.15),
+            )
+
+            for tile in plan.tiles:
+                all_tiles.append(tile)
+                tile_to_target_map[tile.tile_id] = target_obj.id
+
+        logger.info(f"区域目标分解完成: {len(area_targets)} 个区域 -> {len(all_tiles)} 个瓦片")
+
+        # 将瓦片作为点目标计算可见性
+        # 创建临时点目标列表
+        point_targets = []
+        for tile in all_tiles:
+            point_targets.append({
+                'id': tile.tile_id,
+                'name': f"Tile {tile.tile_id}",
+                'location': [tile.center[0], tile.center[1]],
+                'priority': tile.priority,
+                'parent_target_id': tile.parent_target_id,
+            })
+
+        # 调用现有的批量可见性计算
+        result = self.compute_visibility_batch(
+            satellites=satellites,
+            targets=point_targets,
+            start_time=start_time,
+            end_time=end_time,
+            coarse_step=kwargs.get('coarse_step', 5.0),
+            fine_step=kwargs.get('fine_step', 1.0),
+            min_elevation=kwargs.get('min_elevation', 5.0),
+            export_orbits=kwargs.get('export_orbits', False),
+            orbit_output_path=kwargs.get('orbit_output_path'),
+        )
+
+        # 转换结果为瓦片窗口格式
+        output = {
+            'tileWindows': [],
+            'stats': {
+                'nSatellites': result.get('stats', {}).get('nSatellites', 0),
+                'nAreaTargets': len(area_targets),
+                'nTiles': len(all_tiles),
+                'nWindowsFound': 0,
+                'computationTimeMs': result.get('stats', {}).get('computationTimeMs', 0),
+            }
+        }
+
+        # 转换目标窗口为瓦片窗口
+        for window in result.get('targetWindows', []):
+            tile_id = window.get('targetId', '')
+            parent_id = tile_to_target_map.get(tile_id, '')
+
+            # 查找瓦片中心坐标
+            center_lon, center_lat = 0.0, 0.0
+            for tile in all_tiles:
+                if tile.tile_id == tile_id:
+                    center_lon, center_lat = tile.center
+                    break
+
+            output['tileWindows'].append({
+                'satelliteId': window.get('satelliteId', ''),
+                'tileId': tile_id,
+                'targetId': parent_id,
+                'startTime': window.get('startTime', ''),
+                'endTime': window.get('endTime', ''),
+                'maxElevation': window.get('maxElevation', 0.0),
+                'centerLon': center_lon,
+                'centerLat': center_lat,
+            })
+
+        output['stats']['nWindowsFound'] = len(output['tileWindows'])
+
+        return output
