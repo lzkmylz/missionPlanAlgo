@@ -191,6 +191,20 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help='随机种子 (默认: 42)'
     )
 
+    # 缓存检测
+    parser.add_argument(
+        '--auto-cache',
+        action='store_true',
+        default=True,
+        help='启用自动缓存检测 (默认: 启用)'
+    )
+    parser.add_argument(
+        '--no-auto-cache',
+        dest='auto_cache',
+        action='store_false',
+        help='禁用自动缓存检测'
+    )
+
     return parser.parse_args(args)
 
 
@@ -496,9 +510,52 @@ def main(args: Optional[List[str]] = None) -> int:
         print(f"  目标: {len(mission.targets)} 个")
         print(f"  地面站: {len(mission.ground_stations)} 个")
 
-        # 2. 加载缓存
-        print(f"\n[2/3] 加载窗口缓存: {parsed_args.cache}")
-        cache = load_window_cache_from_json(parsed_args.cache, mission)
+        # 2. 加载缓存（支持智能缓存检测）
+        cache_path = parsed_args.cache
+
+        # 尝试智能检测匹配的缓存
+        if parsed_args.auto_cache:
+            try:
+                from core.cache.fingerprint_calculator import FingerprintCalculator
+                from core.cache.index_manager import CacheIndexManager
+
+                calculator = FingerprintCalculator()
+                fingerprint = calculator.calculate(parsed_args.scenario)
+
+                manager = CacheIndexManager()
+                entry = manager.find(fingerprint)
+
+                if entry:
+                    print(f"\n[自动缓存检测] 找到匹配的场景缓存:")
+                    print(f"  场景指纹: {fingerprint.full_hash[:16]}...")
+                    print(f"  缓存文件: {entry.cache_file}")
+                    print(f"  访问次数: {entry.access_count}")
+
+                    # 使用检测到的缓存路径
+                    if Path(entry.cache_file).exists():
+                        cache_path = entry.cache_file
+                        print(f"  ✓ 将使用索引中的缓存")
+                    else:
+                        print(f"  ! 缓存文件不存在，使用指定的缓存路径")
+                else:
+                    # 检查可复用的轨道缓存
+                    orbit_entry = manager.find_reusable_orbit_cache(fingerprint)
+                    if orbit_entry:
+                        print(f"\n[自动缓存检测] 发现可复用的轨道缓存:")
+                        print(f"  来源场景: {orbit_entry.scenario_name}")
+                        print(f"  轨道文件: {orbit_entry.orbit_file}")
+                        print(f"  提示: 可用 cache_manager.py compute -s <scenario> 利用此缓存")
+
+                    print(f"\n[2/3] 加载窗口缓存: {cache_path}")
+            except Exception as e:
+                # 智能检测失败不影响主流程
+                if parsed_args.auto_cache:
+                    print(f"\n[自动缓存检测] 检测失败，使用指定缓存: {e}")
+                print(f"\n[2/3] 加载窗口缓存: {cache_path}")
+        else:
+            print(f"\n[2/3] 加载窗口缓存: {cache_path} (自动检测已禁用)")
+
+        cache = load_window_cache_from_json(cache_path, mission)
         stats = cache.get_statistics()
         print(f"  总窗口数: {stats['total_windows']:,}")
         print(f"  卫星-目标对: {stats['sat_target_pairs']}")

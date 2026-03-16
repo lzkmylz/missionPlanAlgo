@@ -621,6 +621,36 @@ def main(args: Optional[List[str]] = None) -> int:
         print_results(stats, parsed_args.mode)
         print(f"\n结果已保存: {parsed_args.output}")
 
+        # [3/3] 注册缓存到索引
+        print("\n[3/3] 更新缓存索引...")
+        try:
+            from core.cache.fingerprint_calculator import FingerprintCalculator
+            from core.cache.index_manager import CacheIndexManager
+
+            calculator = FingerprintCalculator()
+            fingerprint = calculator.calculate(parsed_args.scenario)
+
+            manager = CacheIndexManager()
+            entry = manager.register(
+                fingerprint=fingerprint,
+                cache_file=parsed_args.output,
+                orbit_file=orbit_output_path if not parsed_args.no_orbit_export else None,
+                stats={
+                    'satellites': len(mission.satellites),
+                    'targets': len(mission.targets),
+                    'ground_stations': len(mission.ground_stations),
+                    'total_windows': stats.get('total_windows', 0),
+                    'target_windows': stats.get('target_windows', 0),
+                    'ground_station_windows': stats.get('ground_station_windows', 0),
+                    'computation_time_seconds': stats.get('computation_time_seconds', 0)
+                }
+            )
+
+            print(f"  场景指纹: {fingerprint.full_hash[:16]}...")
+            print(f"  缓存已注册到索引")
+        except Exception as e:
+            print(f"  警告: 缓存索引更新失败: {e}")
+
         return 0
 
     except FileNotFoundError as e:
