@@ -1,0 +1,111 @@
+{
+  "name": "大规模星座任务规划实验场景（含中继卫星）",
+  "description": "60颗卫星(30光学+30SAR) vs 1000目标，配置天链式中继卫星，支持混合数传",
+  "version": "2.1",
+  "generated_at": "2026-03-16T00:00:00Z",
+  "seed": 42,
+  "duration": {
+    "start": "2024-03-15T00:00:00Z",
+    "end": "2024-03-16T00:00:00Z"
+  },
+  "satellites": [
+    {
+      "id": "OPT-01",
+      "name": "光学卫星-01",
+      "sat_type": "optical",
+      "orbit": {
+        "orbit_type": "LEO",
+        "source": "elements",
+        "semi_major_axis": 6871000.0,
+        "eccentricity": 0.0,
+        "inclination": 55.0,
+        "raan": 0.0,
+        "arg_of_perigee": 0.0,
+        "mean_anomaly": 0.0,
+        "epoch": "2024-03-15T00:00:00Z"
+      },
+      "capabilities": {
+        "imaging_modes": ["push_broom"],
+        "max_roll_angle": 60.0,
+        "max_pitch_angle": 60.0,
+        "storage_capacity": 128.0,
+        "power_capacity": 2800.0,
+        "data_rate": 300.0,
+        "min_solar_elevation": 15.0,
+        "resolution": 1.0,
+        "swath_width": 15000.0
+      }
+    }
+  ],
+  "relay_satellites": [
+    {
+      "id": "RELAY-01",
+      "name": "天链-1号",
+      "orbit_type": "GEO",
+      "longitude": 120.0,
+      "min_elevation": 5.0,
+      "max_range": 45000000,
+      "uplink_capacity": 450.0,
+      "downlink_capacity": 450.0
+    },
+    {
+      "id": "RELAY-02",
+      "name": "天链-2号",
+      "orbit_type": "GEO",
+      "longitude": -60.0,
+      "min_elevation": 5.0,
+      "max_range": 45000000,
+      "uplink_capacity": 450.0,
+      "downlink_capacity": 450.0
+    },
+    {
+      "id": "RELAY-03",
+      "name": "天链-3号",
+      "orbit_type": "GEO",
+      "longitude": 80.0,
+      "min_elevation": 5.0,
+      "max_range": 45000000,
+      "uplink_capacity": 300.0,
+      "downlink_capacity": 300.0
+    }
+  ],
+  "ground_stations": [
+    {
+      "id": "GS-BEIJING",
+      "name": "北京地面站",
+      "location": [116.4, 39.9, 0],
+      "min_elevation": 10.0,
+      "data_rate": 500.0
+    },
+    {
+      "id": "GS-KASHI",
+      "name": "喀什地面站",
+      "location": [76.0, 39.5, 1300],
+      "min_elevation": 10.0,
+      "data_rate": 500.0
+    },
+    {
+      "id": "GS-SANYA",
+      "name": "三亚地面站",
+      "location": [109.5, 18.3, 0],
+      "min_elevation": 10.0,
+      "data_rate": 500.0
+    }
+  ],
+  "targets": [
+    {
+      "id": "TGT-0001",
+      "name": "目标-0001",
+      "location": [116.0, 40.0],
+      "priority": 5
+    }
+  ],
+  "observation_requirements": [
+    {
+      "target_id": "TGT-0001",
+      "required_count": 2,
+      "min_interval_seconds": 7200,
+      "max_interval_seconds": 86400
+    }
+  ]
+}

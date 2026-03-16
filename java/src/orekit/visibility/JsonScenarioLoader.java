@@ -1,6 +1,7 @@
 package orekit.visibility;
 
 import orekit.visibility.model.GroundStationConfig;
+import orekit.visibility.model.RelaySatelliteConfig;
 import orekit.visibility.model.SatelliteConfig;
 import orekit.visibility.model.TargetConfig;
 import org.json.JSONArray;
@@ -204,6 +205,39 @@ public class JsonScenarioLoader {
         }
 
         return stations;
+    }
+
+    /**
+     * 加载中继卫星配置
+     */
+    public List<RelaySatelliteConfig> loadRelaySatellites() {
+        List<RelaySatelliteConfig> relays = new ArrayList<>();
+
+        if (!scenarioData.has("relay_satellites")) {
+            return relays;
+        }
+
+        JSONArray relayArray = scenarioData.getJSONArray("relay_satellites");
+
+        for (int i = 0; i < relayArray.length(); i++) {
+            JSONObject relayJson = relayArray.getJSONObject(i);
+
+            String id = relayJson.getString("id");
+            String name = relayJson.optString("name", id);
+            String orbitType = relayJson.optString("orbit_type", "GEO");
+            double longitude = relayJson.getDouble("longitude");
+            double minElevation = relayJson.optDouble("min_elevation", 5.0);
+            double maxRange = relayJson.optDouble("max_range", 45000000.0);
+            double uplinkCapacity = relayJson.optDouble("uplink_capacity", 450.0);
+            double downlinkCapacity = relayJson.optDouble("downlink_capacity", 450.0);
+
+            relays.add(new RelaySatelliteConfig(
+                id, name, orbitType, longitude, minElevation, maxRange,
+                uplinkCapacity, downlinkCapacity
+            ));
+        }
+
+        return relays;
     }
 
     /**

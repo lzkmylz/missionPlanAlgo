@@ -1,6 +1,7 @@
 package orekit.visibility;
 
 import orekit.visibility.model.BatchResult;
+import orekit.visibility.model.RelaySatelliteConfig;
 import orekit.visibility.model.SatelliteConfig;
 import orekit.visibility.model.TargetConfig;
 import orekit.visibility.model.VisibilityWindow;
@@ -879,6 +880,264 @@ public class OptimizedVisibilityCalculator {
         SatTargetPair(SatelliteConfig sat, TargetConfig target) {
             this.sat = sat;
             this.target = target;
+        }
+    }
+
+    /**
+     * 批量计算所有卫星-中继卫星对的可见窗口
+     *
+     * @param satellites 卫星配置列表（LEO）
+     * @param relays 中继卫星配置列表（GEO）
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @param timeStep 时间步长（秒）
+     * @return Map<satId_relayId, List<VisibilityWindow>>
+     */
+    public Map<String, List<VisibilityWindow>> computeRelayVisibilityWindows(
+            List<SatelliteConfig> satellites,
+            List<RelaySatelliteConfig> relays,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double timeStep) {
+
+        // 确保轨道缓存已预计算
+        if (!orbitCache.hasSatellite(satellites.get(0).getId())) {
+            throw new IllegalStateException(
+                "Orbit cache not precomputed. Call precomputeAllOrbits() first."
+            );
+        }
+
+        // 预计算所有GEO中继卫星的位置（固定）
+        Map<String, org.hipparchus.geometry.euclidean.threed.Vector3D> relayPositions =
+            new java.util.concurrent.ConcurrentHashMap<>();
+        for (RelaySatelliteConfig relay : relays) {
+            org.hipparchus.geometry.euclidean.threed.Vector3D position = calculateGeoPosition(relay.getLongitude());
+            relayPositions.put(relay.getId(), position);
+        }
+
+        // 创建所有卫星-中继对
+        List<SatRelayPair> pairs = new ArrayList<>();
+        for (SatelliteConfig sat : satellites) {
+            for (RelaySatelliteConfig relay : relays) {
+                pairs.add(new SatRelayPair(sat, relay));
+            }
+        }
+
+        // 并行计算所有对的可见窗口
+        Map<String, List<VisibilityWindow>> relayWindows = new ConcurrentHashMap<>();
+
+        pairs.parallelStream()
+            .forEach(pair -> {
+                List<VisibilityWindow> windows = computeSingleRelayWindows(
+                    pair.sat, pair.relay, relayPositions.get(pair.relay.getId()),
+                    startTime, endTime, timeStep
+                );
+
+                if (!windows.isEmpty()) {
+                    // 使用RELAY:前缀标识中继卫星目标
+                    String key = pair.sat.getId() + "_RELAY:" + pair.relay.getId();
+                    relayWindows.computeIfAbsent(key, k -> new ArrayList<>()).addAll(windows);
+                }
+            });
+
+        return relayWindows;
+    }
+
+    /**
+     * 计算GEO卫星在ITRF框架中的位置
+     */
+    private org.hipparchus.geometry.euclidean.threed.Vector3D calculateGeoPosition(double longitudeDeg) {
+        double longitudeRad = Math.toRadians(longitudeDeg);
+        double geoRadius = EARTH_RADIUS + 35786000.0; // GEO高度
+
+        double x = geoRadius * Math.cos(longitudeRad);
+        double y = geoRadius * Math.sin(longitudeRad);
+        double z = 0.0;
+
+        return new org.hipparchus.geometry.euclidean.threed.Vector3D(x, y, z);
+    }
+
+    /**
+     * 计算单个卫星-中继对的可见窗口
+     */
+    private List<VisibilityWindow> computeSingleRelayWindows(
+            SatelliteConfig sat,
+            RelaySatelliteConfig relay,
+            org.hipparchus.geometry.euclidean.threed.Vector3D relayPosition,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double timeStep) {
+
+        List<VisibilityWindow> windows = new ArrayList<>();
+
+        double minElevationRad = Math.toRadians(relay.getMinElevation());
+        double maxRange = relay.getMaxRange();
+        double duration = endTime.durationFrom(startTime);
+
+        AbsoluteDate windowStart = null;
+        AbsoluteDate maxElevationTime = null;
+        double maxElevationInWindow = 0.0;
+        boolean wasVisible = false;
+
+        for (double t = 0; t <= duration; t += timeStep) {
+            OrbitStateCache.OrbitState state = orbitCache.getStateAtTime(sat.getId(), t);
+            if (state == null) continue;
+
+            VisibilityResult visibility = calculateRelayVisibility(
+                state, relayPosition, minElevationRad, maxRange
+            );
+
+            if (visibility.isVisible != wasVisible) {
+                if (wasVisible && windowStart != null) {
+                    AbsoluteDate windowEnd = startTime.shiftedBy(t);
+                    VisibilityWindow window = createRelayVisibilityWindow(
+                        sat, relay, windowStart, windowEnd,
+                        Math.toDegrees(maxElevationInWindow), maxElevationTime
+                    );
+                    if (window != null) {
+                        windows.add(window);
+                    }
+                } else {
+                    windowStart = startTime.shiftedBy(t);
+                    maxElevationInWindow = 0.0;
+                    maxElevationTime = null;
+                }
+                wasVisible = visibility.isVisible;
+            }
+
+            if (visibility.isVisible && visibility.elevation > maxElevationInWindow) {
+                maxElevationInWindow = visibility.elevation;
+                maxElevationTime = startTime.shiftedBy(t);
+            }
+        }
+
+        if (wasVisible && windowStart != null) {
+            VisibilityWindow window = createRelayVisibilityWindow(
+                sat, relay, windowStart, endTime,
+                Math.toDegrees(maxElevationInWindow), maxElevationTime
+            );
+            if (window != null) {
+                windows.add(window);
+            }
+        }
+
+        return windows;
+    }
+
+    /**
+     * 计算LEO卫星与GEO中继卫星的可见性
+     */
+    private VisibilityResult calculateRelayVisibility(
+            OrbitStateCache.OrbitState leoState,
+            org.hipparchus.geometry.euclidean.threed.Vector3D relayPosition,
+            double minElevationRad,
+            double maxRange) {
+
+        org.hipparchus.geometry.euclidean.threed.Vector3D leoPosition =
+            new org.hipparchus.geometry.euclidean.threed.Vector3D(leoState.x, leoState.y, leoState.z);
+
+        double distance = leoPosition.distance(relayPosition);
+        if (distance > maxRange) {
+            return new VisibilityResult(false, 0.0);
+        }
+
+        if (isEarthBlocking(leoPosition, relayPosition)) {
+            return new VisibilityResult(false, 0.0);
+        }
+
+        double elevation = calculateElevationFromGeo(relayPosition, leoPosition);
+        return new VisibilityResult(elevation >= minElevationRad, elevation);
+    }
+
+    /**
+     * 检查视线是否被地球遮挡
+     */
+    private boolean isEarthBlocking(
+            org.hipparchus.geometry.euclidean.threed.Vector3D from,
+            org.hipparchus.geometry.euclidean.threed.Vector3D to) {
+
+        org.hipparchus.geometry.euclidean.threed.Vector3D direction = to.subtract(from);
+        double t = -from.dotProduct(direction) / direction.getNormSq();
+
+        if (t < 0 || t > 1) {
+            return false;
+        }
+
+        org.hipparchus.geometry.euclidean.threed.Vector3D closestPoint = from.add(direction.scalarMultiply(t));
+        return closestPoint.getNorm() < EARTH_RADIUS * 0.99;
+    }
+
+    /**
+     * 计算从GEO位置看向LEO位置的仰角
+     */
+    private double calculateElevationFromGeo(
+            org.hipparchus.geometry.euclidean.threed.Vector3D geoPosition,
+            org.hipparchus.geometry.euclidean.threed.Vector3D leoPosition) {
+
+        org.hipparchus.geometry.euclidean.threed.Vector3D toLeo = leoPosition.subtract(geoPosition);
+        org.hipparchus.geometry.euclidean.threed.Vector3D geoRadial = geoPosition.normalize();
+
+        double cosAngle = geoRadial.dotProduct(toLeo.normalize());
+        double angleFromRadial = Math.acos(Math.max(-1.0, Math.min(1.0, cosAngle)));
+
+        return Math.PI / 2.0 - angleFromRadial;
+    }
+
+    /**
+     * 创建中继卫星可见窗口对象
+     */
+    private VisibilityWindow createRelayVisibilityWindow(
+            SatelliteConfig sat,
+            RelaySatelliteConfig relay,
+            AbsoluteDate start,
+            AbsoluteDate end,
+            double maxElevation,
+            AbsoluteDate maxElTime) {
+
+        double duration = end.durationFrom(start);
+        if (duration < 30.0) { // 最小30秒
+            return null;
+        }
+
+        double qualityScore = Math.min(1.0, maxElevation / 90.0);
+
+        return new VisibilityWindow(
+            sat.getId(),
+            "RELAY:" + relay.getId(),
+            start,
+            end,
+            duration,
+            maxElevation,
+            maxElTime != null ? maxElTime : start.shiftedBy(duration / 2),
+            0.0, 0.0,
+            qualityScore,
+            maxElevation > 30.0 ? "HIGH" : (maxElevation > 15.0 ? "MEDIUM" : "LOW")
+        );
+    }
+
+    /**
+     * 内部类：卫星-中继对
+     */
+    private static class SatRelayPair {
+        final SatelliteConfig sat;
+        final RelaySatelliteConfig relay;
+
+        SatRelayPair(SatelliteConfig sat, RelaySatelliteConfig relay) {
+            this.sat = sat;
+            this.relay = relay;
+        }
+    }
+
+    /**
+     * 内部类：可见性结果
+     */
+    private static class VisibilityResult {
+        final boolean isVisible;
+        final double elevation;
+
+        VisibilityResult(boolean isVisible, double elevation) {
+            this.isVisible = isVisible;
+            this.elevation = elevation;
         }
     }
 }

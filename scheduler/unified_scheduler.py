@@ -37,6 +37,11 @@ from scheduler.metaheuristic.tabu_scheduler import TabuScheduler
 from scheduler.ground_station.scheduler import (
     GroundStationScheduler, GroundStationScheduleResult
 )
+from scheduler.relay.scheduler import (
+    RelayScheduler, RelayScheduleResult
+)
+from scheduler.relay.downlink_task import RelayDownlinkTask
+from core.network.relay_satellite import RelayNetwork
 from scheduler.frequency_utils import (
     ObservationTask, create_observation_tasks, calculate_frequency_fitness
 )
@@ -102,6 +107,7 @@ class UnifiedScheduler:
         mission: Mission,
         window_cache: VisibilityWindowCache,
         ground_station_pool: Optional[GroundStationPool] = None,
+        relay_network: Optional[RelayNetwork] = None,
         config: Optional[Dict[str, Any]] = None
     ):
         """
@@ -111,27 +117,34 @@ class UnifiedScheduler:
             mission: 任务场景对象
             window_cache: 可见性窗口缓存
             ground_station_pool: 地面站资源池（可选，如果需要进行数传规划）
+            relay_network: 中继卫星网络（可选）
             config: 配置参数
                 - imaging_algorithm: 成像调度算法 ('greedy', 'ga', 'edd')
                 - imaging_config: 成像调度器配置
                 - enable_downlink: 是否启用数传规划
+                - downlink_strategy: 数传策略 ('ground_station_first', 'relay_first', 'best_effort')
                 - downlink_config: 数传调度器配置
                 - consider_frequency: 是否考虑频次需求
         """
         self.mission = mission
         self.window_cache = window_cache
         self.ground_station_pool = ground_station_pool
+        self.relay_network = relay_network
         self.config = config or {}
 
         # 成像调度配置
         self.imaging_algorithm = self.config.get('imaging_algorithm', 'greedy')
         self.imaging_config = self.config.get('imaging_config', {})
 
-        # 数传配置（默认启用，如果提供了地面站资源池）
+        # 数传配置（默认启用，如果提供了地面站资源池或中继网络）
         if 'enable_downlink' in self.config:
             self.enable_downlink = self.config['enable_downlink']
         else:
-            self.enable_downlink = ground_station_pool is not None
+            self.enable_downlink = (ground_station_pool is not None) or (relay_network is not None)
+
+        # 数传策略: 'ground_station_first', 'relay_first', 'best_effort'
+        self.downlink_strategy = self.config.get('downlink_strategy', 'best_effort')
+
         # 全局默认配置（会被每颗卫星的独立配置覆盖）
         self.downlink_config = self.config.get('downlink_config', {})
 
@@ -141,6 +154,7 @@ class UnifiedScheduler:
         # 内部状态
         self._imaging_scheduler: Optional[BaseScheduler] = None
         self._ground_station_scheduler: Optional[GroundStationScheduler] = None
+        self._relay_scheduler: Optional[RelayScheduler] = None
         self._target_obs_count: Dict[str, int] = {}
 
         # 初始化精确姿态机动约束检查器
@@ -234,13 +248,31 @@ class UnifiedScheduler:
         logger.info(f"  成功调度: {len(imaging_result.scheduled_tasks)} 个任务")
         logger.info(f"  未调度: {len(imaging_result.unscheduled_tasks)} 个任务")
 
-        # 步骤2: 地面站数传规划（如果启用）
-        if self.enable_downlink and self.ground_station_pool and imaging_result.scheduled_tasks:
-            logger.info("\n[2/3] 地面站数传规划...")
-            downlink_result = self._schedule_downlinks(imaging_result.scheduled_tasks)
-            result.downlink_result = downlink_result
-            logger.info(f"  成功规划: {len(downlink_result.downlink_tasks)} 个数传任务")
-            logger.info(f"  失败: {len(downlink_result.failed_tasks)} 个")
+        # 步骤2: 数传规划（如果启用）
+        if self.enable_downlink and imaging_result.scheduled_tasks:
+            if self.downlink_strategy == 'best_effort':
+                # 混合策略：优先地面站，失败则尝试中继
+                logger.info("\n[2/3] 混合数传规划（优先地面站）...")
+                downlink_result = self._schedule_hybrid_downlinks(imaging_result.scheduled_tasks)
+                result.downlink_result = downlink_result
+            elif self.downlink_strategy == 'ground_station_first':
+                # 仅地面站
+                if self.ground_station_pool:
+                    logger.info("\n[2/3] 地面站数传规划...")
+                    downlink_result = self._schedule_downlinks(imaging_result.scheduled_tasks)
+                    result.downlink_result = downlink_result
+                else:
+                    logger.warning("\n[2/3] 未提供地面站资源池，跳过数传规划")
+            elif self.downlink_strategy == 'relay_first':
+                # 仅中继
+                if self.relay_network:
+                    logger.info("\n[2/3] 中继卫星数传规划...")
+                    downlink_result = self._schedule_relay_downlinks(imaging_result.scheduled_tasks)
+                    result.downlink_result = downlink_result
+                else:
+                    logger.warning("\n[2/3] 未提供中继网络，跳过数传规划")
+            else:
+                logger.warning(f"\n[2/3] 未知的数传策略: {self.downlink_strategy}")
         else:
             logger.info("\n[2/3] 跳过数传规划")
 
@@ -257,9 +289,141 @@ class UnifiedScheduler:
         logger.info("\n" + "=" * 70)
         logger.info("统一调度完成")
         logger.info(f"总耗时: {result.total_computation_time:.2f} 秒")
+        if result.downlink_result:
+            logger.info(f"数传成功: {len(result.downlink_result.downlink_tasks)} 个任务")
+            logger.info(f"数传失败: {len(result.downlink_result.failed_tasks)} 个任务")
         logger.info("=" * 70)
 
         return result
+
+    def _schedule_relay_downlinks(
+        self,
+        scheduled_tasks: List[ScheduledTask]
+    ) -> RelayScheduleResult:
+        """
+        执行中继卫星数传规划
+
+        Args:
+            scheduled_tasks: 已调度的成像任务列表
+
+        Returns:
+            RelayScheduleResult: 中继数传调度结果
+        """
+        if self.relay_network is None:
+            raise ValueError("未提供中继网络，无法进行中继数传规划")
+
+        # 创建中继数传调度器
+        relay_scheduler = RelayScheduler(
+            relay_network=self.relay_network,
+            default_data_rate_mbps=self.downlink_config.get('relay_data_rate_mbps', 450.0),
+            link_setup_time_seconds=self.downlink_config.get('relay_link_setup_time_seconds', 10.0)
+        )
+
+        # 初始化固存状态
+        for sat in self.mission.satellites:
+            storage_capacity = getattr(sat.capabilities, 'storage_capacity', 500.0)
+            relay_scheduler.initialize_satellite_storage(
+                satellite_id=sat.id,
+                current_gb=0.0,
+                capacity_gb=storage_capacity
+            )
+
+        # 获取卫星-中继可见窗口
+        relay_windows = self._get_relay_windows()
+
+        # 执行数传调度
+        return relay_scheduler.schedule_downlinks_for_tasks(
+            scheduled_tasks=scheduled_tasks,
+            visibility_windows=relay_windows
+        )
+
+    def _get_relay_windows(self) -> Dict[str, List[Tuple[datetime, datetime]]]:
+        """
+        获取卫星-中继卫星可见窗口
+
+        Returns:
+            Dict[satellite_id, List[(start, end)]]: 每个卫星的中继可见窗口列表
+        """
+        windows: Dict[str, List[Tuple[datetime, datetime]]] = {}
+
+        if self.window_cache is None or self.relay_network is None:
+            return windows
+
+        for sat in self.mission.satellites:
+            sat_windows = []
+            for relay_id in self.relay_network.relays:
+                # 从缓存获取卫星-中继窗口
+                key = (sat.id, f"RELAY:{relay_id}")
+                if hasattr(self.window_cache, '_windows') and key in self.window_cache._windows:
+                    for window in self.window_cache._windows[key]:
+                        sat_windows.append((window.start_time, window.end_time))
+
+            if sat_windows:
+                windows[sat.id] = sorted(sat_windows, key=lambda x: x[0])
+
+        return windows
+
+    def _schedule_hybrid_downlinks(
+        self,
+        scheduled_tasks: List[ScheduledTask]
+    ) -> GroundStationScheduleResult:
+        """
+        执行混合数传规划（优先地面站，失败则尝试中继）
+
+        Args:
+            scheduled_tasks: 已调度的成像任务列表
+
+        Returns:
+            GroundStationScheduleResult: 数传调度结果（可能包含中继数传任务）
+        """
+        # 首先尝试地面站数传
+        gs_tasks = []
+        relay_tasks = []
+
+        if self.ground_station_pool:
+            gs_result = self._schedule_downlinks(scheduled_tasks)
+            gs_scheduled_ids = {t.related_imaging_task_id for t in gs_result.downlink_tasks}
+            gs_tasks = gs_result.downlink_tasks
+
+            # 找出地面站数传失败的任务
+            failed_tasks = [t for t in scheduled_tasks if t.task_id not in gs_scheduled_ids]
+        else:
+            failed_tasks = scheduled_tasks
+
+        # 对于地面站失败的，尝试中继
+        if failed_tasks and self.relay_network:
+            relay_result = self._schedule_relay_downlinks(failed_tasks)
+            relay_tasks = relay_result.downlink_tasks
+
+            logger.info(f"  地面站成功: {len(gs_tasks)} 个")
+            logger.info(f"  中继成功: {len(relay_tasks)} 个")
+
+        # 合并结果
+        combined_result = GroundStationScheduleResult()
+        combined_result.downlink_tasks = gs_tasks + [
+            self._convert_relay_to_gs_task(t) for t in relay_tasks
+        ]
+        combined_result.failed_tasks = [
+            t.task_id for t in scheduled_tasks
+            if t.task_id not in {dt.related_imaging_task_id for dt in combined_result.downlink_tasks}
+        ]
+
+        return combined_result
+
+    def _convert_relay_to_gs_task(self, relay_task: RelayDownlinkTask) -> DownlinkTask:
+        """将中继任务转换为地面站任务格式（用于结果合并）"""
+        from scheduler.ground_station.downlink_task import DownlinkTask
+        return DownlinkTask(
+            task_id=relay_task.task_id,
+            satellite_id=relay_task.satellite_id,
+            ground_station_id=f"RELAY:{relay_task.relay_id}",
+            start_time=relay_task.start_time,
+            end_time=relay_task.end_time,
+            data_size_gb=relay_task.data_size_gb,
+            related_imaging_task_id=relay_task.related_imaging_task_id,
+            effective_data_rate=relay_task.effective_data_rate,
+            acquisition_time_seconds=relay_task.acquisition_time_seconds
+        )
 
     def _schedule_imaging(self) -> ScheduleResult:
         """
