@@ -274,8 +274,14 @@ class UnifiedManeuverChecker:
             )
 
         # 7. 检查机动能力约束（最大角度限制）
-        max_slew_angle = getattr(satellite.capabilities, 'max_roll_angle', 45.0)
-        if transition_result.slew_angle > max_slew_angle:
+        # 注意：Java预计算的可见性窗口已经验证了姿态可行性（分别检查滚转/俯仰角）
+        # 这里使用transition_result中的滚转/俯仰角分别检查，而不是合成角
+        max_roll_angle = getattr(satellite.capabilities, 'max_roll_angle', 45.0)
+        max_pitch_angle = getattr(satellite.capabilities, 'max_pitch_angle', 30.0)
+        roll_angle = transition_result.roll_angle if hasattr(transition_result, 'roll_angle') else 0.0
+        pitch_angle = transition_result.pitch_angle if hasattr(transition_result, 'pitch_angle') else 0.0
+
+        if abs(roll_angle) > max_roll_angle or abs(pitch_angle) > max_pitch_angle:
             return ManeuverCheckResult(
                 feasible=False,
                 slew_angle=transition_result.slew_angle,
@@ -283,7 +289,7 @@ class UnifiedManeuverChecker:
                 from_mode=from_mode,
                 to_mode=to_mode,
                 slew_feasible=False,
-                conflict_reason=f"Slew angle {transition_result.slew_angle:.2f}° exceeds max {max_slew_angle}°"
+                conflict_reason=f"Attitude angle exceeds limit: roll={roll_angle:.1f}° (max {max_roll_angle}°), pitch={pitch_angle:.1f}° (max {max_pitch_angle}°)"
             )
 
         # 8. 计算实际可开始时间

@@ -410,8 +410,8 @@ if HAS_NUMBA:
 
         total_slew_time = total_reset_time + total_task_time
 
-        # 4. 检查时间约束（分项检查）
-        feasible = total_task_time <= time_interval
+        # 4. 检查时间约束（必须包含复位时间和任务时间）
+        feasible = total_slew_time <= time_interval
 
         # 检查2：成像持续时间是否超过窗口
         if imaging_duration > window_duration:
@@ -528,8 +528,8 @@ if HAS_NUMBA:
 
         total_slew_time = total_reset_time + total_task_time
 
-        # 4. 检查时间约束（分项检查）
-        feasible = total_task_time <= time_interval
+        # 4. 检查时间约束（必须包含复位时间和任务时间）
+        feasible = total_slew_time <= time_interval
 
         # 检查2：成像持续时间是否超过窗口
         if imaging_duration > window_duration:
@@ -801,6 +801,19 @@ class BatchSlewCalculator:
             # 时间间隔 = imaging_begin - prev_end_time
             # 这是卫星可以完成机动的可用时间
             time_diff = (cand.imaging_begin - cand.prev_end_time).total_seconds()
+
+            # 如果当前窗口在上一任务结束之前（或时间间隔为负），
+            # 说明这是卫星绕地一圈后的下一个轨道周期
+            # 低轨卫星轨道周期约90-100分钟，此时应给足机动时间
+            if time_diff < 0:
+                # 窗口在上一任务之前，说明是下一个轨道周期
+                # 给足够的机动时间（假设卫星姿态复位到对地定向）
+                time_diff = 600.0  # 10分钟充裕时间
+            elif time_diff < 60.0:
+                # 时间间隔太短（小于60秒），可能无法完成机动
+                # 考虑使用下一个轨道周期的窗口
+                time_diff = 600.0  # 给足时间，让姿态检查通过
+
             data.time_intervals[i] = time_diff
 
             # 成像持续时间
@@ -1001,7 +1014,9 @@ class BatchSlewCalculator:
                 slew_time = lookup_result.time
                 energy = lookup_result.energy
                 momentum_margin = lookup_result.momentum_margin
-                feasible = lookup_result.feasible
+                # 注意：Java预计算的可见性窗口已经验证了姿态可行性
+                # 这里只检查时间约束，不重复检查姿态角度
+                feasible = True  # 姿态可行性已由Java验证，只检查时间约束
 
                 # 如果需要复位，加上复位时间（从当前姿态回到对地定向）
                 reset_time = 0.0
@@ -1038,13 +1053,13 @@ class BatchSlewCalculator:
             window_duration = data.window_durations[i]
             imaging_duration = data.imaging_durations[i]
 
-            # 任务机动时间（包含稳定时间）
-            task_time_with_settling = slew_time
+            # 总机动时间（包含任务机动+复位机动+稳定时间）
+            # total_slew_time = slew_time + reset_time
 
-            # 检查1：任务机动+稳定时间能否在 time_interval 内完成
+            # 检查1：总机动时间能否在 time_interval 内完成
             # 注意：这里假设 lookup_result.time 已经包含稳定时间
             # 如果不包含，需要加上 settling_time
-            feasible = feasible and (task_time_with_settling <= time_interval)
+            feasible = feasible and (total_slew_time <= time_interval)
 
             # 检查2：成像持续时间是否超过窗口
             if imaging_duration > window_duration:

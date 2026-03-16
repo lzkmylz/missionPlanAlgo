@@ -864,6 +864,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             # 筛选通过姿态约束的候选
             slew_feasible_candidates = []
             phase3_slew_infeasible = 0
+            debug_rejected_count = 0
             for candidate, slew_result in zip(filtered_candidates, batch_results):
                 if slew_result.feasible:
                     slew_feasible_candidates.append((candidate, slew_result))

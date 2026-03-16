@@ -1,6 +1,17 @@
 """
 姿态约束检查器
 
+.. deprecated::
+    此模块已弃用。请使用 BatchSlewConstraintChecker 替代。
+
+    旧用法（已弃用）:
+        from scheduler.constraints import AttitudeConstraintChecker
+        checker = AttitudeConstraintChecker(mission, config)
+
+    新用法（推荐）:
+        from scheduler.constraints import BatchSlewConstraintChecker
+        checker = BatchSlewConstraintChecker(mission, use_precise_model=True)
+
 检查姿态切换的可行性，为调度器提供姿态约束验证。
 
 功能：
@@ -16,9 +27,18 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
+import warnings
 
 from core.dynamics.attitude_manager import AttitudeManager, AttitudeManagementConfig
 from core.dynamics.attitude_mode import AttitudeMode, TransitionResult
+
+# 模块级弃用警告
+warnings.warn(
+    "scheduler.constraints.attitude_constraint_checker 模块已弃用。"
+    "请使用 scheduler.constraints.batch_slew_constraint_checker.BatchSlewConstraintChecker",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 @dataclass
@@ -46,8 +66,17 @@ class AttitudeFeasibilityResult:
 class AttitudeConstraintChecker:
     """姿态约束检查器
 
-    检查姿态切换的可行性，为调度器提供统一的约束检查接口。
-    集成AttitudeManager进行姿态切换计算。
+    .. deprecated::
+        此类已弃用。请使用 BatchSlewConstraintChecker 替代。
+
+        旧用法（已弃用）:
+            checker = AttitudeConstraintChecker(config)
+
+        新用法（推荐）:
+            from scheduler.constraints import BatchSlewConstraintChecker
+            checker = BatchSlewConstraintChecker(mission, use_precise_model=True)
+
+    此类保留仅用于向后兼容，不再被主动维护。
 
     Attributes:
         config: 姿态管理配置
@@ -59,7 +88,15 @@ class AttitudeConstraintChecker:
 
         Args:
             config: 姿态管理配置，如果为None则使用默认配置
+
+        .. deprecated::
+            请使用 BatchSlewConstraintChecker 替代
         """
+        warnings.warn(
+            "AttitudeConstraintChecker 已弃用。请使用 BatchSlewConstraintChecker",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.config = config if config is not None else AttitudeManagementConfig()
         self._attitude_manager = AttitudeManager(self.config)
 

@@ -1,19 +1,39 @@
 """
 姿态机动约束检查器
 
-将姿态机动约束作为调度器的核心约束条件。
-使用正确的 ECEF 坐标系计算机动角度。
+.. deprecated::
+    SlewConstraintChecker 类已弃用。请使用 BatchSlewConstraintChecker 替代。
+
+    旧用法（已弃用）:
+        from scheduler.constraints import SlewConstraintChecker
+        checker = SlewConstraintChecker(mission, attitude_calc)
+
+    新用法（推荐）:
+        from scheduler.constraints import BatchSlewConstraintChecker
+        checker = BatchSlewConstraintChecker(mission, use_precise_model=True)
+        results = checker.check_slew_feasibility_batch(candidates)
+
+SlewFeasibilityResult 数据类仍然有效，被批量检查器共享使用。
 """
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict, Any
 import math
+import warnings
 
 from core.models.satellite import Satellite
 from core.models.target import Target
 from core.models.mission import Mission
 from core.dynamics.attitude_calculator import AttitudeCalculator, PropagatorType
+
+# 模块级弃用警告
+warnings.warn(
+    "scheduler.constraints.slew_constraint_checker 模块中的 SlewConstraintChecker 类已弃用。"
+    "请使用 scheduler.constraints.batch_slew_constraint_checker.BatchSlewConstraintChecker",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 @dataclass
@@ -39,11 +59,17 @@ class SlewFeasibilityResult:
 class SlewConstraintChecker:
     """姿态机动约束检查器
 
-    将姿态机动约束作为调度器的核心约束条件。
-    使用 ECEF 坐标系正确计算机动角度。
+    .. deprecated::
+        此类已弃用。请使用 BatchSlewConstraintChecker 替代。
 
-    注意: 此类已移除对旧版 SlewCalculator 的依赖，改用直接计算。
-    推荐使用 PreciseSlewConstraintChecker 进行高精度约束检查。
+        旧用法（已弃用）:
+            checker = SlewConstraintChecker(mission, attitude_calc)
+
+        新用法（推荐）:
+            from scheduler.constraints import BatchSlewConstraintChecker
+            checker = BatchSlewConstraintChecker(mission, use_precise_model=True)
+
+    此类保留仅用于向后兼容，不再被主动维护。
 
     Attributes:
         mission: 任务对象
@@ -65,7 +91,15 @@ class SlewConstraintChecker:
         Args:
             mission: 任务对象
             attitude_calculator: 姿态计算器（可选）
+
+        .. deprecated::
+            请使用 BatchSlewConstraintChecker 替代
         """
+        warnings.warn(
+            "SlewConstraintChecker 已弃用。请使用 BatchSlewConstraintChecker",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.mission = mission
         self._attitude_calc = attitude_calculator or AttitudeCalculator(
             propagator_type=PropagatorType.SGP4

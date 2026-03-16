@@ -1,7 +1,13 @@
 """Unified constraint checking for satellite schedulers.
 
-This module consolidates all constraint checking functionality,
-eliminating duplication across scheduler implementations.
+.. deprecated::
+    此模块已弃用。所有调度器已迁移到使用 BatchSlewConstraintChecker 和
+    UnifiedBatchConstraintChecker 进行批量约束检查。
+    请使用 scheduler.constraints 模块中的批量检查器。
+
+警告: 此模块中的 ConstraintChecker 类不再被维护，保留仅用于向后兼容。
+姿态机动约束检查请使用 BatchSlewConstraintChecker，
+统一约束检查请使用 UnifiedBatchConstraintChecker。
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,10 +15,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 import math
+import warnings
 
 from core.models import Mission, Satellite, Target
 from scheduler.common.config import ConstraintConfig
 from core.dynamics.attitude_calculator import AttitudeCalculator, PropagatorType
+
+# 模块级弃用警告
+warnings.warn(
+    "scheduler.common.constraint_checker 模块已弃用。"
+    "请使用 scheduler.constraints.batch_slew_constraint_checker.BatchSlewConstraintChecker "
+    "或 scheduler.constraints.unified_batch_constraint_checker.UnifiedBatchConstraintChecker",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 class ConstraintType(Enum):
@@ -859,24 +875,19 @@ class SAAChecker:
 class ConstraintChecker:
     """Unified constraint checker for satellite task scheduling.
 
-    This class consolidates all constraint checking functionality:
-    - Slew constraints (angle and time)
-    - SAA constraints
-    - Power constraints
-    - Storage constraints
-    - Temporal constraints (time conflicts)
+    .. deprecated::
+        此类已弃用。请使用 BatchSlewConstraintChecker 或 UnifiedBatchConstraintChecker。
+        姿态机动约束检查请使用:
+            from scheduler.constraints import BatchSlewConstraintChecker
+            checker = BatchSlewConstraintChecker(mission, use_precise_model=True)
 
-    Usage:
-        checker = ConstraintChecker(mission, config)
-        checker.initialize()
+    此类保留仅用于向后兼容，不再被主动维护。
 
-        context = ConstraintContext(
-            satellite=sat,
-            target=task,
-            window_start=window.start,
-            window_end=window.end,
-        )
-        result = checker.check_task(context)
+    Attributes:
+        mission: Mission object
+        config: Constraint configuration
+        _slew_checker: Internal slew checker (deprecated)
+        _saa_checker: Internal SAA checker (deprecated)
     """
 
     def __init__(
@@ -889,7 +900,16 @@ class ConstraintChecker:
         Args:
             mission: Mission object
             config: Constraint configuration
+
+        .. deprecated::
+            请使用 BatchSlewConstraintChecker 或 UnifiedBatchConstraintChecker
         """
+        warnings.warn(
+            "ConstraintChecker 已弃用。请使用 BatchSlewConstraintChecker "
+            "或 UnifiedBatchConstraintChecker",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.mission = mission
         self.config = config or ConstraintConfig()
 

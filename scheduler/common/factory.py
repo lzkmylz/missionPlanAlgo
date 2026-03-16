@@ -1,5 +1,10 @@
 """Scheduler factory for dependency injection.
 
+.. deprecated::
+    此模块中的 ConstraintChecker 创建方法已弃用。
+    调度器现在内部使用 BatchSlewConstraintChecker 和 UnifiedBatchConstraintChecker。
+    直接使用工厂创建调度器仍然有效。
+
 This module provides factory methods for creating schedulers
 with proper dependency injection, reducing coupling and improving testability.
 """
@@ -52,7 +57,19 @@ class SchedulerFactory:
         )
 
     def _create_constraint_checker(self) -> ConstraintChecker:
-        """Create constraint checker."""
+        """Create constraint checker.
+
+        .. deprecated::
+            此方法已弃用。调度器现在内部使用 BatchSlewConstraintChecker
+            和 UnifiedBatchConstraintChecker，不需要外部创建约束检查器。
+        """
+        import warnings
+        warnings.warn(
+            "_create_constraint_checker 已弃用。"
+            "调度器现在内部使用 BatchSlewConstraintChecker",
+            DeprecationWarning,
+            stacklevel=2
+        )
         checker = ConstraintChecker(
             mission=self.mission,
             config=self.config.constraints,
