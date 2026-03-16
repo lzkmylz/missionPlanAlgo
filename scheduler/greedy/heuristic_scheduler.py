@@ -32,6 +32,10 @@ from ..constraints import (
 from scheduler.common.constraint_checker import ConstraintChecker
 from scheduler.common.config import ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
+from scheduler.common.footprint_utils import (
+    fill_footprint_to_task,
+    calculate_center_distance_score,
+)
 from scheduler.constraints.batch_slew_calculator import BatchSlewCandidate
 
 logger = logging.getLogger(__name__)
@@ -550,7 +554,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                 early_termination=True
             )
 
-            return self._select_best_assignment(slew_feasible, unified_results)
+            return self._select_best_assignment(slew_feasible, unified_results, task)
 
         # 回退：简单选择第一个可行的
         for candidate_data, slew_result in slew_feasible:
@@ -591,28 +595,115 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
     def _select_best_assignment(
         self,
         candidates: List[Tuple],
-        results: List[UnifiedBatchResult]
+        results: List[UnifiedBatchResult],
+        task: Any = None
     ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
         """
         选择最佳任务分配 - 子类可覆盖
 
-        默认策略: 选择最早开始的分配
+        默认策略: 综合评分（时间 + 中心点距离）
         """
         best = None
-        best_start = None
+        best_score = None
 
         for (candidate, slew_result), unified_result in zip(candidates, results):
             if not unified_result.feasible:
                 continue
 
+            sat, window, imaging_mode, _, _, _ = candidate
             actual_start = slew_result.actual_start
 
-            if best_start is None or actual_start < best_start:
-                best_start = actual_start
-                sat, window, imaging_mode, _, _, _ = candidate
+            # 计算评分
+            score = self._calculate_assignment_score(
+                sat, task, window, imaging_mode, actual_start
+            )
+
+            if best_score is None or score > best_score:
+                best_score = score
                 best = (sat.id, window, imaging_mode, slew_result)
 
         return best
+
+    def _calculate_assignment_score(
+        self, sat: Any, task: Any, window: Any, imaging_mode: Any, actual_start: datetime
+    ) -> float:
+        """
+        计算任务分配的评分（越高越好）
+        """
+        score = 0.0
+
+        # 1. 时间评分：越早开始越好
+        time_from_start = (actual_start - self.mission.start_time).total_seconds()
+        score -= time_from_start / 3600.0
+
+        # 2. 中心点距离评分（仅非聚类任务）
+        if self.config.get('enable_center_distance_score', True):
+            if not getattr(task, 'is_cluster', False) and not getattr(task, 'is_cluster_task', False):
+                center_distance_score = self._calculate_center_distance_score(
+                    sat, task, window, actual_start
+                )
+                weight = self.config.get('center_distance_weight', 15.0)
+                score += center_distance_score * weight
+
+        return score
+
+    def _calculate_center_distance_score(
+        self, sat: Any, task: Any, window: Any, imaging_start: datetime
+    ) -> float:
+        """
+        计算成像中心点与目标坐标的距离评分
+        """
+        try:
+            # 获取目标坐标
+            target_lon = getattr(task, 'longitude', None)
+            target_lat = getattr(task, 'latitude', None)
+
+            if target_lon is None or target_lat is None:
+                return 0.5
+
+            # 获取卫星位置
+            position = None
+            try:
+                from core.dynamics.orbit_batch_propagator import get_batch_propagator
+                propagator = get_batch_propagator()
+                if propagator is not None:
+                    state = propagator.get_state_at_time(sat.id, imaging_start)
+                    if state is not None:
+                        position, _ = state
+            except Exception:
+                pass
+
+            if position is None and hasattr(self, '_attitude_calculator'):
+                try:
+                    position, _ = self._attitude_calculator._get_satellite_state(
+                        sat, imaging_start
+                    )
+                except Exception:
+                    pass
+
+            if position is None:
+                return 0.5
+
+            # 获取姿态角
+            roll = getattr(window, 'roll_angle', 0.0) or 0.0
+            pitch = getattr(window, 'pitch_angle', 0.0) or 0.0
+
+            # 使用工具函数计算距离评分
+            score = calculate_center_distance_score(
+                satellite_position=position,
+                roll_angle=roll,
+                pitch_angle=pitch,
+                target_lon=target_lon,
+                target_lat=target_lat,
+                max_distance=10.0,
+                scale=3.0
+            )
+
+            return score
+
+        except Exception as e:
+            logger.debug(f"Failed to calculate center distance score: {e}")
+            return 0.5
 
     @abstractmethod
     def _sort_tasks(self, tasks: List[Any]) -> List[Any]:
@@ -790,6 +881,22 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             energy_consumption=energy_consumption,
             battery_soc_before=battery_soc_before,
             battery_soc_after=battery_soc_after,
+            # 姿态角字段（简化计算，使用0度）
+            roll_angle=0.0,
+            pitch_angle=0.0,
+            yaw_angle=0.0,
+        )
+
+        # 计算成像足迹
+        fill_footprint_to_task(
+            mission=self.mission,
+            attitude_calculator=self._attitude_calculator,
+            scheduled_task=scheduled_task,
+            sat_id=sat_id,
+            imaging_start=actual_start,
+            roll_angle=0.0,
+            pitch_angle=0.0,
+            imaging_mode=imaging_mode
         )
 
         # 填充聚类信息到 ScheduledTask

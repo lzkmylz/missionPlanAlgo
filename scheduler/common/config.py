@@ -34,6 +34,10 @@ class ConstraintConfig:
     sun_exclusion_angle: float = 30.0  # degrees, for optical satellites
     min_solar_elevation: float = 15.0  # degrees, minimum sun elevation for optical imaging (default 15°)
 
+    # 成像中心点距离评分配置
+    enable_center_distance_score: bool = True  # 是否启用成像中心点距离评分
+    center_distance_weight: float = 15.0  # 距离评分权重（分/度）
+
     def __post_init__(self):
         """Validate configuration."""
         # 高精度要求：不接受简化模式

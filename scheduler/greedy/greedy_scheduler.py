@@ -32,6 +32,7 @@ from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstra
 from scheduler.constraints.unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker, UnifiedBatchCandidate
 )
+from scheduler.common.footprint_utils import calculate_center_distance_score
 from core.dynamics.attitude_precache import get_attitude_precache_manager
 try:
     import numpy as np
@@ -1417,7 +1418,88 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             logger.debug(f"Failed to calculate quality score: {e}")
             # 如果质量评分失败，不影响其他评分
 
+        # 新增：中心点距离评分（仅非聚类任务）
+        if self.config.get('enable_center_distance_score', True):
+            if not getattr(task, 'is_cluster', False) and not getattr(task, 'is_cluster_task', False):
+                center_distance_score = self._calculate_center_distance_score(
+                    sat, task, window, actual_start
+                )
+                weight = self.config.get('center_distance_weight', 15.0)
+                score += center_distance_score * weight
+
         return score
+
+    def _calculate_center_distance_score(
+        self, sat: Any, task: Any, window: Any, imaging_start: datetime
+    ) -> float:
+        """
+        计算成像中心点与目标坐标的距离评分
+
+        距离越近评分越高。使用指数衰减模型：
+        - 0度偏差：满分（1.0）
+        - 每增加1度，评分指数衰减
+        - 超过max_distance后评分为0
+
+        Args:
+            sat: 卫星
+            task: 目标任务
+            window: 可见窗口
+            imaging_start: 成像开始时间
+
+        Returns:
+            float: 评分值（0.0 - 1.0）
+        """
+        try:
+            # 获取目标坐标
+            target_lon = getattr(task, 'longitude', None)
+            target_lat = getattr(task, 'latitude', None)
+
+            if target_lon is None or target_lat is None:
+                return 0.5  # 默认中等评分
+
+            # 获取卫星位置
+            position = None
+            try:
+                from core.dynamics.orbit_batch_propagator import get_batch_propagator
+                propagator = get_batch_propagator()
+                if propagator is not None:
+                    state = propagator.get_state_at_time(sat.id, imaging_start)
+                    if state is not None:
+                        position, _ = state
+            except Exception:
+                pass
+
+            if position is None and hasattr(self, '_attitude_calculator'):
+                try:
+                    position, _ = self._attitude_calculator._get_satellite_state(
+                        sat, imaging_start
+                    )
+                except Exception:
+                    pass
+
+            if position is None:
+                return 0.5  # 默认中等评分
+
+            # 获取姿态角
+            roll = getattr(window, 'roll_angle', 0.0) or 0.0
+            pitch = getattr(window, 'pitch_angle', 0.0) or 0.0
+
+            # 使用工具函数计算距离评分
+            score = calculate_center_distance_score(
+                satellite_position=position,
+                roll_angle=roll,
+                pitch_angle=pitch,
+                target_lon=target_lon,
+                target_lat=target_lat,
+                max_distance=10.0,
+                scale=3.0
+            )
+
+            return score
+
+        except Exception as e:
+            logger.debug(f"Failed to calculate center distance score: {e}")
+            return 0.5  # 默认中等评分
 
     def _get_previous_task_target(self, sat_id: str) -> Optional[Any]:
         """获取卫星上一个已调度任务的目标
@@ -1756,12 +1838,33 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             return {'corners': [], 'center': None, 'swath_width_km': 0.0, 'fov_config': {}}
 
         # 获取卫星位置和星下点
+        position = None
+        velocity = None
+
+        # 首先尝试从Java预计算轨道数据获取
+        position = None
+        velocity = None
+
         try:
-            position, velocity = self._attitude_calculator._get_satellite_state(
-                sat, imaging_start
-            )
-        except Exception:
-            return {'corners': [], 'center': None, 'swath_width_km': 0.0, 'fov_config': {}}
+            from core.dynamics.orbit_batch_propagator import get_batch_propagator
+            propagator = get_batch_propagator()
+            if propagator is not None:
+                state = propagator.get_state_at_time(sat_id, imaging_start)
+                if state is not None:
+                    # state is a tuple of (position, velocity)
+                    position, velocity = state
+        except Exception as e:
+            logger.debug(f"Failed to get position from batch propagator: {e}")
+
+        # 如果预计算数据不可用，回退到姿态计算器
+        if position is None:
+            try:
+                position, velocity = self._attitude_calculator._get_satellite_state(
+                    sat, imaging_start
+                )
+            except Exception as e:
+                logger.warning(f"Failed to get satellite position for footprint: {e}")
+                return {'corners': [], 'center': None, 'swath_width_km': 0.0, 'fov_config': {}}
 
         # 计算星下点
         sat_radius = math.sqrt(sum(x**2 for x in position))

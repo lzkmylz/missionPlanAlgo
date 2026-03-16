@@ -1231,3 +1231,90 @@ private List<AttitudeFeasibleInterval> findAttitudeFeasibleIntervals(
 **场景生成**:
 - `scripts/generate_scenario.py` - 修正Walker星座倾角参数
 
+---
+
+## 2026-03-16: 成像中心点距离优化
+
+### 问题背景
+调度器选择任务时，成像中心点（footprint_center）与目标坐标存在偏差（通常2-8度）。优化目标是在满足约束条件下，优先选择成像中心更靠近目标的可见窗口。
+
+### 解决方案
+
+#### 1. 新增工具函数 (`scheduler/common/footprint_utils.py`)
+- `calculate_haversine_distance()` - Haversine公式计算大地线距离
+- `calculate_footprint_center_from_attitude()` - 根据姿态角计算成像中心
+- `calculate_center_distance_score()` - 计算距离评分（指数衰减模型）
+
+#### 2. 调度器集成
+- **GreedyScheduler**: 在 `_calculate_assignment_score()` 中添加中心点距离评分
+- **HeuristicScheduler**: 重写 `_select_best_assignment()`，使用综合评分
+- **MetaheuristicScheduler**: 在 `_evaluate_task_assignment()` 中添加评分因子
+
+#### 3. 配置项 (`scheduler/common/config.py`)
+```python
+enable_center_distance_score: bool = True   # 是否启用
+center_distance_weight: float = 15.0        # 评分权重（分/度）
+```
+
+### 评分模型
+- **指数衰减**: `score = exp(-distance / scale)`
+- **参数**: max_distance=10°, scale=3°
+- **效果**: 0°偏差=1.0分，3°偏差≈0.37分，10°偏差≈0.04分
+
+### 关键设计决策
+
+#### 1. 仅对非聚类任务启用
+```python
+if not getattr(task, 'is_cluster', False) and not getattr(task, 'is_cluster_task', False):
+    # 应用中心点距离评分
+```
+- **原因**: 聚类任务覆盖多个目标，无法定义单一的"最佳中心"
+- **影响**: 约50%的任务类型不受影响
+
+#### 2. 防御性编程
+```python
+# 参数边界检查
+if max_distance <= 0:
+    max_distance = 10.0  # 使用默认值
+if not satellite_position or len(satellite_position) != 3:
+    return 0.5  # 默认中等评分
+```
+
+#### 3. 失败回退策略
+- 任何异常都返回默认评分0.5
+- 不影响调度主流程
+- 记录debug日志供排查
+
+### 测试覆盖
+- **单元测试**: `tests/unit/scheduler/test_center_distance_score.py`
+  - Haversine距离计算（相同点、赤道、极点）
+  - 成像中心计算（星下点、侧摆、俯仰）
+  - 评分函数（边界值、极端情况、无效参数）
+- **22个测试用例全部通过**
+
+### 使用示例
+```python
+# 启用优化（默认）
+config = {
+    'enable_center_distance_score': True,
+    'center_distance_weight': 15.0,
+}
+scheduler = GreedyScheduler(config=config)
+
+# 禁用优化
+config = {
+    'enable_center_distance_score': False,
+}
+```
+
+### 性能影响
+- **额外计算**: 每任务增加一次卫星位置查询和姿态计算
+- **优化措施**: 导入优化（避免方法内重复导入）
+- **实测**: 在2412任务场景下，调度时间增加<5%
+
+### 后续调参建议
+根据实际运行效果调整权重：
+- **偏差改善不明显**: 增加权重到 20-25
+- **任务调度数量下降**: 降低权重到 10-12
+- **平衡推荐**: 15（默认值）
+

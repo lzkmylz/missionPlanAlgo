@@ -16,6 +16,7 @@ from ..base_scheduler import BaseScheduler, ScheduleResult, ScheduledTask, TaskF
 from scheduler.common import ResourceManager, TaskTimeManager, ConstraintChecker
 from scheduler.common import MetaheuristicConfig, ConstraintConfig
 from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
+from scheduler.common.footprint_utils import fill_footprint_to_task
 from payload.imaging_time_calculator import ImagingTimeCalculator
 from core.models import Mission, ImagingMode
 
@@ -726,7 +727,37 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             result = results[0]
 
             # Update state for scheduled task
-            state.score += 10.0
+            base_score = 10.0
+
+            # 新增：中心点距离评分（仅非聚类任务）
+            if self._config.constraints.enable_center_distance_score:
+                if not getattr(task, 'is_cluster', False) and not getattr(task, 'is_cluster_task', False):
+                    try:
+                        target_lon = getattr(task, 'longitude', None)
+                        target_lat = getattr(task, 'latitude', None)
+
+                        if target_lon is not None and target_lat is not None and sat_position is not None:
+                            # 获取姿态角（从 window 或 feasible_window）
+                            roll = getattr(feasible_window, 'roll_angle', 0.0) or 0.0
+                            pitch = getattr(feasible_window, 'pitch_angle', 0.0) or 0.0
+
+                            from scheduler.common.footprint_utils import calculate_center_distance_score
+                            center_distance_score = calculate_center_distance_score(
+                                satellite_position=sat_position,
+                                roll_angle=roll,
+                                pitch_angle=pitch,
+                                target_lon=target_lon,
+                                target_lat=target_lat,
+                                max_distance=10.0,
+                                scale=3.0
+                            )
+                            weight = self._config.constraints.center_distance_weight
+                            base_score += center_distance_score * weight
+                    except Exception as e:
+                        # 评分计算失败不影响主流程
+                        pass
+
+            state.score += base_score
             state.scheduled_count += 1
 
             target_id = getattr(task, 'target_id', str(task_idx))
@@ -968,12 +999,28 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             )
 
             # 计算姿态角（如果启用）
+            roll_angle = 0.0
+            pitch_angle = 0.0
             if self._enable_attitude_calculation:
                 attitude = self._calculate_attitude_angles(sat, task, actual_start)
                 if attitude:
-                    scheduled_task.roll_angle = attitude.roll
-                    scheduled_task.pitch_angle = attitude.pitch
+                    roll_angle = attitude.roll
+                    pitch_angle = attitude.pitch
+                    scheduled_task.roll_angle = roll_angle
+                    scheduled_task.pitch_angle = pitch_angle
                     scheduled_task.yaw_angle = attitude.yaw
+
+            # 计算成像足迹
+            fill_footprint_to_task(
+                mission=self.mission,
+                attitude_calculator=self._attitude_calculator,
+                scheduled_task=scheduled_task,
+                sat_id=sat.id,
+                imaging_start=actual_start,
+                roll_angle=roll_angle,
+                pitch_angle=pitch_angle,
+                imaging_mode=imaging_mode
+            )
 
             # 填充聚类信息到 ScheduledTask
             self._populate_cluster_info(scheduled_task, task)

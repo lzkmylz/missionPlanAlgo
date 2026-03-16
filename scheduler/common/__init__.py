@@ -11,6 +11,13 @@ from .resource_manager import ResourceManager, ResourceSnapshot, ResourceAllocat
 from .config import SchedulerConfig, ConstraintConfig, ResourceConfig, MetaheuristicConfig
 from .constraint_checker import ConstraintChecker, ConstraintContext, ConstraintResult, ConstraintType
 from .factory import SchedulerFactory, create_scheduler
+from .footprint_utils import (
+    calculate_task_footprint,
+    fill_footprint_to_task,
+    calculate_haversine_distance,
+    calculate_footprint_center_from_attitude,
+    calculate_center_distance_score,
+)
 
 __all__ = [
     # Resource management
@@ -31,4 +38,10 @@ __all__ = [
     # Factory
     'SchedulerFactory',
     'create_scheduler',
+    # Footprint utilities
+    'calculate_task_footprint',
+    'fill_footprint_to_task',
+    'calculate_haversine_distance',
+    'calculate_footprint_center_from_attitude',
+    'calculate_center_distance_score',
 ]
