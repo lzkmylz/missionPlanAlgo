@@ -179,7 +179,7 @@ class MosaicPlanner:
 
         # 自动判断：基于卫星类型
         sar_count = sum(1 for s in satellites
-                       if s.satellite_type == SatelliteType.SAR)
+                       if s.sat_type == SatelliteType.SAR_1 or s.sat_type == SatelliteType.SAR_2)
         optical_count = len(satellites) - sar_count
 
         if sar_count > optical_count:

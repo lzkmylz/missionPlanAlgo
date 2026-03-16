@@ -2397,7 +2397,7 @@
         ]
       ],
       "priority": 1,
-      "required_observations": 5,
+      "required_observations": 1,
       "resolution_required": 10.0,
       "mosaic_required": true,
       "mosaic_strategy": "auto",

@@ -2306,14 +2306,17 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
     def _get_target_id(self, task: Any) -> str:
         """
-        Get target ID from either ObservationTask or Target
+        Get target ID from either ObservationTask, AreaObservationTask or Target
 
         Args:
-            task: Task object (ObservationTask or Target)
+            task: Task object (ObservationTask, AreaObservationTask or Target)
 
         Returns:
             Target ID string
         """
+        # 处理区域观测任务 - 使用tile_id而不是target_id
+        if hasattr(task, 'tile_id') and task.tile_id:
+            return task.tile_id
         if isinstance(task, ObservationTask):
             return task.target_id
         return getattr(task, 'id', '')

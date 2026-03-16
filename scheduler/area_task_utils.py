@@ -70,6 +70,13 @@ class AreaObservationTask:
     # 可选的可见性窗口（预计算）
     visibility_windows: List[VisibilityWindow] = field(default_factory=list)
 
+    # 兼容imaging_time_calculator的target_type属性
+    target_type: TargetType = field(default=TargetType.AREA)
+
+    # 兼容调度器的时间窗口属性
+    time_window_start: Optional[datetime] = None
+    time_window_end: Optional[datetime] = None
+
     @property
     def id(self) -> str:
         """兼容原始Target的id属性"""
