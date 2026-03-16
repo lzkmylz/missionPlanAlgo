@@ -792,6 +792,153 @@ class BaseScheduler(ABC):
 
         return True
 
+    def resume_from(self, schedule_result: ScheduleResult,
+                    new_targets: List[Any] = None,
+                    strategy: str = 'conservative') -> 'BaseScheduler':
+        """
+        从已有调度结果恢复状态，支持增量规划
+
+        此方法允许调度器从现有的ScheduleResult恢复状态，
+        然后在此基础上继续规划新的目标。
+
+        Args:
+            schedule_result: 现有调度结果
+            new_targets: 新增目标列表（可选）
+            strategy: 增量规划策略 ('conservative', 'aggressive', 'hybrid')
+
+        Returns:
+            BaseScheduler: 返回self以支持链式调用
+
+        Example:
+            scheduler = GreedyScheduler()
+            scheduler.initialize(mission)
+            result = scheduler.schedule()
+
+            # 增量规划
+            scheduler.resume_from(result, new_targets)
+            incremental_result = scheduler.schedule_incremental()
+        """
+        from scheduler.incremental import IncrementalState
+
+        # 创建增量状态管理器并加载现有调度
+        self._incremental_state = IncrementalState(self.mission)
+        self._incremental_state.load_from_schedule(schedule_result)
+
+        # 保存新增目标
+        self._incremental_targets = new_targets or []
+        self._incremental_strategy = strategy
+
+        logger.info(f"Scheduler resumed from schedule with {len(schedule_result.scheduled_tasks)} tasks")
+        logger.info(f"Incremental targets: {len(self._incremental_targets)}, strategy: {strategy}")
+
+        return self
+
+    def schedule_incremental(self) -> ScheduleResult:
+        """
+        执行增量规划
+
+        必须在调用resume_from之后使用。
+
+        Returns:
+            ScheduleResult: 增量规划结果（包含原有任务+新增任务）
+        """
+        from scheduler.incremental import (
+            IncrementalPlanner, IncrementalPlanRequest, IncrementalStrategyType
+        )
+
+        if not hasattr(self, '_incremental_state') or self._incremental_state is None:
+            raise RuntimeError("Must call resume_from before schedule_incremental")
+
+        # 确定策略类型
+        strategy_map = {
+            'conservative': IncrementalStrategyType.CONSERVATIVE,
+            'aggressive': IncrementalStrategyType.AGGRESSIVE,
+            'hybrid': IncrementalStrategyType.HYBRID
+        }
+        strategy = strategy_map.get(self._incremental_strategy, IncrementalStrategyType.CONSERVATIVE)
+
+        # 创建增量规划请求
+        # 需要获取原始的ScheduleResult
+        original_result = getattr(self, '_incremental_state', None)
+        if original_result:
+            # 从IncrementalState重建ScheduleResult
+            from scheduler.incremental.incremental_state import IncrementalState
+            if isinstance(original_result, IncrementalState):
+                # 获取原始调度的任务列表
+                original_tasks = []
+                for sat_id, sat_state in original_result.satellite_states.items():
+                    for task_info in sat_state.scheduled_tasks:
+                        task = ScheduledTask(
+                            task_id=task_info['task_id'],
+                            satellite_id=sat_id,
+                            target_id=task_info['target_id'],
+                            imaging_start=task_info['imaging_start'],
+                            imaging_end=task_info['imaging_end'],
+                            imaging_mode=task_info.get('imaging_mode', 'standard'),
+                            priority=task_info.get('priority', 0)
+                        )
+                        original_tasks.append(task)
+
+                original_schedule = ScheduleResult(
+                    scheduled_tasks=original_tasks,
+                    unscheduled_tasks={},
+                    makespan=0.0,
+                    computation_time=0.0,
+                    iterations=0
+                )
+            else:
+                original_schedule = original_result
+        else:
+            raise RuntimeError("No original schedule found for incremental planning")
+
+        request = IncrementalPlanRequest(
+            new_targets=self._incremental_targets,
+            existing_schedule=original_schedule,
+            strategy=strategy,
+            mission=self.mission
+        )
+
+        # 执行增量规划
+        planner = IncrementalPlanner(self.config)
+        result = planner.plan(request)
+
+        return result.merged_schedule
+
+    def get_remaining_capacity(self) -> Dict[str, Dict[str, float]]:
+        """
+        获取剩余资源容量
+
+        在调用resume_from之后可用，显示各卫星的剩余资源。
+
+        Returns:
+            Dict[str, Dict[str, float]]: 各卫星的剩余资源
+                {
+                    'sat_id': {
+                        'available_time': float,    # 可用时间（秒）
+                        'available_power': float,   # 可用电量（Wh）
+                        'available_storage': float, # 可用存储（GB）
+                        'utilization_rate': float   # 利用率（0-1）
+                    }
+                }
+        """
+        from scheduler.incremental import ResourceReclaimer
+
+        if not hasattr(self, '_incremental_state') or self._incremental_state is None:
+            raise RuntimeError("Must call resume_from before get_remaining_capacity")
+
+        reclaimer = ResourceReclaimer(self._incremental_state)
+        all_resources = reclaimer.calculate_all_remaining_resources()
+
+        return {
+            sat_id: {
+                'available_time': r.total_available_time,
+                'available_power': r.total_available_power,
+                'available_storage': r.total_available_storage,
+                'utilization_rate': r.utilization_rate
+            }
+            for sat_id, r in all_resources.items()
+        }
+
     def _create_frequency_aware_tasks(self):
         """创建频次感知的观测任务列表"""
         if not self.mission or not self.mission.targets:
