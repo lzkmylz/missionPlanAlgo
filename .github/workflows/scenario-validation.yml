@@ -7,8 +7,10 @@ on:
     branches: [main, master]
 
 jobs:
-  test:
+  # 快速单元测试 - 核心模块
+  unit-core:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +24,102 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run tests
-        run: pytest tests/ -v --tb=short
+      - name: Run core unit tests
+        run: pytest tests/unit/core/ -v --tb=short
 
+  # 单元测试 - 调度器模块
+  unit-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run scheduler unit tests
+        run: pytest tests/unit/scheduler/ -v --tb=short
+
+  # 单元测试 - 工具类
+  unit-utils:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run utils unit tests
+        run: |
+          pytest tests/unit/utils/ -v --tb=short
+          pytest tests/unit/utils/entity/ -v --tb=short
+
+  # 单元测试 - 其他模块
+  unit-others:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run other unit tests
+        run: |
+          pytest tests/unit/ \
+            --ignore=tests/unit/core/ \
+            --ignore=tests/unit/scheduler/ \
+            --ignore=tests/unit/utils/ \
+            -v --tb=short
+
+  # 集成测试（较慢，需要Java后端）
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short
+
+  # 场景验证（仅在PR时运行）
   validate-scenarios:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
-    needs: test
+    needs: [unit-core, unit-scheduler, unit-utils, unit-others]
     steps:
       - uses: actions/checkout@v4
 
