@@ -30,6 +30,7 @@ from scheduler.constraints.saa_constraint_checker import SAAConstraintChecker
 from scheduler.constraints import UnifiedSpatiotemporalChecker, SpatiotemporalCheckResult
 from scheduler.constraints import UnifiedManeuverChecker, ManeuverCheckResult
 from core.dynamics.attitude_manager import AttitudeManagementConfig
+from scheduler.common.footprint_utils import fill_footprint_to_task
 
 logger = logging.getLogger(__name__)
 
@@ -769,8 +770,29 @@ class MetaheuristicConstraintChecker:
         )
 
         # 计算姿态角（如果启用）- 与简化模式解耦，只要启用就计算
+        roll_angle = 0.0
+        pitch_angle = 0.0
         if self._enable_attitude_calculation:
             self._calculate_and_apply_attitude(sat_id, target, actual_start, scheduled_task)
+            roll_angle = scheduled_task.roll_angle or 0.0
+            pitch_angle = scheduled_task.pitch_angle or 0.0
+
+        # 计算成像足迹
+        try:
+            from core.dynamics.attitude_calculator import AttitudeCalculator, PropagatorType
+            attitude_calc = AttitudeCalculator(propagator_type=PropagatorType.SGP4)
+            fill_footprint_to_task(
+                mission=self.mission,
+                attitude_calculator=attitude_calc,
+                scheduled_task=scheduled_task,
+                sat_id=sat_id,
+                imaging_start=actual_start,
+                roll_angle=roll_angle,
+                pitch_angle=pitch_angle,
+                imaging_mode=imaging_mode
+            )
+        except Exception as e:
+            logger.debug(f"Failed to calculate footprint: {e}")
 
         return scheduled_task
 

@@ -6,6 +6,192 @@
 
 ---
 
+## 🚀 快速开始
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/zhaolin/missionplanalgo.git
+cd missionplanalgo
+
+# 安装依赖
+pip install -e .
+
+# 或使用 conda
+conda env create -f environment.yml
+conda activate mpa
+```
+
+### CLI 使用
+
+```bash
+# 计算可见性窗口
+mpa visibility compute -s scenarios/large_scale_frequency.json -o output/windows.json
+
+# 执行调度
+mpa schedule run -s scenarios/large_scale_frequency.json \
+                 -c output/windows.json \
+                 -a greedy \
+                 -o output/schedule.json
+
+# 启动 API 服务
+mpa serve start --host 0.0.0.0 --port 8000
+```
+
+### Python API 使用
+
+```python
+import missionplanalgo as mpa
+
+# 计算可见性
+windows = mpa.compute_visibility("scenarios/test.json")
+print(f"计算了 {windows['total_windows']} 个窗口")
+
+# 执行调度
+result = mpa.schedule("scenarios/test.json",
+                      algorithm="greedy",
+                      cache_path="output/windows.json")
+print(f"调度了 {len(result['scheduled_tasks'])} 个任务")
+
+# 评估结果
+metrics = mpa.evaluate_schedule(result)
+print(f"频次满足率: {metrics['frequency_satisfaction']:.1%}")
+```
+
+### RESTful API 使用
+
+```bash
+# 启动服务
+mpa serve start
+
+# 查看 API 文档
+open http://127.0.0.1:8000/docs
+
+# 调用 API
+curl -X POST http://localhost:8000/api/v1/schedule \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenario": {"satellites": [...], "targets": [...]},
+    "algorithm": "greedy"
+  }'
+```
+
+---
+
+## 📦 功能特性
+
+- **CLI 工具** (`mpa`): 统一的命令行接口，支持调度、可见性计算、配置管理
+- **Python API**: 函数式接口，一行代码完成任务
+- **RESTful API**: FastAPI 实现，支持异步任务处理
+- **单机/分布式**: 开箱即用，也可配置 Redis 实现分布式
+
+---
+
+## 🔧 配置
+
+```bash
+# 初始化配置
+mpa config init
+
+# 设置默认算法
+mpa config set scheduler.default_algorithm ga
+
+# 启用 Redis 分布式模式（可选）
+mpa config set task_backend.type celery
+mpa config set task_backend.broker_url redis://localhost:6379/0
+```
+
+配置位置：`~/.config/mpa/config.yaml`
+
+---
+
+## 📦 Python 包安装与使用
+
+### 作为 Python 包安装
+
+```bash
+# 从源码安装（开发模式）
+git clone https://github.com/zhaolin/missionplanalgo.git
+cd missionplanalgo
+pip install -e .
+
+# 打包分发
+python -m build
+
+# 离线安装
+pip install dist/missionplanalgo-*.whl
+```
+
+### 三种使用方式
+
+#### 1. CLI 命令行工具
+
+```bash
+# 查看帮助
+mpa --help
+
+# 计算可见性
+mpa visibility compute -s scenarios/large_scale_frequency.json
+
+# 执行调度
+mpa schedule run -s scenarios/large_scale_frequency.json -a greedy
+
+# 启动 API 服务
+mpa serve start --host 0.0.0.0 --port 8000
+```
+
+#### 2. Python API
+
+```python
+import missionplanalgo as mpa
+
+# 加载场景
+scenario = mpa.load_scenario("scenarios/test.json")
+
+# 计算可见性
+windows = mpa.compute_visibility(scenario)
+
+# 执行调度
+result = mpa.schedule(scenario, algorithm="greedy")
+
+# 评估结果
+metrics = mpa.evaluate_schedule(result)
+```
+
+#### 3. RESTful API 服务
+
+```bash
+# 启动服务
+mpa serve start
+
+# 查看 API 文档
+open http://127.0.0.1:8000/docs
+
+# 提交调度任务
+curl -X POST http://localhost:8000/api/v1/schedule \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": {...}, "algorithm": "greedy"}'
+```
+
+### 配置管理
+
+```bash
+# 初始化配置
+mpa config init
+
+# 设置默认算法
+mpa config set scheduler.default_algorithm ga
+
+# 启用 Redis 分布式模式（可选）
+mpa config set task_backend.type celery
+mpa config set task_backend.broker_url redis://localhost:6379/0
+```
+
+配置文件位置：`~/.config/mpa/config.yaml`
+
+---
+
 ## 核心特性
 
 - **大规模星座支持**：60颗异构卫星（30光学 + 30 SAR）
@@ -637,6 +823,85 @@ python -m experiments.runner \
 
 ---
 
+## 测试
+
+### 运行测试
+
+```bash
+# 运行所有测试
+python -m pytest tests/ -v
+
+# 运行特定模块测试
+python -m pytest tests/test_api/ -v
+python -m pytest tests/test_config/ -v
+python -m pytest tests/test_integration/ -v
+
+# 生成覆盖率报告
+python -m pytest tests/ --cov=missionplanalgo --cov-report=html
+```
+
+### 测试结构
+
+```
+tests/
+├── test_api/              # API 测试
+│   ├── test_basic.py      # 基础功能测试
+│   └── test_errors.py     # 错误处理测试
+├── test_config/           # 配置测试
+│   └── test_validation.py # 配置验证测试
+├── test_cli/              # CLI 测试
+│   └── test_main.py       # 主命令测试
+├── test_server/           # 服务器测试
+│   └── test_backends.py   # 任务后端测试
+├── test_integration/      # 集成测试
+│   └── test_workflow.py   # 端到端工作流测试
+└── unit/                  # 单元测试
+```
+
+---
+
+## 打包与分发
+
+### 打包为 Wheel
+
+```bash
+# 安装构建工具
+pip install build
+
+# 构建 wheel 和 sdist
+python -m build
+
+# 输出文件
+# dist/missionplanalgo-1.0.0-py3-none-any.whl
+# dist/missionplanalgo-1.0.0.tar.gz
+```
+
+### 离线安装
+
+```bash
+# 在联网机器上打包
+python -m build
+
+# 复制 dist/ 目录到离线机器
+scp -r dist/ user@offline-server:/tmp/
+
+# 离线安装
+pip install /tmp/dist/missionplanalgo-1.0.0-py3-none-any.whl --no-index --find-links /tmp/dist/
+```
+
+### 依赖管理
+
+```bash
+# 导出依赖
+pip freeze > requirements.txt
+
+# 离线安装依赖
+pip download -r requirements.txt -d packages/
+pip install --no-index --find-links packages/ -r requirements.txt
+```
+
+---
+
 ## 常见问题
 
 ### Q: Git LFS 文件拉取失败怎么办？
@@ -728,6 +993,36 @@ TLE数据 → SGP4外推到场景开始
 ```
 
 这解决了历元（如J2000）距场景（如2024年）24年的问题，性能从226分钟提升到80秒。
+
+### Q: Python 包如何离线安装？
+
+**A:** 在有网络的机器上打包，然后离线安装：
+
+```bash
+# 1. 在联网机器上打包
+python -m build
+
+# 2. 下载依赖包
+pip wheel . -w dist/packages/
+
+# 3. 复制到离线机器并安装
+pip install dist/missionplanalgo-*.whl --no-index --find-links dist/packages/
+```
+
+### Q: 如何验证安装成功？
+
+**A:** 运行以下命令验证：
+
+```bash
+# 验证 CLI
+mpa --version
+
+# 验证 Python API
+python -c "import missionplanalgo as mpa; print(mpa.__version__)"
+
+# 运行测试
+python -m pytest tests/test_api/ tests/test_config/ -v
+```
 
 ### Q: 卫星物理参数如何配置？
 

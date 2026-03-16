@@ -294,6 +294,11 @@ def run_single_algorithm(
             'primary_target_id': getattr(task, 'primary_target_id', None),
             'covered_target_ids': getattr(task, 'covered_target_ids', []),
             'covered_target_count': getattr(task, 'covered_target_count', 0),
+            # 成像足迹相关字段
+            'footprint_corners': getattr(task, 'footprint_corners', []),
+            'footprint_center': getattr(task, 'footprint_center', None),
+            'swath_width_km': getattr(task, 'swath_width_km', 0.0),
+            'fov_config': getattr(task, 'fov_config', {}),
         }
         scheduled_tasks.append(task_dict)
 

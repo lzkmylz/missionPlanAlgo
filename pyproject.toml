@@ -1,0 +1,133 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "missionplanalgo"
+version = "1.0.0"
+description = "卫星星座任务规划算法研究平台"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "赵林", email = "zhaolin@hit.edu.cn"}
+]
+maintainers = [
+    {name = "赵林", email = "zhaolin@hit.edu.cn"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = [
+    # Core scientific computing
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pandas>=2.0.0",
+    # Satellite orbit propagation
+    "sgp4>=2.22",
+    # Evolutionary algorithms
+    "deap>=1.4.0",
+    # Data handling
+    "pyyaml>=6.0",
+    "python-dateutil>=2.8.0",
+    # Utilities
+    "tqdm>=4.65.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "jsonschema>=4.17.0",
+    # Performance optimization
+    "numba>=0.57.0",
+    # Visualization
+    "matplotlib>=3.7.0",
+    "plotly>=5.14.0",
+    # Storage
+    "h5py>=3.8.0",
+    "tables>=3.8.0",
+    "pyarrow>=12.0.0",
+    # Database
+    "pymysql>=1.1.0",
+    "sqlalchemy>=2.0.0",
+    # API server
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "python-multipart>=0.0.6",
+    "httpx>=0.24.0",
+    # Configuration
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+]
+celery = [
+    "celery>=5.3.0",
+    "redis>=4.6.0",
+]
+
+[project.scripts]
+mpa = "missionplanalgo.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/zhaolin/missionplanalgo"
+Documentation = "https://missionplanalgo.readthedocs.io"
+Repository = "https://github.com/zhaolin/missionplanalgo.git"
+Issues = "https://github.com/zhaolin/missionplanalgo/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["missionplanalgo*"]
+
+[tool.setuptools.package-data]
+missionplanalgo = [
+    "config/*.yaml",
+    "java/lib/*.jar",
+]
+
+[tool.setuptools.exclude-package-data]
+missionplanalgo = [
+    "java/classes/*",
+    "java/output/*",
+    "java/results/*",
+    "*.pyc",
+    "*.pyo",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

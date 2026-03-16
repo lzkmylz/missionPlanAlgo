@@ -117,7 +117,7 @@ class ScheduledTask:
     # 姿态角字段 - 用于姿控系统验证
     roll_angle: Optional[float] = None    # 滚转角（度）
     pitch_angle: Optional[float] = None   # 俯仰角（度）
-    yaw_angle: Optional[float] = None     # 偏航角（度）
+    yaw_angle: float = 0.0                # 偏航角（度），默认为0（零偏航模式）
     attitude_coordinate_system: str = "LVLH"  # 坐标系：LVLH
     # 任务优先级和复位时间
     priority: Optional[int] = None        # 任务优先级

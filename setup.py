@@ -31,6 +31,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
+            'mpa=missionplanalgo.cli.main:main',
             'sat-cli=utils.entity.cli:main',
             'scen=utils.entity.cli:main',
         ],

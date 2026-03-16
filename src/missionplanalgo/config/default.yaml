@@ -1,0 +1,94 @@
+# Mission Planning Algorithm 默认配置
+
+app:
+  name: "Mission Planning Algorithm"
+  version: "1.0.0"
+  debug: false
+
+# 调度器默认配置
+scheduler:
+  default_algorithm: "greedy"
+  enable_frequency: true
+  enable_downlink: true
+
+  # 算法默认参数
+  algorithms:
+    greedy:
+      consider_power: true
+      consider_storage: true
+    ga:
+      population_size: 80
+      generations: 50
+      mutation_rate: 0.2
+      crossover_rate: 0.8
+    sa:
+      initial_temperature: 100.0
+      cooling_rate: 0.95
+
+# 任务后端配置
+task_backend:
+  # 默认单机模式（开箱即用）
+  type: "local"
+  max_workers: 4
+  db_path: "~/.cache/mpa/tasks.db"
+
+  # 分布式模式（用户自行配置）
+  # type: "celery"
+  # broker_url: "redis://localhost:6379/0"
+  # result_backend: "redis://localhost:6379/1"
+
+# API 服务配置
+server:
+  host: "127.0.0.1"
+  port: 8000
+  log_level: "info"
+  workers: null  # null = auto
+
+  # CORS 配置
+  cors:
+    enabled: true
+    origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+
+# Java 后端配置
+java_backend:
+  enabled: true
+  jar_path: "java/target/orekit-visibility.jar"
+  memory: "4g"
+  jvm_options:
+    - "-XX:+UseG1GC"
+    - "-XX:MaxGCPauseMillis=200"
+
+  # 可见性计算参数
+  visibility:
+    coarse_step: 5.0
+    fine_step: 1.0
+    min_elevation: 5.0
+    parallel: true
+
+# 缓存配置
+cache:
+  directory: "~/.cache/mpa"
+  max_size: "10GB"
+  ttl: "7d"
+  compression: true
+
+  # 缓存类型开关
+  types:
+    visibility: true
+    orbit: true
+    attitude: true
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "text"  # text 或 json
+  file: null  # null = 输出到控制台
+
+  # 结构化日志字段
+  fields:
+    timestamp: true
+    level: true
+    logger: true

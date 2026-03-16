@@ -1,0 +1,30 @@
+# Documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+
+# Configuration files
+include pyproject.toml
+include requirements.txt
+include requirements/*.txt
+
+# Java source and libraries
+recursive-include java/src *.java
+recursive-include java/lib *.jar
+include java/Makefile
+include java/pom.xml
+
+# Data files
+recursive-include data/entity_lib *.json
+recursive-include scenarios *.json *.yaml
+
+# Exclude development files
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .DS_Store
+
+# Exclude Java build artifacts
+recursive-exclude java/classes *
+recursive-exclude java/target *
+recursive-exclude java/output *
+recursive-exclude java/results *
