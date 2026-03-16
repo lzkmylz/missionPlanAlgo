@@ -200,10 +200,10 @@ class ClusteringMixin:
         """获取聚类后的任务列表
 
         将目标进行空间聚类，返回 ClusterTask 列表。
-        未聚类的目标作为单独的 ClusterTask 返回。
+        只返回真正的聚类（is_cluster=True），未聚类的单个目标不返回。
 
         Returns:
-            List[ClusterTask]: 聚类任务列表
+            List[ClusterTask]: 聚类任务列表（仅包含真正的聚类）
         """
         if not self.enable_clustering or not hasattr(self, 'mission') or not self.mission:
             return []
@@ -218,9 +218,8 @@ class ClusteringMixin:
         # 执行聚类
         clusters = self._clusterer.cluster_targets(targets)
 
-        # 转换为目标列表
+        # 转换为目标列表（只返回真正的聚类）
         tasks = []
-        clustered_target_ids: Set[str] = set()
 
         # 添加聚类任务
         for cluster in clusters:
@@ -233,24 +232,15 @@ class ClusteringMixin:
             )
             tasks.append(task)
             self._cluster_map[task.task_id] = task
-            for target in cluster.targets:
-                clustered_target_ids.add(target.id)
-
-        # 添加未聚类的单个目标
-        for target in targets:
-            if target.id not in clustered_target_ids:
-                task = ClusterTask(
-                    task_id=target.id,
-                    cluster_id=f"single_{target.id}",
-                    targets=[target],
-                    centroid=(target.longitude or 0, target.latitude or 0),
-                    total_priority=target.priority or 5,
-                    is_cluster=False
-                )
-                tasks.append(task)
-                self._cluster_map[task.task_id] = task
 
         return tasks
+
+    def _cluster_targets(self) -> List[ClusterTask]:
+        """获取聚类后的任务列表（向后兼容别名）
+
+        与 _get_clustered_tasks 相同，为向后兼容提供。
+        """
+        return self._get_clustered_tasks()
 
     def _record_cluster_schedule(
         self,
@@ -337,6 +327,18 @@ class ClusteringMixin:
     def get_cluster_task(self, task_id: str) -> Optional[ClusterTask]:
         """获取聚类任务对象"""
         return self._cluster_map.get(task_id)
+
+    @property
+    def clusterer(self):
+        """获取聚类器实例（延迟初始化，向后兼容）"""
+        if self._clusterer is None and self.enable_clustering:
+            self._initialize_clustering()
+        return self._clusterer
+
+    @property
+    def cluster_schedules(self) -> List[ClusterScheduleInfo]:
+        """获取聚类调度列表（向后兼容）"""
+        return self._cluster_schedules
 
     def get_clustering_config(self) -> Dict[str, Any]:
         """获取聚类配置"""

@@ -136,6 +136,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         # 统一批量约束检查器（延迟初始化，只创建一次）
         self._unified_checker = None
 
+        # Footprint calculator for coverage calculations (lazy initialization)
+        self._footprint_calc = None
+
         # 性能分析数据
         self._perf_stats = defaultdict(lambda: {'count': 0, 'total_time': 0.0, 'max_time': 0.0, 'min_time': float('inf')})
 
@@ -191,6 +194,14 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         # Add clustering parameters
         params.update(self.get_clustering_config())
         return params
+
+    @property
+    def footprint_calc(self):
+        """获取FootprintCalculator实例（延迟初始化，向后兼容）"""
+        if self._footprint_calc is None:
+            from core.coverage.footprint_calculator import FootprintCalculator
+            self._footprint_calc = FootprintCalculator(satellite_altitude_km=self.altitude_km)
+        return self._footprint_calc
 
     def _perf_start(self) -> float:
         """开始计时"""
