@@ -22,7 +22,7 @@ from typing import List, Dict, Any
 from unittest.mock import Mock, patch
 
 from scheduler.greedy.greedy_scheduler import GreedyScheduler
-from scheduler.common.clustering_mixin import ClusterSchedule
+from scheduler.common.clustering_mixin import ClusterSchedule, ClusterScheduleInfo
 from scheduler.base_scheduler import ScheduleResult, ScheduledTask
 from core.models.target import Target, TargetType
 from core.models.satellite import Satellite, SatelliteType, SatelliteCapabilities, ImagingMode, Orbit
@@ -429,6 +429,9 @@ class TestGreedyScheduler:
         scheduled_target_ids = set()
         for task in result.scheduled_tasks:
             scheduled_target_ids.add(task.target_id)
+            # For cluster tasks, also include covered targets
+            if getattr(task, 'is_cluster_task', False):
+                scheduled_target_ids.update(getattr(task, 'covered_target_ids', []))
 
         # All targets should be covered
         all_target_ids = {t.id for t in mock_mission.targets}
@@ -692,9 +695,9 @@ class TestGreedyScheduler:
             # Should have cluster schedules after scheduling
             assert len(scheduler.cluster_schedules) > 0
 
-            # Verify cluster schedule structure
+            # Verify cluster schedule structure (accept both ClusterSchedule and ClusterScheduleInfo)
             for cs in scheduler.cluster_schedules:
-                assert isinstance(cs, ClusterSchedule)
+                assert isinstance(cs, (ClusterSchedule, ClusterScheduleInfo))
                 assert cs.cluster_id is not None
                 assert len(cs.targets) > 0
                 assert cs.satellite_id is not None
@@ -811,7 +814,7 @@ class TestClusteringEdgeCases:
 
     def test_multiple_clusters_same_priority_density(self):
         """Test sorting when clusters have same priority density"""
-        scheduler = GreedyScheduler({})
+        scheduler = GreedyScheduler({'enable_clustering': True})
         scheduler.mission = Mock()
 
         # Two identical clusters
@@ -904,6 +907,7 @@ class TestClusteringIntegration:
             'consider_power': False,
             'consider_storage': False,
             'consider_time_conflicts': False,
+            'enable_clustering': True,
         }
         scheduler = GreedyScheduler(base_config)
 

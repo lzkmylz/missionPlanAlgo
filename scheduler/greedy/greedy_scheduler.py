@@ -229,25 +229,217 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
         return (sat.id, windows[0], 15.0)
 
-    def _estimate_satellite_position(self, sat_id, dt):
-        """估计卫星位置（向后兼容桩方法）"""
-        # 返回默认位置（地球表面上方500km）
-        return (6371000 + 500000, 0, 0)
+    def _calculate_cluster_imaging_time(self, cluster, imaging_mode):
+        """计算聚类成像时间（向后兼容方法）"""
+        if not cluster or not hasattr(cluster, 'targets') or not cluster.targets:
+            return 60.0  # 默认最小值
+        # 简单估计：每个目标10秒
+        return max(60.0, len(cluster.targets) * 10.0)
 
-    def _check_cluster_resource_constraints(self, cluster, sat_id):
-        """检查聚类资源约束（向后兼容桩方法）"""
+    def _calculate_cluster_assignment_score(self, satellite, cluster, window, slew_angle):
+        """计算聚类分配评分（向后兼容方法）"""
+        # 基础评分
+        score = 100.0
+
+        # 根据目标数量加分
+        if hasattr(cluster, 'targets') and cluster.targets:
+            score += len(cluster.targets) * 10.0
+
+        # 根据优先级加分
+        if hasattr(cluster, 'total_priority'):
+            score += cluster.total_priority * 5.0
+
+        # 根据slew角度减分
+        if slew_angle:
+            score -= slew_angle * 2.0
+
+        return max(1.0, score)
+
+    def _sort_clusters_by_priority_density(self, clusters):
+        """按优先级密度排序聚类（向后兼容方法）
+
+        优先级密度 = 总优先级 / 目标数量
+        密度越高的聚类越优先。
+
+        Args:
+            clusters: 聚类列表
+
+        Returns:
+            按优先级密度排序的聚类列表（降序）
+        """
+        def priority_density_key(cluster):
+            if hasattr(cluster, 'total_priority') and hasattr(cluster, 'targets'):
+                num_targets = len(cluster.targets) if cluster.targets else 1
+                # 返回负值用于降序排序
+                return -(cluster.total_priority / num_targets)
+            return 0.0
+
+        return sorted(clusters, key=priority_density_key)
+
+    def _estimate_satellite_position(self, satellite, dt):
+        """估计卫星位置（向后兼容方法）"""
+        # 返回默认位置（地球表面上方500km，轨道半径约6871km）
+        import math
+        # 使用当前时间计算大致位置（简化模型）
+        if hasattr(dt, 'hour'):
+            angle = (dt.hour / 24.0) * 2 * math.pi
+        else:
+            angle = 0.0
+        radius = 6871000.0  # 地球半径 + 500km
+        x = radius * math.cos(angle)
+        y = radius * math.sin(angle)
+        z = 0.0
+        return (x, y, z)
+
+    def _check_cluster_resource_constraints(self, satellite, cluster, imaging_mode):
+        """检查聚类资源约束（向后兼容方法）"""
+        # 获取卫星ID
+        sat_id = getattr(satellite, 'id', '')
+
+        # 检查电量
+        if self.consider_power and sat_id in self._sat_resource_usage:
+            power = self._sat_resource_usage[sat_id].get('power', 0.0)
+            if power <= 0.0:
+                return False
+
         return True
 
-    def _create_cluster_scheduled_task(self, cluster, assignment):
-        """创建聚类调度任务（向后兼容桩方法）"""
-        return None
+    def _are_all_targets_scheduled(self, targets):
+        """检查所有目标是否已调度（向后兼容方法）"""
+        if not hasattr(self, '_scheduled_target_ids'):
+            self._scheduled_target_ids = set()
+
+        for target in targets:
+            target_id = getattr(target, 'id', None)
+            if target_id and target_id not in self._scheduled_target_ids:
+                return False
+        return True
+
+    def _get_unscheduled_targets(self):
+        """获取未调度的目标列表（向后兼容方法）"""
+        if not hasattr(self, '_scheduled_target_ids'):
+            self._scheduled_target_ids = set()
+
+        if not self.mission or not hasattr(self.mission, 'targets'):
+            return []
+
+        return [
+            t for t in self.mission.targets
+            if getattr(t, 'id', None) not in self._scheduled_target_ids
+        ]
+
+    def _count_high_priority_targets(self, targets):
+        """统计高优先级目标数量（向后兼容方法）"""
+        count = 0
+        for target in targets:
+            priority = getattr(target, 'priority', 5)
+            if priority >= 8:
+                count += 1
+        return count
+
+    def _create_cluster_scheduled_task(self, cluster, satellite_id, window, slew_angle):
+        """创建聚类调度任务（向后兼容方法）"""
+        from datetime import datetime
+
+        # 计算成像时长
+        duration = getattr(window, 'duration', 300.0)
+        if hasattr(duration, 'total_seconds'):
+            duration = duration.total_seconds()
+
+        start_time = getattr(window, 'start_time', datetime.now())
+        if hasattr(window, 'end_time'):
+            end_time = window.end_time
+        else:
+            from datetime import timedelta
+            end_time = start_time + timedelta(seconds=duration)
+
+        task = ScheduledTask(
+            task_id=f"cluster_{getattr(cluster, 'cluster_id', 'unknown')}",
+            satellite_id=satellite_id,
+            target_id=getattr(cluster.targets[0], 'id', '') if hasattr(cluster, 'targets') and cluster.targets else '',
+            imaging_start=start_time,
+            imaging_end=end_time,
+            imaging_mode='push_broom',
+            slew_angle=slew_angle if slew_angle else 0.0,
+        )
+
+        # 标记为聚类任务
+        task.is_cluster_task = True
+        task.cluster_id = getattr(cluster, 'cluster_id', '')
+        if hasattr(cluster, 'targets'):
+            task.covered_target_ids = [t.id for t in cluster.targets]
+            task.covered_target_count = len(cluster.targets)
+
+        return task
 
     def get_efficiency_metrics(self):
-        """获取效率指标（向后兼容桩方法）"""
+        """获取效率指标（向后兼容方法）"""
+        # 如果没有mission初始化，返回默认值
+        if not self.mission or not hasattr(self.mission, 'targets'):
+            return {
+                'task_reduction_ratio': 0.0,
+                'high_priority_coverage': 0.0,
+                'avg_look_angle': 0.0,
+                'avg_targets_per_task': 0.0,
+            }
+
+        # 计算高优先级目标覆盖率
+        high_priority_count = 0
+        scheduled_high_priority = 0
+
+        if not hasattr(self, '_scheduled_target_ids'):
+            self._scheduled_target_ids = set()
+
+        for target in self.mission.targets:
+            if getattr(target, 'priority', 5) >= 8:
+                high_priority_count += 1
+                if getattr(target, 'id', None) in self._scheduled_target_ids:
+                    scheduled_high_priority += 1
+
+        # 如果没有高优先级目标，返回1.0
+        if high_priority_count == 0:
+            high_priority_coverage = 1.0
+        else:
+            high_priority_coverage = scheduled_high_priority / high_priority_count
+
+        # 计算平均侧摆角
+        total_look_angle = 0.0
+        task_count = 0
+        total_covered_targets = 0
+        if hasattr(self, 'schedule_result') and self.schedule_result:
+            for task in getattr(self.schedule_result, 'scheduled_tasks', []):
+                if hasattr(task, 'slew_angle'):
+                    total_look_angle += task.slew_angle
+                    task_count += 1
+                # 聚类任务覆盖多个目标
+                if hasattr(task, 'covered_target_count'):
+                    total_covered_targets += task.covered_target_count
+                else:
+                    total_covered_targets += 1
+
+        avg_look_angle = total_look_angle / task_count if task_count > 0 else 0.0
+        avg_targets_per_task = total_covered_targets / task_count if task_count > 0 else 0.0
+
+        # 计算任务缩减率（聚类效果）
+        # 1 - (实际调度任务数 / 原始目标数)
+        total_targets = len(self.mission.targets) if self.mission and hasattr(self.mission, 'targets') else 0
+        # 优先使用 cluster_schedules 计算（如果聚类已启用且有记录）
+        if self.enable_clustering and self._cluster_schedules:
+            num_cluster_tasks = len(self._cluster_schedules)
+            if total_targets > 0:
+                task_reduction_ratio = 1.0 - (num_cluster_tasks / total_targets)
+            else:
+                task_reduction_ratio = 0.0
+        elif total_targets > 0 and task_count > 0:
+            task_reduction_ratio = 1.0 - (task_count / total_targets)
+        else:
+            task_reduction_ratio = 0.0
+
         return {
-            'task_reduction_ratio': 0.0,
-            'high_priority_coverage': 0.0,
-            'avg_look_angle': 0.0,
+            'task_reduction_ratio': task_reduction_ratio,
+            'high_priority_coverage': high_priority_coverage,
+            'avg_look_angle': avg_look_angle,
+            'avg_targets_per_task': avg_targets_per_task,
         }
 
     def _get_efficiency_metrics(self):
@@ -1265,17 +1457,30 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
         Args:
             sat: Satellite
-            task: Target task (ObservationTask or Target)
+            task: Target task (ObservationTask, ClusterTask or Target)
 
         Returns:
             List of visibility windows (filtered by Java precomputed attitude feasibility)
         """
-        if self.window_cache:
-            target_id = self._get_target_id(task)
-            windows = self.window_cache.get_windows(sat.id, target_id)
+        if not self.window_cache:
+            return []
+
+        # Handle cluster tasks - get windows for all targets in cluster
+        if isinstance(task, ClusterTask):
+            all_windows = []
+            for target in task.targets:
+                target_id = getattr(target, 'id', '')
+                windows = self.window_cache.get_windows(sat.id, target_id)
+                if windows:
+                    all_windows.extend(windows)
             # Filter out windows that Java marked as attitude infeasible
-            return [w for w in windows if getattr(w, 'attitude_feasible', True)]
-        return []
+            return [w for w in all_windows if getattr(w, 'attitude_feasible', True)]
+
+        # Handle regular tasks
+        target_id = self._get_target_id(task)
+        windows = self.window_cache.get_windows(sat.id, target_id)
+        # Filter out windows that Java marked as attitude infeasible
+        return [w for w in windows if getattr(w, 'attitude_feasible', True)]
 
     def _extract_window_times(self, window: Any) -> Tuple[Optional[datetime], Optional[datetime]]:
         """
@@ -1906,11 +2111,17 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             except Exception as e:
                 logger.warning(f"Failed to calculate footprint for task {task.id}: {e}")
 
+        # 确定target_id（聚类任务使用第一个目标的ID）
+        if isinstance(task, ClusterTask) and task.targets:
+            target_id = task.targets[0].id
+        else:
+            target_id = task.id
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
             satellite_id=sat_id,
-            target_id=task.id,
+            target_id=target_id,
             imaging_start=actual_start,
             imaging_end=actual_end,
             imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
