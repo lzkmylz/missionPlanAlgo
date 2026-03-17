@@ -9,19 +9,34 @@ from .area_coverage_plan import AreaCoveragePlan, MultiAreaCoveragePlan, Coverag
 from .imaging_mode import (
     ImagingModeConfig,
     ImagingModeType,
+    ImagingMode,
     OPTICAL_PUSH_BROOM_HIGH_RES,
     OPTICAL_PUSH_BROOM_MEDIUM_RES,
+    OPTICAL_PMC_25PERCENT,
+    OPTICAL_PMC_50PERCENT,
     SAR_STRIPMAP_MODE,
     SAR_SPOTLIGHT_MODE,
     SAR_SCAN_MODE,
     SAR_SLIDING_SPOTLIGHT_MODE,
+    SAR_PMC_25PERCENT,
     MODE_TEMPLATES,
     get_mode_template,
+    create_pmc_mode_config,
 )
 from .payload_config import (
     PayloadConfiguration,
     create_optical_payload_config,
     create_sar_payload_config,
+)
+from .pmc_config import (
+    PitchMotionCompensationConfig,
+    PMC_CONFIG_10PERCENT,
+    PMC_CONFIG_25PERCENT,
+    PMC_CONFIG_50PERCENT,
+    PMC_CONFIG_75PERCENT,
+    PMC_CONFIG_TEMPLATES,
+    get_pmc_config_template,
+    create_pmc_config_for_altitude,
 )
 
 __all__ = [
@@ -36,19 +51,33 @@ __all__ = [
     # 覆盖规划相关
     'MosaicTile', 'TileStatus', 'TilePriorityMode', 'TileVisibilityInfo',
     'AreaCoveragePlan', 'MultiAreaCoveragePlan', 'CoverageStrategy', 'OverlapHandling', 'CoverageStatistics',
-    # 成像模式相关 (新增)
+    # 成像模式相关
     'ImagingModeConfig',
     'ImagingModeType',
+    'ImagingMode',
     'OPTICAL_PUSH_BROOM_HIGH_RES',
     'OPTICAL_PUSH_BROOM_MEDIUM_RES',
+    'OPTICAL_PMC_25PERCENT',
+    'OPTICAL_PMC_50PERCENT',
     'SAR_STRIPMAP_MODE',
     'SAR_SPOTLIGHT_MODE',
     'SAR_SCAN_MODE',
     'SAR_SLIDING_SPOTLIGHT_MODE',
+    'SAR_PMC_25PERCENT',
     'MODE_TEMPLATES',
     'get_mode_template',
-    # 载荷配置相关 (新增)
+    'create_pmc_mode_config',
+    # 载荷配置相关
     'PayloadConfiguration',
     'create_optical_payload_config',
     'create_sar_payload_config',
+    # PMC配置相关 (新增)
+    'PitchMotionCompensationConfig',
+    'PMC_CONFIG_10PERCENT',
+    'PMC_CONFIG_25PERCENT',
+    'PMC_CONFIG_50PERCENT',
+    'PMC_CONFIG_75PERCENT',
+    'PMC_CONFIG_TEMPLATES',
+    'get_pmc_config_template',
+    'create_pmc_config_for_altitude',
 ]

@@ -1416,3 +1416,86 @@ orbit_entry = manager.find_reusable_orbit_cache(fingerprint)
 - `tests/unit/cache/test_index_manager.py` - 索引管理测试 (9个用例)
 - 总计 **24个测试用例全部通过**
 
+
+---
+
+## 2026-03-17: 主动前向推扫模式（PMC）实现
+
+### 功能概述
+
+实现了主动前向推扫模式（Pitch Motion Compensation），通过俯仰匀速机动降低相机相对地面的推扫速度，延长积分时间，提高信噪比（SNR）。
+
+### 技术原理
+
+- **俯仰机动补偿**: 成像过程中以固定俯仰角速度机动
+- **等效降速**: 地速 = 轨道速度 × (1 - 降速比)
+- **积分时间增益**: Gain = 1 / (1 - R)，其中R为降速比
+
+### 支持的降速比
+
+| 降速比 | 俯仰角速度(500km) | 积分时间增益 | SNR增益 |
+|--------|------------------|-------------|---------|
+| 10%    | 0.087°/s        | 1.11x       | 0.46dB  |
+| 25%    | 0.218°/s        | 1.33x       | 1.25dB  |
+| 50%    | 0.436°/s        | 2.00x       | 3.01dB  |
+| 75%    | 0.655°/s        | 4.00x       | 6.02dB  |
+
+### 新增文件
+
+**数据模型**:
+- `core/models/pmc_config.py` - PMC配置类
+- 扩展 `core/models/imaging_mode.py` - 添加ImagingMode枚举和PMC模板
+- 扩展 `core/models/payload_config.py` - 支持PMC模式管理
+- 扩展 `core/models/target.py` - 支持PMC任务需求
+
+**动力学计算**:
+- `core/dynamics/pmc_calculator.py` - PMC动力学计算核心
+
+**约束检查**:
+- `scheduler/constraints/pmc_constraint_checker.py` - PMC约束检查器
+- 扩展 `scheduler/constraints/unified_batch_constraint_checker.py` - 集成PMC检查
+
+**示例**:
+- `examples/pmc_mode_example.py` - 使用示例
+
+### 使用示例
+
+```python
+# 创建PMC模式
+from core.models.imaging_mode import create_pmc_mode_config
+
+pmc_mode = create_pmc_mode_config(
+    base_resolution_m=0.5,
+    base_swath_width_m=15000,
+    speed_reduction_ratio=0.25,
+    mode_type='optical'
+)
+
+# 创建需要PMC的目标
+from core.models.target import Target, TargetType
+
+target = Target(
+    id='TGT-001',
+    target_type=TargetType.POINT,
+    longitude=116.4,
+    latitude=39.9,
+    required_imaging_mode='forward_pushbroom_pmc',
+    pmc_priority=2
+)
+
+# PMC约束检查
+from scheduler.constraints.pmc_constraint_checker import PMCConstraintChecker
+
+checker = PMCConstraintChecker()
+result = checker.check_pmc_feasibility(candidate)
+print(f"SNR增益: {result.snr_gain_db:.2f}dB")
+```
+
+### 目标任务需求扩展
+
+目标现在可以指定：
+- `required_imaging_mode`: 要求的成像模式（如 'forward_pushbroom_pmc'）
+- `required_satellite_type`: 要求的卫星类型（'optical' 或 'sar'）
+- `pmc_priority`: PMC模式优先级（0-3）
+- `pmc_speed_reduction_range`: 期望降速比范围
+

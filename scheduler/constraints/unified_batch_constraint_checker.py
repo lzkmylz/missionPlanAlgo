@@ -28,6 +28,11 @@ from .batch_orbit_constraint_checker import (
     BatchOrbitConstraintCandidate,
     BatchOrbitConstraintResult
 )
+from .pmc_constraint_checker import (
+    PMCConstraintChecker,
+    PMCCandidate,
+    PMCConstraintResult
+)
 
 from .slew_constraint_checker import SlewFeasibilityResult
 from .saa_constraint_checker import SAAFeasibilityResult
@@ -62,10 +67,31 @@ class UnifiedBatchCandidate:
     power_needed: float = 0.0
     storage_produced: float = 0.0
 
+    # PMC模式信息（新增）
+    is_pmc_mode: bool = False  # 是否为PMC模式
+    pmc_config: Optional[Any] = None  # PMC配置（如果是PMC模式）
+    imaging_mode: Optional[str] = None  # 成像模式名称
+
     def __post_init__(self):
         """初始化后处理：默认 imaging_begin = window_start"""
         if self.imaging_begin is None:
             self.imaging_begin = self.window_start
+        # 从卫星载荷检查是否是PMC模式
+        if self.imaging_mode and not self.is_pmc_mode:
+            try:
+                mode_cfg = self.satellite.payload_config.get_mode_config(self.imaging_mode)
+                self.is_pmc_mode = mode_cfg.is_pmc_mode()
+                if self.is_pmc_mode:
+                    from core.models.pmc_config import PitchMotionCompensationConfig
+                    pmc_params = mode_cfg.get_pmc_params()
+                    self.pmc_config = PitchMotionCompensationConfig(
+                        speed_reduction_ratio=pmc_params.get('speed_reduction_ratio', 0.25),
+                        pitch_rate_dps=pmc_params.get('pitch_rate_dps'),
+                        min_altitude_m=pmc_params.get('min_altitude_m', 400000.0),
+                        max_roll_angle_deg=pmc_params.get('max_roll_angle_deg', 30.0),
+                    )
+            except (ValueError, AttributeError):
+                pass
 
 
 @dataclass
@@ -76,7 +102,8 @@ class UnifiedBatchResult:
     saa_result: Optional[SAAFeasibilityResult] = None
     time_result: Optional[BatchTimeConflictResult] = None
     resource_result: Optional[BatchResourceResult] = None
-    orbit_result: Optional[BatchOrbitConstraintResult] = None  # 新增：单圈约束结果
+    orbit_result: Optional[BatchOrbitConstraintResult] = None  # 单圈约束结果
+    pmc_result: Optional[PMCConstraintResult] = None  # PMC约束结果（新增）
     reason: Optional[str] = None
 
     # 详细结果
@@ -84,7 +111,8 @@ class UnifiedBatchResult:
     saa_feasible: bool = True
     time_feasible: bool = True
     resource_feasible: bool = True
-    orbit_feasible: bool = True  # 新增：单圈约束是否满足
+    orbit_feasible: bool = True  # 单圈约束是否满足
+    pmc_feasible: bool = True  # PMC约束是否满足（新增）
 
 
 class UnifiedBatchConstraintChecker:
@@ -139,7 +167,8 @@ class UnifiedBatchConstraintChecker:
             consider_power=consider_power,
             consider_storage=consider_storage
         )
-        self._orbit_checker = BatchOrbitConstraintChecker(mission)  # 新增：单圈约束检查器
+        self._orbit_checker = BatchOrbitConstraintChecker(mission)
+        self._pmc_checker = PMCConstraintChecker()  # 新增：PMC约束检查器
 
         # 性能统计
         self._stats = {
@@ -194,7 +223,28 @@ class UnifiedBatchConstraintChecker:
         else:
             active_indices = list(range(len(candidates)))
 
-        # 阶段1: 姿态机动约束检查（通常最耗时，但已批量优化）
+        # 阶段1: PMC约束检查（如果是PMC模式）
+        pmc_indices = [i for i in active_indices if candidates[i].is_pmc_mode]
+        if pmc_indices:
+            pmc_candidates = self._convert_to_pmc_candidates(
+                [candidates[i] for i in pmc_indices]
+            )
+            pmc_results = self._pmc_checker.check_pmc_feasibility_batch(pmc_candidates)
+
+            for idx, pmc_result in zip(pmc_indices, pmc_results):
+                results[idx].pmc_result = pmc_result
+                results[idx].pmc_feasible = pmc_result.feasible
+                if not pmc_result.feasible:
+                    results[idx].feasible = False
+                    results[idx].reason = f"PMC constraint: {pmc_result.reason}"
+
+        # 早期终止检查
+        if early_termination:
+            active_indices = [i for i in active_indices if results[i].feasible]
+            if not active_indices:
+                return results
+
+        # 阶段2: 姿态机动约束检查（通常最耗时，但已批量优化）
         active_candidates = [candidates[i] for i in active_indices]
         slew_candidates = self._convert_to_slew_candidates(active_candidates)
         slew_results = self._slew_checker.check_slew_feasibility_batch(
@@ -475,6 +525,24 @@ class UnifiedBatchConstraintChecker:
             for c in candidates
         ]
 
+    def _convert_to_pmc_candidates(
+        self,
+        candidates: List[UnifiedBatchCandidate]
+    ) -> List[PMCCandidate]:
+        """转换为PMC约束候选"""
+        pmc_candidates = []
+        for c in candidates:
+            if c.is_pmc_mode and c.pmc_config:
+                pmc_candidates.append(PMCCandidate(
+                    sat_id=c.sat_id,
+                    satellite=c.satellite,
+                    target=c.target,
+                    imaging_start=c.imaging_begin or c.window_start,
+                    imaging_duration_s=c.imaging_duration,
+                    pmc_config=c.pmc_config
+                ))
+        return pmc_candidates
+
     def get_stats(self) -> Dict[str, Any]:
         """获取检查统计信息"""
         return {
@@ -499,6 +567,7 @@ class UnifiedBatchConstraintChecker:
         self._time_checker.reset_batch_stats()
         self._resource_checker.reset_batch_stats()
         self._orbit_checker.reset_batch_stats()
+        self._pmc_checker.reset_stats()
 
     def _check_resolution_constraint(self, candidate: UnifiedBatchCandidate) -> bool:
         """

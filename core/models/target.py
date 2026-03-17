@@ -91,6 +91,20 @@ class Target:
     # 状态（运行时被更新）
     completed_observations: int = 0
 
+    # ========== 成像模式与卫星类型要求（新增）==========
+    # 指定成像模式（如 'push_broom', 'forward_pushbroom_pmc', 'spotlight' 等）
+    required_imaging_mode: Optional[str] = None
+
+    # 指定卫星类型（如 'optical', 'sar'）
+    required_satellite_type: Optional[str] = None
+
+    # PMC模式优先级（如果支持PMC模式）
+    # 0 = 不使用PMC, 1 = 低优先级, 2 = 中优先级, 3 = 高优先级
+    pmc_priority: int = 0
+
+    # 期望降速比范围（仅PMC模式有效）[min, max]
+    pmc_speed_reduction_range: Optional[Tuple[float, float]] = None
+
     # ========== 拼幅覆盖相关字段 ==========
     # 是否启用拼幅覆盖（仅区域目标有效）
     mosaic_required: bool = False
@@ -188,6 +202,40 @@ class Target:
 
         return (x, y, z)
 
+    def requires_pmc(self) -> bool:
+        """检查是否需要PMC模式"""
+        return self.pmc_priority > 0 or self.required_imaging_mode == 'forward_pushbroom_pmc'
+
+    def get_preferred_speed_reduction(self) -> Optional[float]:
+        """获取首选降速比"""
+        if self.pmc_speed_reduction_range:
+            # 返回范围中值
+            return (self.pmc_speed_reduction_range[0] + self.pmc_speed_reduction_range[1]) / 2
+        return None
+
+    def check_satellite_compatibility(self, payload_type: str, mode_name: str) -> bool:
+        """
+        检查卫星是否与目标要求兼容
+
+        Args:
+            payload_type: 载荷类型（'optical' 或 'sar'）
+            mode_name: 成像模式名称
+
+        Returns:
+            是否兼容
+        """
+        # 检查卫星类型要求
+        if self.required_satellite_type:
+            if self.required_satellite_type.lower() != payload_type.lower():
+                return False
+
+        # 检查成像模式要求
+        if self.required_imaging_mode:
+            if self.required_imaging_mode != mode_name:
+                return False
+
+        return True
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -203,6 +251,10 @@ class Target:
             'time_window_start': self.time_window_start.isoformat() if self.time_window_start else None,
             'time_window_end': self.time_window_end.isoformat() if self.time_window_end else None,
             'immediate_downlink': self.immediate_downlink,
+            'required_imaging_mode': self.required_imaging_mode,
+            'required_satellite_type': self.required_satellite_type,
+            'pmc_priority': self.pmc_priority,
+            'pmc_speed_reduction_range': self.pmc_speed_reduction_range,
         }
 
     @classmethod
@@ -221,6 +273,13 @@ class Target:
             longitude = data.get('longitude')
             latitude = data.get('latitude')
 
+        # 解析PMC速度范围
+        pmc_range = data.get('pmc_speed_reduction_range')
+        if pmc_range and len(pmc_range) == 2:
+            pmc_speed_reduction_range = tuple(pmc_range)
+        else:
+            pmc_speed_reduction_range = None
+
         return cls(
             id=data['id'],
             name=data.get('name', ''),
@@ -234,4 +293,8 @@ class Target:
             time_window_start=datetime.fromisoformat(data['time_window_start']) if data.get('time_window_start') else None,
             time_window_end=datetime.fromisoformat(data['time_window_end']) if data.get('time_window_end') else None,
             immediate_downlink=data.get('immediate_downlink', False),
+            required_imaging_mode=data.get('required_imaging_mode'),
+            required_satellite_type=data.get('required_satellite_type'),
+            pmc_priority=data.get('pmc_priority', 0),
+            pmc_speed_reduction_range=pmc_speed_reduction_range,
         )

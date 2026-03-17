@@ -8,12 +8,33 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 from enum import Enum
+import math
 
 
 class ImagingModeType(Enum):
     """成像模式类型"""
     OPTICAL = "optical"
     SAR = "sar"
+
+
+class ImagingMode(Enum):
+    """
+    具体成像模式枚举
+
+    定义卫星支持的各种成像工作模式。
+    """
+    # 光学被动推扫模式
+    PUSH_BROOM = "push_broom"
+    FRAME = "frame"
+
+    # 主动前向推扫模式（Pitch Motion Compensation）
+    FORWARD_PUSHBROOM_PMC = "forward_pushbroom_pmc"
+
+    # SAR模式
+    STRIPMAP = "stripmap"
+    SPOTLIGHT = "spotlight"
+    SCAN = "scan"
+    SLIDING_SPOTLIGHT = "sliding_spotlight"
 
 
 @dataclass
@@ -60,6 +81,25 @@ class ImagingModeConfig:
             raise ValueError(
                 f"max_duration_s ({self.max_duration_s}) must be >= min_duration_s ({self.min_duration_s})"
             )
+
+        # 验证PMC模式参数
+        self._validate_pmc_params()
+
+    def _validate_pmc_params(self):
+        """验证PMC模式参数"""
+        chars = self.characteristics
+        if chars.get('motion_compensation', False):
+            # 验证降速比
+            reduction = chars.get('speed_reduction_ratio')
+            if reduction is not None:
+                if not 0.1 <= reduction <= 0.75:
+                    raise ValueError(
+                        f"PMC speed_reduction_ratio must be in [0.1, 0.75], got {reduction}"
+                    )
+            # 验证俯仰角速度
+            pitch_rate = chars.get('pitch_rate_dps')
+            if pitch_rate is not None and pitch_rate < 0:
+                raise ValueError(f"PMC pitch_rate_dps must be non-negative, got {pitch_rate}")
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -130,6 +170,44 @@ class ImagingModeConfig:
         """
         # W * s / 3600 = Wh
         return (self.power_consumption_w * duration_s) / 3600.0
+
+    def is_pmc_mode(self) -> bool:
+        """检查是否为PMC模式"""
+        return self.characteristics.get('motion_compensation', False)
+
+    def get_pmc_params(self) -> Dict[str, Any]:
+        """
+        获取PMC模式参数
+
+        Returns:
+            PMC参数字典，非PMC模式返回空字典
+        """
+        if not self.is_pmc_mode():
+            return {}
+        return {
+            'speed_reduction_ratio': self.characteristics.get('speed_reduction_ratio', 0.25),
+            'pitch_rate_dps': self.characteristics.get('pitch_rate_dps'),
+            'min_altitude_m': self.characteristics.get('min_altitude_m', 400000),
+            'max_roll_angle_deg': self.characteristics.get('max_roll_angle_deg', 30.0),
+            'integration_time_gain': self.characteristics.get('integration_time_gain', 1.33),
+        }
+
+    def get_effective_integration_time(self, duration_s: float) -> float:
+        """
+        计算有效积分时间（考虑PMC增益）
+
+        Args:
+            duration_s: 物理成像时长（秒）
+
+        Returns:
+            等效积分时间（秒）
+        """
+        if not self.is_pmc_mode():
+            return duration_s
+        reduction_ratio = self.characteristics.get('speed_reduction_ratio', 0.25)
+        # 降速比越高，等效积分时间越长
+        # 公式: t_effective = t_physical / (1 - reduction_ratio)
+        return duration_s / max(0.1, (1 - reduction_ratio))
 
 
 # 预定义的成像模式配置模板
@@ -252,14 +330,93 @@ SAR_SLIDING_SPOTLIGHT_MODE = ImagingModeConfig(
     }
 )
 
+# 光学 - 主动前向推扫模式（PMC 25%降速）
+OPTICAL_PMC_25PERCENT = ImagingModeConfig(
+    resolution_m=0.5,
+    swath_width_m=15000,
+    power_consumption_w=180.0,  # PMC模式功耗略高（姿态机动）
+    data_rate_mbps=200.0,
+    min_duration_s=8.0,  # PMC需要更长最小时间
+    max_duration_s=30.0,  # 可配置的最大时长
+    mode_type="optical",
+    fov_config={
+        'cross_track_fov_deg': 2.5,
+        'along_track_fov_deg': 0.5,
+    },
+    characteristics={
+        'spectral_bands': ['PAN', 'RGB', 'NIR'],
+        'description': '主动前向推扫模式，25%降速比，提高SNR',
+        'motion_compensation': True,
+        'speed_reduction_ratio': 0.25,
+        'pitch_rate_dps': 0.35,  # 典型值，实际根据轨道高度计算
+        'min_altitude_m': 400000,
+        'max_roll_angle_deg': 30.0,
+        'integration_time_gain': 1.33,  # 1/(1-0.25)
+    }
+)
+
+# 光学 - 主动前向推扫模式（PMC 50%降速）
+OPTICAL_PMC_50PERCENT = ImagingModeConfig(
+    resolution_m=0.5,
+    swath_width_m=15000,
+    power_consumption_w=200.0,  # 更高降速比需要更多机动
+    data_rate_mbps=200.0,
+    min_duration_s=10.0,
+    max_duration_s=30.0,
+    mode_type="optical",
+    fov_config={
+        'cross_track_fov_deg': 2.5,
+        'along_track_fov_deg': 0.5,
+    },
+    characteristics={
+        'spectral_bands': ['PAN', 'RGB', 'NIR'],
+        'description': '主动前向推扫模式，50%降速比，显著提高SNR',
+        'motion_compensation': True,
+        'speed_reduction_ratio': 0.50,
+        'pitch_rate_dps': 0.70,
+        'min_altitude_m': 400000,
+        'max_roll_angle_deg': 25.0,  # 更高降速比限制滚转角
+        'integration_time_gain': 2.0,  # 1/(1-0.5)
+    }
+)
+
+# SAR - 主动前向推扫模式（PMC 25%降速）
+SAR_PMC_25PERCENT = ImagingModeConfig(
+    resolution_m=3.0,
+    swath_width_m=30000,
+    power_consumption_w=350.0,
+    data_rate_mbps=400.0,
+    min_duration_s=8.0,
+    max_duration_s=30.0,
+    mode_type="sar",
+    fov_config={
+        'range_half_angle_deg': 3.0,
+        'azimuth_half_angle_deg': 1.0,
+    },
+    characteristics={
+        'polarization': 'HH+HV',
+        'incidence_angle_range': [20, 45],
+        'description': 'SAR主动前向推扫模式，25%降速比',
+        'motion_compensation': True,
+        'speed_reduction_ratio': 0.25,
+        'pitch_rate_dps': 0.35,
+        'min_altitude_m': 500000,
+        'max_roll_angle_deg': 35.0,
+        'integration_time_gain': 1.33,
+    }
+)
+
 # 模式模板映射（用于快速查找）
 MODE_TEMPLATES = {
     'optical_push_broom_high': OPTICAL_PUSH_BROOM_HIGH_RES,
     'optical_push_broom_medium': OPTICAL_PUSH_BROOM_MEDIUM_RES,
+    'optical_pmc_25percent': OPTICAL_PMC_25PERCENT,
+    'optical_pmc_50percent': OPTICAL_PMC_50PERCENT,
     'sar_stripmap': SAR_STRIPMAP_MODE,
     'sar_spotlight': SAR_SPOTLIGHT_MODE,
     'sar_scan': SAR_SCAN_MODE,
     'sar_sliding_spotlight': SAR_SLIDING_SPOTLIGHT_MODE,
+    'sar_pmc_25percent': SAR_PMC_25PERCENT,
 }
 
 
@@ -274,3 +431,69 @@ def get_mode_template(template_name: str) -> Optional[ImagingModeConfig]:
         ImagingModeConfig 或 None
     """
     return MODE_TEMPLATES.get(template_name)
+
+
+def create_pmc_mode_config(
+    base_resolution_m: float,
+    base_swath_width_m: float,
+    speed_reduction_ratio: float,
+    mode_type: str = "optical",
+    max_duration_s: float = 30.0,
+    **kwargs
+) -> ImagingModeConfig:
+    """
+    创建自定义PMC模式配置
+
+    Args:
+        base_resolution_m: 基础分辨率（米）
+        base_swath_width_m: 基础幅宽（米）
+        speed_reduction_ratio: 降速比（0.1-0.75）
+        mode_type: 模式类型（"optical"或"sar"）
+        max_duration_s: 最大成像时长（秒）
+        **kwargs: 其他配置参数
+
+    Returns:
+        ImagingModeConfig
+    """
+    if not 0.1 <= speed_reduction_ratio <= 0.75:
+        raise ValueError(f"speed_reduction_ratio must be in [0.1, 0.75]")
+
+    # 计算等效积分时间增益
+    integration_gain = 1.0 / (1.0 - speed_reduction_ratio)
+
+    # 基础俯仰角速度估算（度/秒），基于典型500km轨道
+    typical_altitude = 500000  # 米
+    v_ground = 7500  # m/s，近似地面速度
+    pitch_rate = math.degrees(v_ground * speed_reduction_ratio / typical_altitude)
+
+    # PMC模式功耗增加（姿态机动成本）
+    base_power = kwargs.get('base_power_w', 150.0 if mode_type == 'optical' else 300.0)
+    power_consumption = base_power * (1.0 + 0.2 * speed_reduction_ratio)
+
+    characteristics = {
+        'description': f'主动前向推扫模式，{int(speed_reduction_ratio*100)}%降速比',
+        'motion_compensation': True,
+        'speed_reduction_ratio': speed_reduction_ratio,
+        'pitch_rate_dps': pitch_rate,
+        'min_altitude_m': kwargs.get('min_altitude_m', 400000),
+        'max_roll_angle_deg': kwargs.get('max_roll_angle_deg', 30.0),
+        'integration_time_gain': integration_gain,
+    }
+
+    # 添加额外的characteristics
+    if 'spectral_bands' in kwargs:
+        characteristics['spectral_bands'] = kwargs['spectral_bands']
+    if 'polarization' in kwargs:
+        characteristics['polarization'] = kwargs['polarization']
+
+    return ImagingModeConfig(
+        resolution_m=base_resolution_m,
+        swath_width_m=base_swath_width_m,
+        power_consumption_w=power_consumption,
+        data_rate_mbps=kwargs.get('data_rate_mbps', 200.0 if mode_type == 'optical' else 400.0),
+        min_duration_s=kwargs.get('min_duration_s', 8.0),
+        max_duration_s=max_duration_s,
+        mode_type=mode_type,
+        fov_config=kwargs.get('fov_config', {}),
+        characteristics=characteristics,
+    )

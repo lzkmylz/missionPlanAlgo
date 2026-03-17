@@ -63,6 +63,12 @@ from .unified_batch_constraint_checker import (
     UnifiedBatchCandidate,
     UnifiedBatchResult
 )
+from .pmc_constraint_checker import (
+    PMCConstraintChecker,
+    PMCCandidate,
+    PMCConstraintResult,
+    check_pmc_mode_for_task
+)
 
 __all__ = [
     'SlewConstraintChecker',  # 基类，保留供继承
@@ -96,6 +102,10 @@ __all__ = [
     'UnifiedBatchConstraintChecker',  # 统一批量约束检查器
     'UnifiedBatchCandidate',
     'UnifiedBatchResult',
+    'PMCConstraintChecker',  # PMC约束检查器（新增）
+    'PMCCandidate',
+    'PMCConstraintResult',
+    'check_pmc_mode_for_task',
     'AttitudeConstraintChecker',
     'AttitudeFeasibilityResult',
     'UnifiedSpatiotemporalChecker',

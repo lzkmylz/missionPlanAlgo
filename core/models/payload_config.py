@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 import copy
 
-from .imaging_mode import ImagingModeConfig
+from .imaging_mode import ImagingModeConfig, create_pmc_mode_config
+from .pmc_config import PitchMotionCompensationConfig
 
 
 @dataclass
@@ -237,6 +238,68 @@ class PayloadConfiguration:
     def copy(self) -> 'PayloadConfiguration':
         """创建深度拷贝"""
         return copy.deepcopy(self)
+
+    def get_pmc_modes(self) -> List[str]:
+        """
+        获取所有PMC模式名称
+
+        Returns:
+            PMC模式名称列表
+        """
+        return [name for name, config in self.modes.items() if config.is_pmc_mode()]
+
+    def has_pmc_mode(self) -> bool:
+        """检查是否有PMC模式"""
+        return any(config.is_pmc_mode() for config in self.modes.values())
+
+    def get_pmc_config(self, mode: Optional[str] = None) -> Optional[PitchMotionCompensationConfig]:
+        """
+        获取指定模式的PMC配置
+
+        Args:
+            mode: 模式名称，None则检查默认模式
+
+        Returns:
+            PitchMotionCompensationConfig 或 None（如果不是PMC模式）
+        """
+        mode_config = self.get_mode_config(mode)
+        if not mode_config.is_pmc_mode():
+            return None
+
+        pmc_params = mode_config.get_pmc_params()
+        return PitchMotionCompensationConfig(
+            speed_reduction_ratio=pmc_params.get('speed_reduction_ratio', 0.25),
+            pitch_rate_dps=pmc_params.get('pitch_rate_dps'),
+            min_altitude_m=pmc_params.get('min_altitude_m', 400000.0),
+            max_roll_angle_deg=pmc_params.get('max_roll_angle_deg', 30.0),
+        )
+
+    def add_pmc_mode(
+        self,
+        mode_name: str,
+        speed_reduction_ratio: float,
+        base_resolution_m: float = 0.5,
+        base_swath_width_m: float = 15000.0,
+        **kwargs
+    ) -> None:
+        """
+        添加PMC模式
+
+        Args:
+            mode_name: 模式名称
+            speed_reduction_ratio: 降速比（0.1-0.75）
+            base_resolution_m: 基础分辨率
+            base_swath_width_m: 基础幅宽
+            **kwargs: 其他参数
+        """
+        pmc_config = create_pmc_mode_config(
+            base_resolution_m=base_resolution_m,
+            base_swath_width_m=base_swath_width_m,
+            speed_reduction_ratio=speed_reduction_ratio,
+            mode_type=self.payload_type,
+            **kwargs
+        )
+        self.add_mode(mode_name, pmc_config)
 
 
 # 预定义的载荷配置模板
