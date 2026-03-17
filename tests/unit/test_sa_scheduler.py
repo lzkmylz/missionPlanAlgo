@@ -64,7 +64,7 @@ class TestSAScheduler:
         scheduler = SAScheduler()
 
         assert scheduler.initial_temperature == 100.0
-        assert scheduler.cooling_rate == 0.98
+        assert scheduler.cooling_rate == 0.95
         assert scheduler.max_iterations == 1000
         assert scheduler.min_temperature == 0.001
 

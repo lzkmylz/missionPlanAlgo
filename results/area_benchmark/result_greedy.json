@@ -1,0 +1,628 @@
+{
+  "algorithm": "Greedy (贪心)",
+  "timestamp": "2026-03-16T20:55:15.257801",
+  "metrics": {
+    "scheduled_tasks": 41,
+    "unscheduled_tasks": 0,
+    "total_tasks": 41,
+    "schedule_rate": 1.0,
+    "makespan_hours": 0.0,
+    "total_computation_time": 24.8630850315094,
+    "satellite_switches": 57,
+    "avg_tasks_per_satellite": 1.18
+  },
+  "area_metrics": {
+    "coverage": {
+      "total_tiles": 41,
+      "covered_tiles": 41,
+      "pending_tiles": 0,
+      "coverage_ratio": 1.0,
+      "min_required_coverage": 0.95,
+      "total_area_km2": 111855.26941824636,
+      "covered_area_km2": 111855.26941824636,
+      "area_coverage_ratio": 1.0,
+      "total_overlap_area_km2": 54586.05118667763,
+      "avg_overlap_ratio": 0.1333883276305738,
+      "max_overlap_ratio": 0.32855693489503063,
+      "overlapping_tile_pairs": 150,
+      "area_per_satellite_km2": {
+        "OPT-17": 2728.177302886109,
+        "OPT-22": 2728.177302880506,
+        "OPT-16": 2728.177302880506,
+        "OPT-23": 5456.35460577782,
+        "OPT-30": 5456.354605761012,
+        "OPT-05": 2728.177302880506,
+        "OPT-20": 2728.177302886109,
+        "OPT-25": 5456.354605766615,
+        "OPT-29": 2728.177302880506,
+        "OPT-03": 2728.177302886109,
+        "OPT-07": 2728.177302874903,
+        "OPT-26": 5456.354605772218,
+        "OPT-12": 2728.177302880506,
+        "OPT-21": 5456.354605772218,
+        "OPT-08": 5456.354605772218,
+        "OPT-15": 2728.177302886109,
+        "OPT-18": 5456.354605766615,
+        "OPT-11": 2728.177302891712,
+        "OPT-09": 5456.354605766615,
+        "OPT-04": 2728.177302880506,
+        "OPT-02": 2728.177302886109,
+        "OPT-01": 2728.177302886109,
+        "OPT-27": 5456.354605766615,
+        "OPT-13": 2728.177302886109,
+        "SAR-19": 2728.177302886109,
+        "SAR-29": 2728.177302880506,
+        "OPT-19": 2728.177302886109,
+        "SAR-15": 2728.177302891712,
+        "SAR-30": 2728.177302880506,
+        "SAR-01": 2728.177302880506,
+        "SAR-11": 2728.177302886109,
+        "SAR-20": 2728.177302880506,
+        "SAR-12": 2728.177302886109,
+        "SAR-16": 2728.177302880506,
+        "SAR-03": 2728.177302880506,
+        "SAR-02": 2728.177302891712,
+        "SAR-17": 2728.177302880506,
+        "SAR-22": 2728.177302880506,
+        "SAR-08": 2728.177302880506,
+        "SAR-25": 2728.177302886109,
+        "SAR-21": 2728.177302886109,
+        "SAR-04": 2728.177302880506,
+        "SAR-09": 2728.177302880506,
+        "SAR-07": 2728.177302886109,
+        "SAR-27": 2728.177302874903,
+        "SAR-18": 2728.177302886109,
+        "SAR-05": 2728.177302880506,
+        "SAR-23": 2728.177302886109,
+        "SAR-13": 2728.177302886109,
+        "SAR-26": 2728.177302886109
+      },
+      "coverage_contribution_ratio": {
+        "OPT-17": 0.024390243902457365,
+        "OPT-22": 0.024390243902407273,
+        "OPT-16": 0.024390243902407273,
+        "OPT-23": 0.048780487804964814,
+        "OPT-30": 0.048780487804814546,
+        "OPT-05": 0.024390243902407273,
+        "OPT-20": 0.024390243902457365,
+        "OPT-25": 0.04878048780486464,
+        "OPT-29": 0.024390243902407273,
+        "OPT-03": 0.024390243902457365,
+        "OPT-07": 0.02439024390235718,
+        "OPT-26": 0.04878048780491473,
+        "OPT-12": 0.024390243902407273,
+        "OPT-21": 0.04878048780491473,
+        "OPT-08": 0.04878048780491473,
+        "OPT-15": 0.024390243902457365,
+        "OPT-18": 0.04878048780486464,
+        "OPT-11": 0.024390243902507453,
+        "OPT-09": 0.04878048780486464,
+        "OPT-04": 0.024390243902407273,
+        "OPT-02": 0.024390243902457365,
+        "OPT-01": 0.024390243902457365,
+        "OPT-27": 0.04878048780486464,
+        "OPT-13": 0.024390243902457365,
+        "SAR-19": 0.024390243902457365,
+        "SAR-29": 0.024390243902407273,
+        "OPT-19": 0.024390243902457365,
+        "SAR-15": 0.024390243902507453,
+        "SAR-30": 0.024390243902407273,
+        "SAR-01": 0.024390243902407273,
+        "SAR-11": 0.024390243902457365,
+        "SAR-20": 0.024390243902407273,
+        "SAR-12": 0.024390243902457365,
+        "SAR-16": 0.024390243902407273,
+        "SAR-03": 0.024390243902407273,
+        "SAR-02": 0.024390243902507453,
+        "SAR-17": 0.024390243902407273,
+        "SAR-22": 0.024390243902407273,
+        "SAR-08": 0.024390243902407273,
+        "SAR-25": 0.024390243902457365,
+        "SAR-21": 0.024390243902457365,
+        "SAR-04": 0.024390243902407273,
+        "SAR-09": 0.024390243902407273,
+        "SAR-07": 0.024390243902457365,
+        "SAR-27": 0.02439024390235718,
+        "SAR-18": 0.024390243902457365,
+        "SAR-05": 0.024390243902407273,
+        "SAR-23": 0.024390243902457365,
+        "SAR-13": 0.024390243902457365,
+        "SAR-26": 0.024390243902457365
+      },
+      "first_task_time": null,
+      "last_task_time": null,
+      "coverage_makespan_hours": 0.0,
+      "tiles_per_satellite": {
+        "OPT-17": 1,
+        "OPT-22": 1,
+        "OPT-16": 1,
+        "OPT-23": 2,
+        "OPT-30": 2,
+        "OPT-05": 1,
+        "OPT-20": 1,
+        "OPT-25": 2,
+        "OPT-29": 1,
+        "OPT-03": 1,
+        "OPT-07": 1,
+        "OPT-26": 2,
+        "OPT-12": 1,
+        "OPT-21": 2,
+        "OPT-08": 2,
+        "OPT-15": 1,
+        "OPT-18": 2,
+        "OPT-11": 1,
+        "OPT-09": 2,
+        "OPT-04": 1,
+        "OPT-02": 1,
+        "OPT-01": 1,
+        "OPT-27": 2,
+        "OPT-13": 1,
+        "SAR-19": 1,
+        "SAR-29": 1,
+        "OPT-19": 1,
+        "SAR-15": 1,
+        "SAR-30": 1,
+        "SAR-01": 1,
+        "SAR-11": 1,
+        "SAR-20": 1,
+        "SAR-12": 1,
+        "SAR-16": 1,
+        "SAR-03": 1,
+        "SAR-02": 1,
+        "SAR-17": 1,
+        "SAR-22": 1,
+        "SAR-08": 1,
+        "SAR-25": 1,
+        "SAR-21": 1,
+        "SAR-04": 1,
+        "SAR-09": 1,
+        "SAR-07": 1,
+        "SAR-27": 1,
+        "SAR-18": 1,
+        "SAR-05": 1,
+        "SAR-23": 1,
+        "SAR-13": 1,
+        "SAR-26": 1
+      }
+    },
+    "efficiency": {
+      "avg_overlap_ratio": 0.0,
+      "max_overlap_ratio": 0.0,
+      "total_overlap_area_km2": 0.0,
+      "satellite_switches": 57,
+      "avg_tasks_per_satellite": 1.18,
+      "avg_time_between_tasks_min": 0.0
+    },
+    "resource": {
+      "avg_storage_used_gb": 0.0,
+      "max_storage_used_gb": 0.0,
+      "storage_efficiency": 0.0,
+      "avg_power_consumption_w": 0.0,
+      "power_efficiency": 0.0,
+      "avg_slew_angle_deg": 28.16650337662016,
+      "max_slew_angle_deg": 67.1378950598211,
+      "total_slew_time_sec": 0.0
+    },
+    "summary": {
+      "total_tiles": 41,
+      "scheduled_tasks": 59,
+      "unscheduled_tasks": 23,
+      "success_rate": 1.0
+    }
+  },
+  "scheduled_tasks": [
+    {
+      "task_id": "AREA-TAIWAN-001-T0001-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0001-OBS1",
+      "satellite_id": "OPT-17",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0002-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0002-OBS1",
+      "satellite_id": "OPT-22",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0003-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0003-OBS1",
+      "satellite_id": "OPT-16",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0004-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0004-OBS1",
+      "satellite_id": "OPT-23",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0005-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0005-OBS1",
+      "satellite_id": "OPT-30",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0006-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0006-OBS1",
+      "satellite_id": "OPT-30",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0007-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0007-OBS1",
+      "satellite_id": "OPT-05",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0008-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0008-OBS1",
+      "satellite_id": "OPT-20",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0009-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0009-OBS1",
+      "satellite_id": "OPT-25",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0010-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0010-OBS1",
+      "satellite_id": "OPT-29",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0011-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0011-OBS1",
+      "satellite_id": "OPT-25",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0012-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0012-OBS1",
+      "satellite_id": "OPT-03",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0013-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0013-OBS1",
+      "satellite_id": "OPT-07",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0014-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0014-OBS1",
+      "satellite_id": "OPT-26",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0015-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0015-OBS1",
+      "satellite_id": "OPT-12",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0016-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0016-OBS1",
+      "satellite_id": "OPT-21",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0017-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0017-OBS1",
+      "satellite_id": "OPT-08",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0018-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0018-OBS1",
+      "satellite_id": "OPT-15",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0019-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0019-OBS1",
+      "satellite_id": "OPT-18",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0020-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0020-OBS1",
+      "satellite_id": "OPT-11",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0021-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0021-OBS1",
+      "satellite_id": "OPT-09",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0022-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0022-OBS1",
+      "satellite_id": "OPT-04",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0023-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0023-OBS1",
+      "satellite_id": "OPT-26",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0024-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0024-OBS1",
+      "satellite_id": "OPT-21",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0025-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0025-OBS1",
+      "satellite_id": "OPT-02",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0026-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0026-OBS1",
+      "satellite_id": "OPT-08",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0027-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0027-OBS1",
+      "satellite_id": "OPT-01",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0028-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0028-OBS1",
+      "satellite_id": "OPT-27",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0029-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0029-OBS1",
+      "satellite_id": "OPT-09",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0030-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0030-OBS1",
+      "satellite_id": "OPT-13",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0031-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0031-OBS1",
+      "satellite_id": "SAR-19",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0032-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0032-OBS1",
+      "satellite_id": "OPT-23",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0033-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0033-OBS1",
+      "satellite_id": "OPT-18",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0034-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0034-OBS1",
+      "satellite_id": "SAR-29",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0035-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0035-OBS1",
+      "satellite_id": "OPT-19",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0036-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0036-OBS1",
+      "satellite_id": "OPT-27",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0037-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0037-OBS1",
+      "satellite_id": "SAR-15",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0038-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0038-OBS1",
+      "satellite_id": "SAR-30",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0039-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0039-OBS1",
+      "satellite_id": "SAR-01",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0040-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0040-OBS1",
+      "satellite_id": "SAR-11",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0041-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0041-OBS1",
+      "satellite_id": "SAR-20",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0001-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0001-OBS1",
+      "satellite_id": "SAR-12",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0002-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0002-OBS1",
+      "satellite_id": "SAR-16",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0003-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0003-OBS1",
+      "satellite_id": "SAR-03",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0004-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0004-OBS1",
+      "satellite_id": "SAR-02",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0005-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0005-OBS1",
+      "satellite_id": "SAR-17",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0006-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0006-OBS1",
+      "satellite_id": "SAR-22",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0007-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0007-OBS1",
+      "satellite_id": "SAR-08",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0008-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0008-OBS1",
+      "satellite_id": "SAR-25",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0009-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0009-OBS1",
+      "satellite_id": "SAR-21",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0010-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0010-OBS1",
+      "satellite_id": "SAR-04",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0011-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0011-OBS1",
+      "satellite_id": "SAR-09",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0012-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0012-OBS1",
+      "satellite_id": "SAR-07",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0013-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0013-OBS1",
+      "satellite_id": "SAR-27",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0014-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0014-OBS1",
+      "satellite_id": "SAR-18",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0015-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0015-OBS1",
+      "satellite_id": "SAR-05",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0016-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0016-OBS1",
+      "satellite_id": "SAR-23",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0017-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0017-OBS1",
+      "satellite_id": "SAR-13",
+      "start_time": null,
+      "end_time": null
+    },
+    {
+      "task_id": "AREA-TAIWAN-001-T0018-OBS1",
+      "target_id": "AREA-TAIWAN-001-T0018-OBS1",
+      "satellite_id": "SAR-26",
+      "start_time": null,
+      "end_time": null
+    }
+  ]
+}

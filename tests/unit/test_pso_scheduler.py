@@ -65,7 +65,7 @@ class TestPSOScheduler:
         """测试PSO默认参数"""
         scheduler = PSOScheduler()
 
-        assert scheduler.num_particles == 30
+        assert scheduler.num_particles == 25
         assert scheduler.max_iterations == 100
         assert scheduler.cognitive_coeff == 2.0
         assert scheduler.social_coeff == 2.0

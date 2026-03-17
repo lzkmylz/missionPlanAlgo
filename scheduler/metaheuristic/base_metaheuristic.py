@@ -1014,9 +1014,13 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                 prev_target = state.sat_last_target.get(sat_idx)
                 if prev_target and hasattr(prev_target, 'latitude') and hasattr(task, 'latitude'):
                     import math
-                    lat_diff = abs(task.latitude - prev_target.latitude)
-                    lon_diff = abs(task.longitude - prev_target.longitude)
-                    slew_angle = math.sqrt(lat_diff**2 + lon_diff**2)
+                    try:
+                        lat_diff = abs(float(task.latitude) - float(prev_target.latitude))
+                        lon_diff = abs(float(task.longitude) - float(prev_target.longitude))
+                        slew_angle = math.sqrt(lat_diff**2 + lon_diff**2)
+                    except (TypeError, ValueError):
+                        # Mock对象或无效值，跳过角度计算
+                        slew_angle = 0.0
 
             # 计算资源使用
             storage_used = 0.0

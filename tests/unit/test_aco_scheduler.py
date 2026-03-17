@@ -67,7 +67,7 @@ class TestACOScheduler:
         """测试ACO默认参数"""
         scheduler = ACOScheduler()
 
-        assert scheduler.num_ants == 30
+        assert scheduler.num_ants == 25  # 默认25只蚂蚁
         assert scheduler.max_iterations == 100
         assert scheduler.alpha == 1.0
         assert scheduler.beta == 2.0

@@ -90,10 +90,10 @@ class SPTScheduler(HeuristicScheduler):
             # 估计处理时间（使用默认成像时长作为代理）
             processing_time = self._estimate_processing_time(task)
 
-            # 优先级作为次键（数字越小优先级越高，所以直接使用priority值）
+            # 优先级作为次键（数字越大优先级越高，所以使用负值）
             priority = getattr(task, 'priority', 50)
 
-            return (processing_time, priority)
+            return (processing_time, -priority)  # 负值使高优先级排在前面
 
         return sorted(tasks, key=spt_key)
 

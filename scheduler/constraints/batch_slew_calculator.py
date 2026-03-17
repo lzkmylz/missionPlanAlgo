@@ -793,7 +793,11 @@ class BatchSlewCalculator:
                 data.target_positions[i] = [0.0, 0.0, 0.0]
 
             # 卫星位置
-            data.sat_positions[i] = list(cand.sat_position)
+            if cand.sat_position is not None:
+                data.sat_positions[i] = list(cand.sat_position)
+            else:
+                # 如果卫星位置为None，使用一个默认值（地球表面上方500km）
+                data.sat_positions[i] = [6871000.0, 0.0, 0.0]  # 默认位置
 
             # 实际成像开始时间 (使用 candidate.imaging_begin, 默认为 window_start)
             data.imaging_begins[i] = cand.imaging_begin

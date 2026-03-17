@@ -119,11 +119,11 @@ class TestGitHubActions:
         content = workflow.read_text()
         assert "scenarios/" in content, "Should trigger on scenarios/ changes"
 
-    def test_workflow_builds_docker_image(self):
-        """Should build Docker image."""
+    def test_workflow_uses_python(self):
+        """Should use Python setup."""
         workflow = Path(".github/workflows/scenario-validation.yml")
         content = workflow.read_text()
-        assert "docker build" in content, "Should build Docker image"
+        assert "setup-python" in content, "Should use Python setup action"
 
     def test_workflow_runs_validate(self):
         """Should run validate command."""

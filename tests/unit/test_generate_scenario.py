@@ -73,7 +73,7 @@ class TestScenarioGenerator:
         from scripts.generate_scenario import ScenarioGenerator
 
         generator = ScenarioGenerator(seed=42)
-        orbits = generator.generate_walker_orbits('optical', phase_offset=0)
+        orbits = generator.generate_walker_orbits('optical', raan_offset=0)
 
         assert len(orbits) == 30  # 30/6/1 Walker constellation
         # Check that orbits have required fields

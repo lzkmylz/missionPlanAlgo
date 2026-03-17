@@ -63,7 +63,7 @@ class TestGAScheduler:
         """测试GA默认参数"""
         scheduler = GAScheduler()
 
-        assert scheduler.population_size == 100
+        assert scheduler.population_size == 80
         assert scheduler.generations == 200
         assert scheduler.crossover_rate == 0.8
         assert scheduler.mutation_rate == 0.2

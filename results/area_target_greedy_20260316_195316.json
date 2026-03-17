@@ -1,0 +1,17 @@
+{
+  "scenario": "台湾本岛区域目标拼幅覆盖场景",
+  "algorithm": "greedy",
+  "timestamp": "20260316_195316",
+  "total_tasks": 82,
+  "scheduled_tasks": 0,
+  "unscheduled_tasks": 82,
+  "makespan_hours": 0.0,
+  "area_coverage_stats": {
+    "total_areas": 1,
+    "fully_covered_areas": 0,
+    "overall_coverage_ratio": 0.0,
+    "total_tiles": 41,
+    "total_covered_tiles": 0,
+    "total_overlap_km2": 0.0
+  }
+}

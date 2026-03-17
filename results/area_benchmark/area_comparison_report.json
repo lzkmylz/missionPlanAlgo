@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-03-16T20:55:31.653552",
+  "scenario_type": "area_target",
+  "algorithms": [
+    "Greedy (贪心)",
+    "GA (遗传算法)"
+  ],
+  "comparison": {
+    "coverage": {
+      "Greedy (贪心)": {
+        "success_rate": 1.0,
+        "covered_tiles": 41,
+        "total_tiles": 41,
+        "makespan_hours": 0.0,
+        "total_area_km2": 111855.26941824636,
+        "covered_area_km2": 111855.26941824636,
+        "area_coverage_ratio": 1.0,
+        "total_overlap_area_km2": 54586.05118667763,
+        "avg_overlap_ratio": 0.1333883276305738,
+        "max_overlap_ratio": 0.32855693489503063,
+        "overlapping_tile_pairs": 150,
+        "num_satellites_used": 50
+      },
+      "GA (遗传算法)": {
+        "success_rate": 1.0,
+        "covered_tiles": 41,
+        "total_tiles": 41,
+        "makespan_hours": 0.0,
+        "total_area_km2": 111855.26941824636,
+        "covered_area_km2": 111855.26941824636,
+        "area_coverage_ratio": 1.0,
+        "total_overlap_area_km2": 54586.05118667763,
+        "avg_overlap_ratio": 0.1333883276305738,
+        "max_overlap_ratio": 0.32855693489503063,
+        "overlapping_tile_pairs": 150,
+        "num_satellites_used": 38
+      }
+    },
+    "efficiency": {
+      "Greedy (贪心)": {
+        "satellite_switches": 57,
+        "avg_tasks_per_satellite": 1.18,
+        "avg_time_between_tasks_min": 0.0
+      },
+      "GA (遗传算法)": {
+        "satellite_switches": 40,
+        "avg_tasks_per_satellite": 1.0789473684210527,
+        "avg_time_between_tasks_min": 0.0
+      }
+    }
+  },
+  "best_algorithm": {
+    "coverage": "Greedy (贪心)",
+    "coverage_ratio": 1.0
+  }
+}
