@@ -95,10 +95,10 @@ class EDDScheduler(HeuristicScheduler):
             else:
                 due_date_timestamp = due_date.timestamp() if isinstance(due_date, datetime) else float('inf')
 
-            # 优先级作为次键（数字越大优先级越高，所以使用负值）
+            # 优先级作为次键（数字越小优先级越高）
             priority = getattr(task, 'priority', 50)
 
-            return (due_date_timestamp, -priority)  # 负值使高优先级排在前面
+            return (due_date_timestamp, priority)  # 小数字优先级高，排前面
 
         return sorted(tasks, key=edd_key)
 

@@ -1,10 +1,10 @@
 """
 PMC (Pitch Motion Compensation) 动力学计算模块
 
-计算主动前向推扫模式下的姿态机动、成像参数和约束检查。
+计算主动前向推扫和反向推扫模式下的姿态机动、成像参数和约束检查。
 
 核心功能:
-1. 俯仰角速度计算
+1. 俯仰角速度计算（支持前向/反向）
 2. 成像期间姿态序列生成
 3. PMC约束可行性验证
 4. SNR增益估算
@@ -91,7 +91,8 @@ class PMCCalculator:
     def calculate_pitch_rate(
         self,
         orbit_altitude_m: float,
-        speed_reduction_ratio: float
+        speed_reduction_ratio: float,
+        direction: str = 'forward'
     ) -> float:
         """
         计算PMC所需俯仰角速度
@@ -99,15 +100,19 @@ class PMCCalculator:
         公式: θ_dot = v_orbital * R / h
         其中:
         - v_orbital: 卫星轨道速度
-        - R: 降速比
+        - R: 速度变化比
         - h: 轨道高度
+
+        前向模式: 正值（相机后摆，降低地速）
+        反向模式: 负值（相机前摆，增加地速）
 
         Args:
             orbit_altitude_m: 轨道高度（米）
-            speed_reduction_ratio: 降速比（0.1-0.75）
+            speed_reduction_ratio: 速度变化比（0.1-0.75）
+            direction: 推扫方向 ('forward' 或 'reverse')
 
         Returns:
-            俯仰角速度（度/秒）
+            俯仰角速度（度/秒），前向为正，反向为负
         """
         r = self.EARTH_RADIUS_M + orbit_altitude_m
         v_orbital = math.sqrt(self.EARTH_GM / r)  # m/s
@@ -115,25 +120,36 @@ class PMCCalculator:
         # 俯仰角速度（弧度/秒）
         pitch_rate_rad_s = v_orbital * speed_reduction_ratio / orbit_altitude_m
 
+        # 根据方向确定符号
+        if direction == 'reverse':
+            pitch_rate_rad_s = -pitch_rate_rad_s
+
         return math.degrees(pitch_rate_rad_s)
 
     def calculate_ground_velocity(
         self,
         orbit_altitude_m: float,
-        speed_reduction_ratio: float
+        speed_reduction_ratio: float,
+        direction: str = 'forward'
     ) -> float:
         """
         计算PMC模式下的等效地面速度
 
+        前向和反向模式都是降速成像:
+        v_eff = v_orbital * (1 - R)
+
         Args:
             orbit_altitude_m: 轨道高度（米）
             speed_reduction_ratio: 降速比
+            direction: 推扫方向 ('forward' 或 'reverse')，不影响地速计算
 
         Returns:
             等效地面速度（米/秒）
         """
         r = self.EARTH_RADIUS_M + orbit_altitude_m
         v_orbital = math.sqrt(self.EARTH_GM / r)
+
+        # 前向和反向都是降速成像
         return v_orbital * (1.0 - speed_reduction_ratio)
 
     def calculate_imaging_sequence(
@@ -214,7 +230,7 @@ class PMCCalculator:
             # 等效地面速度
             if is_pmc_phase:
                 ground_v = self.calculate_ground_velocity(
-                    orbit_altitude, pmc_config.speed_reduction_ratio
+                    orbit_altitude, pmc_config.speed_reduction_ratio, pmc_config.direction
                 )
             else:
                 r = self.EARTH_RADIUS_M + orbit_altitude
@@ -345,7 +361,7 @@ class PMCCalculator:
 
         return len(violations) == 0, violations
 
-    def calculate_snr_gain_db(
+    def calculate_snr_change_db(
         self,
         speed_reduction_ratio: float
     ) -> float:
@@ -353,13 +369,14 @@ class PMCCalculator:
         计算SNR增益
 
         SNR与积分时间的平方根成正比
+        前向和反向模式都是降速成像，都有SNR增益:
         增益 = 10 * log10(1 / (1 - R))
 
         Args:
             speed_reduction_ratio: 降速比
 
         Returns:
-            SNR增益（dB）
+            SNR增益（dB），始终为正值
         """
         integration_gain = 1.0 / (1.0 - speed_reduction_ratio)
         return 10.0 * math.log10(integration_gain)
@@ -445,7 +462,7 @@ class PMCCalculator:
 
         # 2. 检查俯仰角速度
         pitch_rate = pmc_config.get_pitch_rate(orbit_altitude)
-        if pitch_rate > 2.0:  # 2度/秒为典型上限
+        if abs(pitch_rate) > 2.0:  # 2度/秒为典型上限（取绝对值支持反向模式）
             result['checks']['pitch_rate'] = {
                 'passed': False,
                 'message': f'Pitch rate {pitch_rate:.2f}°/s too high'
@@ -489,8 +506,10 @@ class PMCCalculator:
                 result['errors'].extend(roll_violations)
 
             # 计算SNR增益
-            snr_gain = self.calculate_snr_gain_db(pmc_config.speed_reduction_ratio)
-            result['snr_gain_db'] = snr_gain
+            snr_change = self.calculate_snr_change_db(
+                pmc_config.speed_reduction_ratio
+            )
+            result['snr_change_db'] = snr_change
 
             # 计算等效积分时间
             effective_time = self.calculate_effective_integration_time(
@@ -515,24 +534,26 @@ class PMCCalculator:
 def calculate_pmc_parameters(
     orbit_altitude_m: float,
     speed_reduction_ratio: float,
-    base_power_w: float = 150.0
+    base_power_w: float = 150.0,
+    direction: str = 'forward'
 ) -> Dict[str, float]:
     """
     便捷函数：计算PMC参数
 
     Args:
         orbit_altitude_m: 轨道高度（米）
-        speed_reduction_ratio: 降速比
+        speed_reduction_ratio: 速度变化比
         base_power_w: 基础功耗（瓦特）
+        direction: 推扫方向 ('forward' 或 'reverse')
 
     Returns:
         PMC参数字典
     """
     calculator = PMCCalculator()
 
-    pitch_rate = calculator.calculate_pitch_rate(orbit_altitude_m, speed_reduction_ratio)
-    ground_v = calculator.calculate_ground_velocity(orbit_altitude_m, speed_reduction_ratio)
-    snr_gain = calculator.calculate_snr_gain_db(speed_reduction_ratio)
+    pitch_rate = calculator.calculate_pitch_rate(orbit_altitude_m, speed_reduction_ratio, direction)
+    ground_v = calculator.calculate_ground_velocity(orbit_altitude_m, speed_reduction_ratio, direction)
+    snr_change = calculator.calculate_snr_change_db(speed_reduction_ratio)
 
     # 计算典型成像时长下的参数
     typical_duration_s = 10.0
@@ -541,17 +562,22 @@ def calculate_pmc_parameters(
     )
 
     pmc_config = PitchMotionCompensationConfig(
-        speed_reduction_ratio=speed_reduction_ratio
+        speed_reduction_ratio=speed_reduction_ratio,
+        direction=direction
     )
     energy_wh = calculator.estimate_power_consumption(
         base_power_w, typical_duration_s, pmc_config
     )
 
+    # 积分时间增益（前向和反向都是降速成像）
+    integration_gain = 1.0 / (1.0 - speed_reduction_ratio)
+
     return {
         'pitch_rate_dps': pitch_rate,
         'ground_velocity_m_s': ground_v,
-        'snr_gain_db': snr_gain,
+        'snr_change_db': snr_change,
         'effective_integration_time_s': effective_time,
         'energy_wh': energy_wh,
-        'integration_gain': 1.0 / (1.0 - speed_reduction_ratio),
+        'integration_gain': integration_gain,
+        'direction': direction,
     }

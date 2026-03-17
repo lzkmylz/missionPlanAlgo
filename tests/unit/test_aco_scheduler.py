@@ -68,7 +68,7 @@ class TestACOScheduler:
         scheduler = ACOScheduler()
 
         assert scheduler.num_ants == 25  # 默认25只蚂蚁
-        assert scheduler.max_iterations == 100
+        assert scheduler.max_iterations == 50  # 默认50代（平衡模式）
         assert scheduler.alpha == 1.0
         assert scheduler.beta == 2.0
         assert scheduler.evaporation_rate == 0.1

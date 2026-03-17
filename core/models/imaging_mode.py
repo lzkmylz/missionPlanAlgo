@@ -30,6 +30,9 @@ class ImagingMode(Enum):
     # 主动前向推扫模式（Pitch Motion Compensation）
     FORWARD_PUSHBROOM_PMC = "forward_pushbroom_pmc"
 
+    # 主动反向推扫模式（Reverse Pitch Motion Compensation）
+    REVERSE_PUSHBROOM_PMC = "reverse_pushbroom_pmc"
+
     # SAR模式
     STRIPMAP = "stripmap"
     SPOTLIGHT = "spotlight"
@@ -89,7 +92,7 @@ class ImagingModeConfig:
         """验证PMC模式参数"""
         chars = self.characteristics
         if chars.get('motion_compensation', False):
-            # 验证降速比
+            # 验证速度变化比
             reduction = chars.get('speed_reduction_ratio')
             if reduction is not None:
                 if not 0.1 <= reduction <= 0.75:
@@ -98,8 +101,14 @@ class ImagingModeConfig:
                     )
             # 验证俯仰角速度
             pitch_rate = chars.get('pitch_rate_dps')
-            if pitch_rate is not None and pitch_rate < 0:
-                raise ValueError(f"PMC pitch_rate_dps must be non-negative, got {pitch_rate}")
+            direction = chars.get('direction', 'forward')
+            if pitch_rate is not None:
+                # 前向模式：俯仰角速度为正（相机后摆）
+                # 反向模式：俯仰角速度为负（相机前摆）
+                if direction == 'forward' and pitch_rate < 0:
+                    raise ValueError(f"Forward PMC pitch_rate_dps must be non-negative, got {pitch_rate}")
+                if direction == 'reverse' and pitch_rate > 0:
+                    raise ValueError(f"Reverse PMC pitch_rate_dps must be non-positive, got {pitch_rate}")
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -187,6 +196,7 @@ class ImagingModeConfig:
         return {
             'speed_reduction_ratio': self.characteristics.get('speed_reduction_ratio', 0.25),
             'pitch_rate_dps': self.characteristics.get('pitch_rate_dps'),
+            'direction': self.characteristics.get('direction', 'forward'),
             'min_altitude_m': self.characteristics.get('min_altitude_m', 400000),
             'max_roll_angle_deg': self.characteristics.get('max_roll_angle_deg', 30.0),
             'integration_time_gain': self.characteristics.get('integration_time_gain', 1.33),
@@ -196,6 +206,9 @@ class ImagingModeConfig:
         """
         计算有效积分时间（考虑PMC增益）
 
+        前向和反向PMC都是降速成像，积分时间延长:
+        t_effective = t_physical / (1 - R)
+
         Args:
             duration_s: 物理成像时长（秒）
 
@@ -204,8 +217,10 @@ class ImagingModeConfig:
         """
         if not self.is_pmc_mode():
             return duration_s
+
         reduction_ratio = self.characteristics.get('speed_reduction_ratio', 0.25)
-        # 降速比越高，等效积分时间越长
+
+        # 前向和反向都是降速成像，积分时间延长
         # 公式: t_effective = t_physical / (1 - reduction_ratio)
         return duration_s / max(0.1, (1 - reduction_ratio))
 
@@ -380,6 +395,61 @@ OPTICAL_PMC_50PERCENT = ImagingModeConfig(
     }
 )
 
+# 光学 - 主动反向推扫模式（Reverse PMC 25%降速）
+# 说明：反向推扫也是降速成像，只是推扫方向相反
+# 初始时刻：相机处于大后俯仰角（如+25°），指向后方远处目标
+# 成像过程：向前俯仰机动（角度减小），相机光轴相对地面向后推扫
+OPTICAL_REVERSE_PMC_25PERCENT = ImagingModeConfig(
+    resolution_m=0.6,  # 反向推扫分辨率略低于正向（推扫方向不同导致）
+    swath_width_m=15000,
+    power_consumption_w=170.0,
+    data_rate_mbps=200.0,
+    min_duration_s=5.0,
+    max_duration_s=20.0,
+    mode_type="optical",
+    fov_config={
+        'cross_track_fov_deg': 2.5,
+        'along_track_fov_deg': 0.5,
+    },
+    characteristics={
+        'spectral_bands': ['PAN', 'RGB', 'NIR'],
+        'description': '主动反向推扫模式，25%降速，从后向前推扫成像',
+        'motion_compensation': True,
+        'direction': 'reverse',  # 反向推扫
+        'speed_reduction_ratio': 0.25,  # 降速比
+        'pitch_rate_dps': -0.35,  # 负值表示向前俯仰（角度减小）
+        'min_altitude_m': 400000,
+        'max_roll_angle_deg': 30.0,
+        'integration_time_gain': 1.33,  # 1/(1-0.25)，积分时间延长
+    }
+)
+
+# 光学 - 主动反向推扫模式（Reverse PMC 50%降速）
+OPTICAL_REVERSE_PMC_50PERCENT = ImagingModeConfig(
+    resolution_m=0.8,  # 更高降速比，分辨率提高但幅宽可能受影响
+    swath_width_m=12000,
+    power_consumption_w=190.0,
+    data_rate_mbps=200.0,
+    min_duration_s=4.0,
+    max_duration_s=15.0,
+    mode_type="optical",
+    fov_config={
+        'cross_track_fov_deg': 2.5,
+        'along_track_fov_deg': 0.5,
+    },
+    characteristics={
+        'spectral_bands': ['PAN', 'RGB', 'NIR'],
+        'description': '主动反向推扫模式，50%降速，从后向前推扫成像',
+        'motion_compensation': True,
+        'direction': 'reverse',
+        'speed_reduction_ratio': 0.50,
+        'pitch_rate_dps': -0.70,  # 负值表示向前俯仰
+        'min_altitude_m': 400000,
+        'max_roll_angle_deg': 25.0,
+        'integration_time_gain': 2.0,  # 1/(1-0.5)，积分时间延长
+    }
+)
+
 # SAR - 主动前向推扫模式（PMC 25%降速）
 SAR_PMC_25PERCENT = ImagingModeConfig(
     resolution_m=3.0,
@@ -412,6 +482,8 @@ MODE_TEMPLATES = {
     'optical_push_broom_medium': OPTICAL_PUSH_BROOM_MEDIUM_RES,
     'optical_pmc_25percent': OPTICAL_PMC_25PERCENT,
     'optical_pmc_50percent': OPTICAL_PMC_50PERCENT,
+    'optical_reverse_pmc_25percent': OPTICAL_REVERSE_PMC_25PERCENT,
+    'optical_reverse_pmc_50percent': OPTICAL_REVERSE_PMC_50PERCENT,
     'sar_stripmap': SAR_STRIPMAP_MODE,
     'sar_spotlight': SAR_SPOTLIGHT_MODE,
     'sar_scan': SAR_SCAN_MODE,

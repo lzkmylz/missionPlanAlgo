@@ -26,7 +26,7 @@ class PMCConstraintResult:
     roll_violations: List[str] = None
     altitude_feasible: bool = True
     pitch_rate_feasible: bool = True
-    snr_gain_db: float = 0.0
+    snr_change_db: float = 0.0  # SNR变化（正值为增益，负值为损失）
     effective_integration_time_s: float = 0.0
     estimated_energy_wh: float = 0.0
     reason: Optional[str] = None
@@ -97,7 +97,7 @@ class PMCConstraintChecker:
 
         # 2. 检查俯仰角速度
         pitch_rate = candidate.pmc_config.get_pitch_rate(orbit_altitude)
-        if pitch_rate > 2.0:  # 2度/秒为上限
+        if abs(pitch_rate) > 2.0:  # 2度/秒为上限（取绝对值支持反向模式）
             self._stats['infeasible_count'] += 1
             return PMCConstraintResult(
                 feasible=False,
@@ -141,7 +141,7 @@ class PMCConstraintChecker:
             )
 
         # 5. 计算性能指标
-        snr_gain = self.calculator.calculate_snr_gain_db(
+        snr_change = self.calculator.calculate_snr_change_db(
             candidate.pmc_config.speed_reduction_ratio
         )
         effective_time = self.calculator.calculate_effective_integration_time(
@@ -164,7 +164,7 @@ class PMCConstraintChecker:
             roll_violations=[],
             altitude_feasible=True,
             pitch_rate_feasible=True,
-            snr_gain_db=snr_gain,
+            snr_change_db=snr_change,
             effective_integration_time_s=effective_time,
             estimated_energy_wh=energy_wh
         )
@@ -225,6 +225,7 @@ def check_pmc_mode_for_task(
     pmc_config = PitchMotionCompensationConfig(
         speed_reduction_ratio=pmc_params.get('speed_reduction_ratio', 0.25),
         pitch_rate_dps=pmc_params.get('pitch_rate_dps'),
+        direction=pmc_params.get('direction', 'forward'),
         min_altitude_m=pmc_params.get('min_altitude_m', 400000.0),
         max_roll_angle_deg=pmc_params.get('max_roll_angle_deg', 30.0),
     )
@@ -243,7 +244,7 @@ def check_pmc_mode_for_task(
 
     details = {
         "feasible": result.feasible,
-        "snr_gain_db": result.snr_gain_db,
+        "snr_change_db": result.snr_change_db,
         "effective_integration_time_s": result.effective_integration_time_s,
         "estimated_energy_wh": result.estimated_energy_wh,
         "altitude_feasible": result.altitude_feasible,

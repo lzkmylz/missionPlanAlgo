@@ -64,7 +64,7 @@ class TestGAScheduler:
         scheduler = GAScheduler()
 
         assert scheduler.population_size == 80
-        assert scheduler.generations == 200
+        assert scheduler.generations == 50  # 默认50代（超过50代边际收益极低）
         assert scheduler.crossover_rate == 0.8
         assert scheduler.mutation_rate == 0.2
 

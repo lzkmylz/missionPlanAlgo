@@ -134,13 +134,14 @@ class TestEDDScheduler:
 
     def test_ties_broken_by_priority(self):
         """测试截止时间相同时按优先级打破平局"""
+        # 数字越小优先级越高：priority=1是高优先级，priority=9是低优先级
         target_high = Target(
             id="TARGET-HIGH",
             name="高优先级",
             target_type=TargetType.POINT,
             longitude=116.4,
             latitude=39.9,
-            priority=9,
+            priority=1,  # 高优先级（数字小）
             time_window_end=datetime(2024, 1, 1, 12, 0)
         )
         target_low = Target(
@@ -149,7 +150,7 @@ class TestEDDScheduler:
             target_type=TargetType.POINT,
             longitude=121.5,
             latitude=31.2,
-            priority=3,
+            priority=9,  # 低优先级（数字大）
             time_window_end=datetime(2024, 1, 1, 12, 0)
         )
 
@@ -371,13 +372,14 @@ class TestSPTScheduler:
     def test_spt_ties_broken_by_priority(self):
         """测试SPT处理时间相同时按优先级排序"""
         # 创建两个点目标，处理时间相同但优先级不同
+        # 数字越小优先级越高：priority=1是高优先级，priority=9是低优先级
         target_high = Target(
             id="HIGH-PRIORITY",
             name="高优先级",
             target_type=TargetType.POINT,
             longitude=116.4,
             latitude=39.9,
-            priority=9
+            priority=1  # 高优先级（数字小）
         )
         target_low = Target(
             id="LOW-PRIORITY",
@@ -385,7 +387,7 @@ class TestSPTScheduler:
             target_type=TargetType.POINT,
             longitude=121.5,
             latitude=31.2,
-            priority=3
+            priority=9  # 低优先级（数字大）
         )
 
         mission = Mission(

@@ -98,16 +98,8 @@ class SatelliteType(Enum):
     SAR_2 = "sar_2"
 
 
-class ImagingMode(Enum):
-    """成像模式枚举"""
-    # SAR模式
-    SPOTLIGHT = "spotlight"
-    SLIDING_SPOTLIGHT = "sliding_spotlight"
-    STRIPMAP = "stripmap"
-    SCAN = "scan"
-    # 光学模式
-    PUSH_BROOM = "push_broom"
-    FRAME = "frame"
+# 从imaging_mode模块导入ImagingMode，确保全局使用统一的枚举定义
+from .imaging_mode import ImagingMode
 
 
 class OrbitType(Enum):

@@ -24,19 +24,25 @@ class PitchMotionCompensationConfig:
     """
     PMC模式配置
 
+    支持主动前向推扫和主动反向推扫，两者都是降速成像以获得更高质量。
+
     Attributes:
         speed_reduction_ratio: 降速比（0.1-0.75），表示地速降低百分比
         pitch_rate_dps: 俯仰角速度（度/秒），None表示自动计算
+            - 前向模式: 正值（从0°开始向后摆，角度增加）
+            - 反向模式: 负值（从大俯仰角开始向前摆，角度减小）
+        direction: 推扫方向（'forward' 或 'reverse'）
         min_altitude_m: 最小适用轨道高度（米）
         max_roll_angle_deg: PMC模式下最大允许滚转角（度）
         max_pitch_angle_deg: PMC模式下最大允许俯仰角（度）
-        integration_time_gain: 积分时间增益因子
+        integration_time_gain: 积分时间增益因子，始终 >1（延长积分时间）
         enter_exit_time_s: 进入/退出PMC状态的机动时间（秒）
         power_overhead_factor: 功耗增加系数（相对于普通模式）
         max_continuous_duration_s: 最大连续PMC成像时长（秒）
     """
     speed_reduction_ratio: float = 0.25
     pitch_rate_dps: Optional[float] = None  # None时自动计算
+    direction: str = "forward"  # 'forward' 或 'reverse'
     min_altitude_m: float = 400000.0
     max_roll_angle_deg: float = 30.0
     max_pitch_angle_deg: float = 20.0
@@ -51,14 +57,22 @@ class PitchMotionCompensationConfig:
             raise ValueError(
                 f"speed_reduction_ratio must be in [0.1, 0.75], got {self.speed_reduction_ratio}"
             )
-        if self.pitch_rate_dps is not None and self.pitch_rate_dps < 0:
-            raise ValueError(f"pitch_rate_dps must be non-negative")
+        if self.direction not in ('forward', 'reverse'):
+            raise ValueError(f"direction must be 'forward' or 'reverse', got {self.direction}")
         if self.min_altitude_m < 200000:
             raise ValueError(f"min_altitude_m must be >= 200km")
         if self.max_continuous_duration_s <= 0:
             raise ValueError(f"max_continuous_duration_s must be positive")
 
-        # 自动计算积分时间增益
+        # 验证俯仰角速度符号与方向一致
+        if self.pitch_rate_dps is not None:
+            if self.direction == 'forward' and self.pitch_rate_dps < 0:
+                raise ValueError(f"Forward mode requires positive pitch_rate_dps")
+            if self.direction == 'reverse' and self.pitch_rate_dps > 0:
+                raise ValueError(f"Reverse mode requires negative pitch_rate_dps")
+
+        # 自动计算积分时间增益（前向和反向都是降速成像）
+        # 增益 = 1/(1-R)，积分时间延长
         self.integration_time_gain = 1.0 / (1.0 - self.speed_reduction_ratio)
 
     def calculate_pitch_rate(self, orbit_altitude_m: float) -> float:
@@ -71,11 +85,14 @@ class PitchMotionCompensationConfig:
         - R: 降速比
         - h: 轨道高度
 
+        前向模式: 正值（从0°开始向后摆，角度增加）
+        反向模式: 负值（从大俯仰角开始向前摆，角度减小）
+
         Args:
             orbit_altitude_m: 轨道高度（米）
 
         Returns:
-            俯仰角速度（度/秒）
+            俯仰角速度（度/秒），前向为正，反向为负
         """
         if orbit_altitude_m < self.min_altitude_m:
             raise ValueError(
@@ -90,6 +107,10 @@ class PitchMotionCompensationConfig:
 
         # 俯仰角速度（弧度/秒）
         pitch_rate_rad_s = v_orbital * self.speed_reduction_ratio / orbit_altitude_m
+
+        # 根据方向确定符号
+        if self.direction == 'reverse':
+            pitch_rate_rad_s = -pitch_rate_rad_s
 
         return math.degrees(pitch_rate_rad_s)
 
@@ -135,6 +156,10 @@ class PitchMotionCompensationConfig:
         """
         计算PMC模式下的等效地面速度
 
+        前向和反向模式都是降速成像:
+        - 地速 = v_orbital * (1 - R)
+        - R为降速比
+
         Args:
             orbit_altitude_m: 轨道高度（米）
 
@@ -146,6 +171,7 @@ class PitchMotionCompensationConfig:
         mu = 3.986004418e14
         v_orbital = math.sqrt(mu / r)
 
+        # 前向和反向都是降速成像
         return v_orbital * (1.0 - self.speed_reduction_ratio)
 
     def check_altitude_feasibility(self, orbit_altitude_m: float) -> Tuple[bool, str]:
@@ -164,9 +190,9 @@ class PitchMotionCompensationConfig:
         # 计算所需俯仰角速度
         pitch_rate = self.calculate_pitch_rate(orbit_altitude_m)
 
-        # 检查是否在合理范围内（通常<2度/秒）
-        if pitch_rate > 2.0:
-            return False, f"Required pitch rate {pitch_rate:.2f}°/s exceeds 2°/s limit"
+        # 检查是否在合理范围内（通常<2度/秒，取绝对值检查）
+        if abs(pitch_rate) > 2.0:
+            return False, f"Required pitch rate {abs(pitch_rate):.2f}°/s exceeds 2°/s limit"
 
         return True, f"Feasible with pitch rate {pitch_rate:.3f}°/s"
 
@@ -210,6 +236,7 @@ class PitchMotionCompensationConfig:
         return {
             'speed_reduction_ratio': self.speed_reduction_ratio,
             'pitch_rate_dps': self.pitch_rate_dps,
+            'direction': self.direction,
             'min_altitude_m': self.min_altitude_m,
             'max_roll_angle_deg': self.max_roll_angle_deg,
             'max_pitch_angle_deg': self.max_pitch_angle_deg,
@@ -225,6 +252,7 @@ class PitchMotionCompensationConfig:
         return cls(
             speed_reduction_ratio=data.get('speed_reduction_ratio', 0.25),
             pitch_rate_dps=data.get('pitch_rate_dps'),
+            direction=data.get('direction', 'forward'),
             min_altitude_m=data.get('min_altitude_m', 400000.0),
             max_roll_angle_deg=data.get('max_roll_angle_deg', 30.0),
             max_pitch_angle_deg=data.get('max_pitch_angle_deg', 20.0),
@@ -262,11 +290,37 @@ PMC_CONFIG_75PERCENT = PitchMotionCompensationConfig(
     power_overhead_factor=1.3,
 )
 
+# 反向推扫配置模板（也是降速成像，只是推扫方向相反）
+
+PMC_REVERSE_CONFIG_10PERCENT = PitchMotionCompensationConfig(
+    speed_reduction_ratio=0.10,
+    direction='reverse',
+    max_roll_angle_deg=35.0,
+    max_continuous_duration_s=30.0,
+)
+
+PMC_REVERSE_CONFIG_25PERCENT = PitchMotionCompensationConfig(
+    speed_reduction_ratio=0.25,
+    direction='reverse',
+    max_roll_angle_deg=30.0,
+    max_continuous_duration_s=30.0,
+)
+
+PMC_REVERSE_CONFIG_50PERCENT = PitchMotionCompensationConfig(
+    speed_reduction_ratio=0.50,
+    direction='reverse',
+    max_roll_angle_deg=25.0,
+    max_continuous_duration_s=25.0,
+)
+
 PMC_CONFIG_TEMPLATES = {
     '10percent': PMC_CONFIG_10PERCENT,
     '25percent': PMC_CONFIG_25PERCENT,
     '50percent': PMC_CONFIG_50PERCENT,
     '75percent': PMC_CONFIG_75PERCENT,
+    'reverse_10percent': PMC_REVERSE_CONFIG_10PERCENT,
+    'reverse_25percent': PMC_REVERSE_CONFIG_25PERCENT,
+    'reverse_50percent': PMC_REVERSE_CONFIG_50PERCENT,
 }
 
 
@@ -286,6 +340,7 @@ def get_pmc_config_template(template_name: str) -> Optional[PitchMotionCompensat
 def create_pmc_config_for_altitude(
     orbit_altitude_m: float,
     speed_reduction_ratio: float = 0.25,
+    direction: str = 'forward',
     **kwargs
 ) -> PitchMotionCompensationConfig:
     """
@@ -293,7 +348,8 @@ def create_pmc_config_for_altitude(
 
     Args:
         orbit_altitude_m: 轨道高度（米）
-        speed_reduction_ratio: 降速比
+        speed_reduction_ratio: 速度变化比
+        direction: 推扫方向 ('forward' 或 'reverse')
         **kwargs: 其他配置参数
 
     Returns:
@@ -301,6 +357,7 @@ def create_pmc_config_for_altitude(
     """
     config = PitchMotionCompensationConfig(
         speed_reduction_ratio=speed_reduction_ratio,
+        direction=direction,
         **kwargs
     )
 
@@ -309,3 +366,27 @@ def create_pmc_config_for_altitude(
     config.pitch_rate_dps = pitch_rate
 
     return config
+
+
+def create_reverse_pmc_config(
+    speed_ratio: float = 0.25,
+    **kwargs
+) -> PitchMotionCompensationConfig:
+    """
+    创建反向推扫PMC配置
+
+    反向推扫通过向前俯仰机动增加等效地面速度，实现快速大范围扫描。
+    代价是积分时间减少、SNR降低。
+
+    Args:
+        speed_ratio: 增速比（0.1-0.75），表示地速增加百分比
+        **kwargs: 其他配置参数
+
+    Returns:
+        PitchMotionCompensationConfig
+    """
+    return PitchMotionCompensationConfig(
+        speed_reduction_ratio=speed_ratio,
+        direction='reverse',
+        **kwargs
+    )

@@ -14,6 +14,8 @@ from .imaging_mode import (
     OPTICAL_PUSH_BROOM_MEDIUM_RES,
     OPTICAL_PMC_25PERCENT,
     OPTICAL_PMC_50PERCENT,
+    OPTICAL_REVERSE_PMC_25PERCENT,
+    OPTICAL_REVERSE_PMC_50PERCENT,
     SAR_STRIPMAP_MODE,
     SAR_SPOTLIGHT_MODE,
     SAR_SCAN_MODE,
@@ -34,9 +36,13 @@ from .pmc_config import (
     PMC_CONFIG_25PERCENT,
     PMC_CONFIG_50PERCENT,
     PMC_CONFIG_75PERCENT,
+    PMC_REVERSE_CONFIG_10PERCENT,
+    PMC_REVERSE_CONFIG_25PERCENT,
+    PMC_REVERSE_CONFIG_50PERCENT,
     PMC_CONFIG_TEMPLATES,
     get_pmc_config_template,
     create_pmc_config_for_altitude,
+    create_reverse_pmc_config,
 )
 
 __all__ = [
@@ -59,6 +65,8 @@ __all__ = [
     'OPTICAL_PUSH_BROOM_MEDIUM_RES',
     'OPTICAL_PMC_25PERCENT',
     'OPTICAL_PMC_50PERCENT',
+    'OPTICAL_REVERSE_PMC_25PERCENT',
+    'OPTICAL_REVERSE_PMC_50PERCENT',
     'SAR_STRIPMAP_MODE',
     'SAR_SPOTLIGHT_MODE',
     'SAR_SCAN_MODE',
@@ -77,7 +85,11 @@ __all__ = [
     'PMC_CONFIG_25PERCENT',
     'PMC_CONFIG_50PERCENT',
     'PMC_CONFIG_75PERCENT',
+    'PMC_REVERSE_CONFIG_10PERCENT',
+    'PMC_REVERSE_CONFIG_25PERCENT',
+    'PMC_REVERSE_CONFIG_50PERCENT',
     'PMC_CONFIG_TEMPLATES',
     'get_pmc_config_template',
     'create_pmc_config_for_altitude',
+    'create_reverse_pmc_config',
 ]

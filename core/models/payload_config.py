@@ -270,6 +270,7 @@ class PayloadConfiguration:
         return PitchMotionCompensationConfig(
             speed_reduction_ratio=pmc_params.get('speed_reduction_ratio', 0.25),
             pitch_rate_dps=pmc_params.get('pitch_rate_dps'),
+            direction=pmc_params.get('direction', 'forward'),
             min_altitude_m=pmc_params.get('min_altitude_m', 400000.0),
             max_roll_angle_deg=pmc_params.get('max_roll_angle_deg', 30.0),
         )

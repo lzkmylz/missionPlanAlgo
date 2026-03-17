@@ -203,14 +203,31 @@ class Target:
         return (x, y, z)
 
     def requires_pmc(self) -> bool:
-        """检查是否需要PMC模式"""
-        return self.pmc_priority > 0 or self.required_imaging_mode == 'forward_pushbroom_pmc'
+        """检查是否需要PMC模式（前向或反向）"""
+        pmc_modes = ('forward_pushbroom_pmc', 'reverse_pushbroom_pmc')
+        return self.pmc_priority > 0 or self.required_imaging_mode in pmc_modes
+
+    def requires_forward_pmc(self) -> bool:
+        """检查是否需要前向PMC模式"""
+        return self.required_imaging_mode == 'forward_pushbroom_pmc'
+
+    def requires_reverse_pmc(self) -> bool:
+        """检查是否需要反向PMC模式"""
+        return self.required_imaging_mode == 'reverse_pushbroom_pmc'
 
     def get_preferred_speed_reduction(self) -> Optional[float]:
-        """获取首选降速比"""
+        """获取首选速度变化比（前向为降速比，反向为增速比）"""
         if self.pmc_speed_reduction_range:
             # 返回范围中值
             return (self.pmc_speed_reduction_range[0] + self.pmc_speed_reduction_range[1]) / 2
+        return None
+
+    def get_pmc_direction(self) -> Optional[str]:
+        """获取PMC方向（'forward' 或 'reverse'）"""
+        if self.required_imaging_mode == 'forward_pushbroom_pmc':
+            return 'forward'
+        elif self.required_imaging_mode == 'reverse_pushbroom_pmc':
+            return 'reverse'
         return None
 
     def check_satellite_compatibility(self, payload_type: str, mode_name: str) -> bool:

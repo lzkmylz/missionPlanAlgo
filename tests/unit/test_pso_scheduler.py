@@ -66,7 +66,7 @@ class TestPSOScheduler:
         scheduler = PSOScheduler()
 
         assert scheduler.num_particles == 25
-        assert scheduler.max_iterations == 100
+        assert scheduler.max_iterations == 50  # 默认50代
         assert scheduler.cognitive_coeff == 2.0
         assert scheduler.social_coeff == 2.0
         assert scheduler.inertia_weight == 0.9

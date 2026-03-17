@@ -65,8 +65,8 @@ class TestSAScheduler:
 
         assert scheduler.initial_temperature == 100.0
         assert scheduler.cooling_rate == 0.95
-        assert scheduler.max_iterations == 1000
-        assert scheduler.min_temperature == 0.001
+        assert scheduler.max_iterations == 50  # 默认50代（平衡模式优化）
+        assert scheduler.min_temperature == 0.01  # 默认0.01（从0.001调整）
 
     def test_sa_returns_result(self):
         """测试SA返回有效结果"""
