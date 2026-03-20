@@ -381,7 +381,9 @@ class GroundStationScheduler:
         downlink_duration: float
     ) -> Optional[Tuple[datetime, datetime]]:
         """计算数传开始和结束时间"""
-        downlink_start = max(vis_start, imaging_end)
+        # 添加1秒缓冲，确保成像完全结束才开始数传，消除微秒级并发冲突
+        MIN_GAP = timedelta(seconds=1.0)
+        downlink_start = max(vis_start, imaging_end + MIN_GAP)
         downlink_end = downlink_start + timedelta(seconds=downlink_duration)
 
         if downlink_end > vis_end:

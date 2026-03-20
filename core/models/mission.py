@@ -28,6 +28,7 @@ class Mission:
         ground_stations: 地面站列表
         relay_satellites: 中继卫星原始配置列表（字典格式，供RelayNetwork构建使用）
         description: 场景描述
+        scheduling_config: 调度策略配置（可选）
     """
     name: str
     start_time: datetime
@@ -37,6 +38,7 @@ class Mission:
     ground_stations: List[GroundStation] = field(default_factory=list)
     relay_satellites: List[Dict[str, Any]] = field(default_factory=list)
     description: str = ""
+    scheduling_config: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """验证时间范围"""
@@ -82,7 +84,7 @@ class Mission:
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
-        return {
+        result = {
             'name': self.name,
             'description': self.description,
             'start_time': self.start_time.isoformat(),
@@ -91,6 +93,11 @@ class Mission:
             'targets': [target.to_dict() for target in self.targets],
             'ground_stations': [gs.to_dict() for gs in self.ground_stations],
         }
+        if self.relay_satellites:
+            result['relay_satellites'] = self.relay_satellites
+        if self.scheduling_config:
+            result['scheduling_config'] = self.scheduling_config
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Mission':
@@ -123,6 +130,7 @@ class Mission:
             ground_stations=ground_stations,
             relay_satellites=relay_satellites,
             description=data.get('description', ''),
+            scheduling_config=data.get('scheduling_config', {}),
         )
 
     def save(self, filepath: str) -> None:

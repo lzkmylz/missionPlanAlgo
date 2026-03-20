@@ -145,6 +145,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                 'storage': 0.0,
                 'last_task_end': self.mission.start_time,
                 'scheduled_tasks': [],
+                'downlink_tasks': [],  # 用于交织调度
             }
             for sat in self.mission.satellites
         }
@@ -170,6 +171,13 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                 scheduled_tasks.append(scheduled_task)
 
                 self._update_resource_usage(sat_id, task, window, scheduled_task)
+
+                # 交织调度模式：立即尝试安排数传（释放固存，支持更多成像任务）
+                if self._scheduling_strategy == 'interleaved':
+                    dl_task = self._try_immediate_downlink(sat_id, scheduled_task)
+                    if dl_task:
+                        self._interleaved_downlink_tasks.append(dl_task)
+
                 self._last_task_target[sat_id] = task
 
                 task_id = task.task_id if isinstance(task, ObservationTask) else task.id
@@ -974,3 +982,4 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         self._perf_stats[name]['total_time'] += elapsed
         if elapsed > self._perf_stats[name]['max_time']:
             self._perf_stats[name]['max_time'] = elapsed
+

@@ -316,6 +316,14 @@ class SatelliteCapabilities:
     # 详细成像器配置（JSON模板中的详细参数）
     imager: Dict[str, Any] = field(default_factory=dict)
 
+    # 相控阵天线配置（JSON模板中的并发数传参数）
+    phased_array: Dict[str, Any] = field(default_factory=lambda: {
+        'max_steering_angle_deg': 60.0,  # 相控阵最大扫描角
+        'min_elevation_for_concurrent_deg': 30.0,  # 并发数传最小仰角
+        'max_concurrent_roll_deg': 30.0,  # 允许并发的最大滚转角
+        'data_rate_mbps': 300.0,  # 数传速率
+    })
+
     # 详细成像模式参数（JSON模板中的模式详细配置）
     imaging_mode_details: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -1202,6 +1210,15 @@ class Satellite:
             except (ValueError, KeyError) as e:
                 warnings.warn(f"Failed to parse payload_config: {e}", UserWarning)
 
+        # 解析phased_array配置（并发数传参数），无配置时使用默认值
+        _pa = cap_data.get('phased_array', {})
+        phased_array_dict = {
+            'max_steering_angle_deg': _pa.get('max_steering_angle_deg', 60.0),
+            'min_elevation_for_concurrent_deg': _pa.get('min_elevation_for_concurrent_deg', 30.0),
+            'max_concurrent_roll_deg': _pa.get('max_concurrent_roll_deg', 30.0),
+            'data_rate_mbps': _pa.get('data_rate_mbps', 300.0),
+        }
+
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
             max_roll_angle=cap_data.get('max_roll_angle', DEFAULT_MAX_ROLL_ANGLE_DEG),
@@ -1218,6 +1235,7 @@ class Satellite:
             imaging_mode_constraints=imaging_mode_constraints,
             agility=agility_dict,
             payload_config=payload_config,
+            phased_array=phased_array_dict,
         )
 
         # 读取TLE（支持多种格式）

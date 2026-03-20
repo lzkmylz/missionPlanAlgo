@@ -50,6 +50,19 @@ DEFAULT_DOWNLINK_CONFIG = {
 }
 
 # ============================================================================
+# 调度策略配置
+# ============================================================================
+
+# 调度策略: coverage_first = 覆盖优先(两阶段串行), interleaved = 交织调度(即时数传)
+SCHEDULING_STRATEGY_CONFIG = {
+    'scheduling_strategy': 'coverage_first',  # 默认: 覆盖优先模式
+    'downlink_lookahead_seconds': 3600,        # 交织模式向前看窗口(秒)
+    'max_antenna_steering_angle_deg': 60.0,    # 相控阵天线扫描范围(±度)
+    'min_gs_elevation_for_concurrent_deg': 30.0,  # 并发数传要求地面站最小仰角(度)
+    'max_concurrent_roll_deg': 30.0,           # 允许并发数传的最大滚转角(度)
+}
+
+# ============================================================================
 # 算法特定配置模板
 # ============================================================================
 
@@ -57,14 +70,17 @@ ALGORITHM_CONFIG_TEMPLATES = {
     'greedy': {
         'imaging_algorithm': 'greedy',
         'imaging_config': DEFAULT_IMAGING_CONFIG.copy(),
+        **SCHEDULING_STRATEGY_CONFIG,
     },
     'edd': {
         'imaging_algorithm': 'edd',
         'imaging_config': DEFAULT_IMAGING_CONFIG.copy(),
+        **SCHEDULING_STRATEGY_CONFIG,
     },
     'spt': {
         'imaging_algorithm': 'spt',
         'imaging_config': DEFAULT_IMAGING_CONFIG.copy(),
+        **SCHEDULING_STRATEGY_CONFIG,
     },
     'ga': {
         'imaging_algorithm': 'ga',
@@ -148,6 +164,7 @@ def get_algorithm_config(
     enable_downlink: bool = True,
     enable_frequency: bool = True,
     seed: int = 42,
+    scheduling_strategy: str = None,
     **overrides
 ) -> Dict[str, Any]:
     """
@@ -158,6 +175,7 @@ def get_algorithm_config(
         enable_downlink: 是否启用数传规划
         enable_frequency: 是否启用频次需求
         seed: 随机种子
+        scheduling_strategy: 调度策略 ('coverage_first' 或 'interleaved')
         **overrides: 覆盖默认配置的参数
 
     Returns:
@@ -178,6 +196,10 @@ def get_algorithm_config(
     config['enable_downlink'] = enable_downlink
     config['consider_frequency'] = enable_frequency
     config['imaging_config']['random_seed'] = seed
+
+    # 应用调度策略（如果提供）
+    if scheduling_strategy:
+        config['scheduling_strategy'] = scheduling_strategy
 
     # 应用覆盖参数
     config['imaging_config'].update(overrides)

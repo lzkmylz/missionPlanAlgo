@@ -165,6 +165,15 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help=argparse.SUPPRESS  # 隐藏此参数，高精度要求下已禁用
     )
 
+    # 调度策略参数
+    parser.add_argument(
+        '--strategy',
+        type=str,
+        choices=['coverage_first', 'interleaved'],
+        default=None,
+        help='调度策略: coverage_first=覆盖优先(默认), interleaved=交织调度(即时数传)'
+    )
+
     # 对比模式参数
     parser.add_argument(
         '--repetitions',
@@ -216,7 +225,8 @@ def run_single_algorithm(
     enable_downlink: bool = True,
     enable_frequency: bool = True,
     seed: int = 42,
-    ga_params: Optional[Dict[str, Any]] = None
+    ga_params: Optional[Dict[str, Any]] = None,
+    scheduling_strategy: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     运行单个调度算法
@@ -229,6 +239,7 @@ def run_single_algorithm(
         enable_frequency: 是否启用频次需求
         seed: 随机种子
         ga_params: GA特定参数字典
+        scheduling_strategy: 调度策略 ('coverage_first' 或 'interleaved')
 
     Returns:
         包含运行结果的字典
@@ -266,6 +277,7 @@ def run_single_algorithm(
         enable_downlink=enable_downlink,
         enable_frequency=enable_frequency,
         seed=seed,
+        scheduling_strategy=scheduling_strategy,
         **overrides
     )
 
@@ -379,7 +391,8 @@ def run_comparison(
     enable_frequency: bool = True,
     repetitions: int = 1,
     seed: int = 42,
-    ga_params: Optional[Dict[str, Any]] = None
+    ga_params: Optional[Dict[str, Any]] = None,
+    scheduling_strategy: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     运行多算法对比
@@ -393,6 +406,7 @@ def run_comparison(
         repetitions: 每种算法的重复次数
         seed: 随机种子
         ga_params: GA特定参数字典
+        scheduling_strategy: 调度策略 ('coverage_first' 或 'interleaved')
 
     Returns:
         各算法的结果列表
@@ -416,7 +430,8 @@ def run_comparison(
                     enable_downlink=enable_downlink,
                     enable_frequency=enable_frequency,
                     seed=seed,
-                    ga_params=ga_params
+                    ga_params=ga_params,
+                    scheduling_strategy=scheduling_strategy
                 )
                 result['repetition'] = rep
                 all_results.append(result)
@@ -626,7 +641,8 @@ def main(args: Optional[List[str]] = None) -> int:
                 enable_downlink=parsed_args.downlink,
                 enable_frequency=parsed_args.frequency,
                 seed=parsed_args.seed,
-                ga_params=ga_params if parsed_args.algorithm == 'ga' else None
+                ga_params=ga_params if parsed_args.algorithm == 'ga' else None,
+                scheduling_strategy=parsed_args.strategy
             )
             print_single_result(result)
 
@@ -661,7 +677,8 @@ def main(args: Optional[List[str]] = None) -> int:
                 enable_frequency=parsed_args.frequency,
                 repetitions=parsed_args.repetitions,
                 seed=parsed_args.seed,
-                ga_params=ga_params
+                ga_params=ga_params,
+                scheduling_strategy=parsed_args.strategy
             )
             print_comparison_results(results)
 

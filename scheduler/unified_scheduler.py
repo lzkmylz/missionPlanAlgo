@@ -137,6 +137,22 @@ class UnifiedScheduler:
         self.imaging_algorithm = self.config.get('imaging_algorithm', 'greedy')
         self.imaging_config = self.config.get('imaging_config', {})
 
+        # 调度策略配置: coverage_first (覆盖优先) 或 interleaved (交织调度)
+        # 优先级: 传入配置 > Mission配置 > imaging_config > 默认值
+        self.scheduling_strategy = self.config.get(
+            'scheduling_strategy',
+            getattr(mission, 'scheduling_config', {}).get(
+                'scheduling_strategy',
+                self.imaging_config.get('scheduling_strategy', 'coverage_first')
+            )
+        )
+        # 将策略传递给成像调度器配置
+        self.imaging_config['scheduling_strategy'] = self.scheduling_strategy
+        self.imaging_config['downlink_lookahead_seconds'] = self.config.get(
+            'downlink_lookahead_seconds', 3600)
+        self.imaging_config['max_concurrent_roll_deg'] = self.config.get(
+            'max_concurrent_roll_deg', 30.0)
+
         # 数传配置（默认启用，如果提供了地面站资源池或中继网络）
         if 'enable_downlink' in self.config:
             self.enable_downlink = self.config['enable_downlink']
@@ -338,7 +354,7 @@ class UnifiedScheduler:
             visibility_windows=relay_windows
         )
 
-    def _get_relay_windows(self) -> Dict[str, List[Tuple[datetime, datetime]]]:
+    def _get_relay_windows(self) -> Dict[str, List[Tuple[str, datetime, datetime]]]:
         """
         获取卫星-中继卫星可见窗口。
 
@@ -346,12 +362,13 @@ class UnifiedScheduler:
         如果缓存中不存在中继窗口，将抛出错误，要求重新计算可见性窗口。
 
         Returns:
-            Dict[satellite_id, List[(start, end)]]: 每个卫星的中继可见窗口列表
+            Dict[satellite_id, List[(relay_id, start, end)]]: 每个卫星的中继可见窗口列表，
+            包含中继卫星ID，按开始时间排序
 
         Raises:
             RuntimeError: 如果缓存中没有找到中继卫星可见性窗口
         """
-        windows: Dict[str, List[Tuple[datetime, datetime]]] = {}
+        windows: Dict[str, List[Tuple[str, datetime, datetime]]] = {}
 
         if self.relay_network is None:
             return windows
@@ -367,7 +384,7 @@ class UnifiedScheduler:
                     key = (sat.id, f"RELAY:{relay_id}")
                     if hasattr(self.window_cache, '_windows') and key in self.window_cache._windows:
                         for window in self.window_cache._windows[key]:
-                            sat_windows.append((window.start_time, window.end_time))
+                            sat_windows.append((relay_id, window.start_time, window.end_time))
                             # 同步注入 RelayNetwork 可见性（供 can_relay_data 使用）
                             self.relay_network.add_visibility_window(
                                 sat.id, relay_id, window.start_time, window.end_time
@@ -377,7 +394,7 @@ class UnifiedScheduler:
                         missing_relays.add(relay_id)
 
                 if sat_windows:
-                    windows[sat.id] = sorted(sat_windows, key=lambda x: x[0])
+                    windows[sat.id] = sorted(sat_windows, key=lambda x: x[1])
 
         # 检查是否找到任何中继窗口
         if not cache_hit:
@@ -390,10 +407,10 @@ class UnifiedScheduler:
                 f"--output output/frequency_scenario"
             )
 
-        # 记录缺失的中继窗口警告
+        # 记录缺失的中继窗口信息（部分中继无窗口是正常的物理现象）
         if missing_relays:
-            logger.warning(
-                f"部分中继卫星窗口未在缓存中找到: {missing_relays}"
+            logger.info(
+                f"部分中继卫星在场景期间无可见窗口（正常）: {missing_relays}"
             )
 
         logger.info(f"从缓存加载了 {len(windows)} 颗卫星的中继可见性窗口")
@@ -485,6 +502,12 @@ class UnifiedScheduler:
             scheduler.set_slew_checker(self.slew_checker)
             logger.info("  使用精确姿态机动模型")
 
+        # 传递地面站/中继窗口用于交织调度（仅当使用GreedyScheduler时）
+        if hasattr(scheduler, 'set_downlink_windows'):
+            gs_windows = self._get_ground_station_windows()
+            relay_windows = self._get_relay_windows()
+            scheduler.set_downlink_windows(gs_windows, relay_windows)
+
         # 执行调度
         return scheduler.schedule()
 
@@ -537,9 +560,17 @@ class UnifiedScheduler:
         # 获取卫星-地面站可见窗口
         gs_windows = self._get_ground_station_windows()
 
+        # 过滤掉已在交织调度阶段安排数传的任务
+        pending_downlink_tasks = [t for t in scheduled_tasks if t.downlink_start is None]
+        already_scheduled_count = len(scheduled_tasks) - len(pending_downlink_tasks)
+        if already_scheduled_count > 0:
+            from scheduler.logging import get_scheduler_logger
+            logger = get_scheduler_logger(__name__)
+            logger.info(f"  交织调度已安排 {already_scheduled_count} 个任务的数传，Phase2 处理剩余 {len(pending_downlink_tasks)} 个")
+
         # 执行数传调度
         return gs_scheduler.schedule_downlinks_for_tasks(
-            scheduled_tasks=scheduled_tasks,
+            scheduled_tasks=pending_downlink_tasks,
             visibility_windows=gs_windows
         )
 

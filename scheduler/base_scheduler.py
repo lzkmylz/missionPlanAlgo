@@ -261,6 +261,17 @@ class BaseScheduler(ABC):
         self._power_calculator: Optional[PowerGenerationCalculator] = None
         self._enable_power_generation_calc = self.config.get('enable_power_generation_calc', True)
 
+        # 调度策略配置: coverage_first (覆盖优先) 或 interleaved (交织调度)
+        self._scheduling_strategy = self.config.get('scheduling_strategy', 'coverage_first')
+        self._downlink_lookahead_seconds = self.config.get('downlink_lookahead_seconds', 3600)
+        self._max_concurrent_roll_deg = self.config.get('max_concurrent_roll_deg', 30.0)
+
+        # 数传窗口存储（用于交织调度）
+        self._gs_windows: Dict[str, List[Tuple[str, datetime, datetime]]] = {}
+        self._relay_windows: Dict[str, List[Tuple[str, datetime, datetime]]] = {}
+        # 交织模式下即时安排的数传任务列表
+        self._interleaved_downlink_tasks: List = []
+
     def initialize(self, mission, satellite_pool=None, ground_station_pool=None) -> None:
         """初始化调度器"""
         import os
@@ -299,6 +310,130 @@ class BaseScheduler(ABC):
             slew_checker: SlewConstraintChecker 或 PreciseSlewConstraintChecker 实例
         """
         self._slew_checker = slew_checker
+
+    def set_downlink_windows(
+        self,
+        gs_windows: Dict[str, List[Tuple[str, datetime, datetime]]],
+        relay_windows: Dict[str, List[Tuple[str, datetime, datetime]]] = None
+    ) -> None:
+        """设置地面站和中继卫星数传窗口，用于交织调度模式。
+
+        Args:
+            gs_windows: 卫星-地面站可见窗口 Dict[sat_id, List[(gs_id, start, end)]]
+            relay_windows: 卫星-中继窗口 Dict[sat_id, List[(relay_id, start, end)]]
+        """
+        self._gs_windows = gs_windows or {}
+        self._relay_windows = relay_windows or {}
+
+    def _try_immediate_downlink(
+        self,
+        sat_id: str,
+        imaging_task: 'ScheduledTask'
+    ) -> Optional['Any']:
+        """交织调度：在成像任务完成后立即尝试安排近期数传。
+
+        适用于相控阵天线场景：成像和数传可同时进行（在滚转角约束内）。
+        物理约束：|roll_angle| <= max_concurrent_roll_deg (默认30°)
+
+        Args:
+            sat_id: 卫星ID
+            imaging_task: 已调度的成像任务
+
+        Returns:
+            DownlinkTask if successfully scheduled, None otherwise
+        """
+        from scheduler.ground_station.downlink_task import DownlinkTask
+
+        sat = self.mission.get_satellite_by_id(sat_id)
+        if not sat:
+            return None
+
+        # 检查滚转角约束（相控阵并发条件）
+        roll_angle = abs(imaging_task.roll_angle) if imaging_task.roll_angle else 0.0
+        max_concurrent_roll = sat.capabilities.phased_array.get(
+            'max_concurrent_roll_deg', self._max_concurrent_roll_deg
+        )
+        if roll_angle > max_concurrent_roll:
+            return None
+
+        imaging_end = imaging_task.imaging_end
+        lookahead = timedelta(seconds=self._downlink_lookahead_seconds)
+        min_gap = timedelta(seconds=1.0)
+
+        # 收集 lookahead 窗口内的候选地面站/中继窗口
+        candidate_windows = []
+
+        for gs_id, win_start, win_end in self._gs_windows.get(sat_id, []):
+            if win_start >= imaging_end + min_gap and win_start <= imaging_end + lookahead:
+                candidate_windows.append((gs_id, win_start, win_end, 'gs'))
+
+        for relay_id, win_start, win_end in self._relay_windows.get(sat_id, []):
+            if win_start >= imaging_end + min_gap and win_start <= imaging_end + lookahead:
+                candidate_windows.append((relay_id, win_start, win_end, 'relay'))
+
+        if not candidate_windows:
+            return None
+
+        candidate_windows.sort(key=lambda w: w[1])
+
+        usage = self._sat_resource_usage.get(sat_id) if hasattr(self, '_sat_resource_usage') else None
+        if not usage:
+            return None
+
+        # 从卫星相控阵配置读取实际数传速率
+        data_rate_mbps = sat.capabilities.phased_array.get('data_rate_mbps', 300.0)
+
+        for station_id, win_start, win_end, station_type in candidate_windows:
+            data_size = imaging_task.storage_after - imaging_task.storage_before
+            if data_size <= 0:
+                continue
+
+            duration_sec = max((data_size * 8000) / data_rate_mbps, 60.0)
+
+            if (win_end - win_start).total_seconds() < duration_sec:
+                continue
+
+            downlink_start = win_start
+            downlink_end = downlink_start + timedelta(seconds=duration_sec)
+            if downlink_end > win_end:
+                downlink_end = win_end
+                downlink_start = downlink_end - timedelta(seconds=duration_sec)
+
+            # 检查与已有数传任务的时间冲突
+            has_conflict = any(
+                not (downlink_end <= dl['start'] or downlink_start >= dl['end'])
+                for dl in usage.get('downlink_tasks', [])
+            )
+            if has_conflict:
+                continue
+
+            dl_task = DownlinkTask(
+                task_id=f"DL-{imaging_task.task_id}",
+                satellite_id=sat_id,
+                ground_station_id=station_id if station_type == 'gs' else None,
+                relay_satellite_id=station_id if station_type == 'relay' else None,
+                start_time=downlink_start,
+                end_time=downlink_end,
+                data_size_gb=data_size,
+                related_imaging_task_id=imaging_task.task_id
+            )
+
+            # 更新资源使用记录
+            usage['storage'] = max(0.0, usage['storage'] - data_size)
+            usage['downlink_tasks'].append({
+                'start': downlink_start,
+                'end': downlink_end,
+                'task_id': dl_task.task_id
+            })
+
+            # 回写数传信息到成像任务
+            imaging_task.ground_station_id = station_id if station_type == 'gs' else None
+            imaging_task.downlink_start = downlink_start
+            imaging_task.downlink_end = downlink_end
+
+            return dl_task
+
+        return None
 
     def _calculate_power_generation(
         self,

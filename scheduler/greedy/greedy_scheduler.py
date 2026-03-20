@@ -619,7 +619,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 'power': power,
                 'storage': 0.0,
                 'last_task_end': self.mission.start_time,
-                'scheduled_tasks': []  # Track scheduled tasks for conflict detection
+                'scheduled_tasks': [],  # Track scheduled tasks for conflict detection
+                'downlink_tasks': []    # Track downlink tasks for interleaved scheduling
             }
 
         # Initialize slew constraint checker first (required by unified constraint checker)
@@ -761,6 +762,14 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 t = self._perf_start()
                 self._update_resource_usage(sat_id, task, window, scheduled_task)
                 self._perf_end('update_resource_usage', t)
+
+                # 交织调度模式：立即尝试安排数传（释放固存，支持更多成像任务）
+                if self._scheduling_strategy == 'interleaved':
+                    t = self._perf_start()
+                    dl_task = self._try_immediate_downlink(sat_id, scheduled_task)
+                    if dl_task:
+                        self._interleaved_downlink_tasks.append(dl_task)
+                    self._perf_end('interleaved_downlink', t)
 
                 # 如果是区域任务，注册覆盖状态
                 if isinstance(task, AreaObservationTask):

@@ -72,7 +72,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -138,7 +149,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -204,7 +226,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -270,7 +303,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -336,7 +380,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -402,7 +457,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -468,7 +534,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -534,7 +611,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -600,7 +688,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -666,7 +765,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -732,7 +842,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -798,7 +919,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -864,7 +996,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -930,7 +1073,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -996,7 +1150,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1062,7 +1227,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1128,7 +1304,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1194,7 +1381,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1260,7 +1458,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1326,7 +1535,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1392,7 +1612,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1458,7 +1689,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1524,7 +1766,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1590,7 +1843,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1656,7 +1920,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1722,7 +1997,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1788,7 +2074,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1854,7 +2151,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1920,7 +2228,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -1986,7 +2305,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2090,7 +2420,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2194,7 +2535,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2298,7 +2650,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2402,7 +2765,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2506,7 +2880,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2610,7 +2995,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2714,7 +3110,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2818,7 +3225,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -2922,7 +3340,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3026,7 +3455,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3130,7 +3570,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3234,7 +3685,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3338,7 +3800,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3442,7 +3915,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3546,7 +4030,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3650,7 +4145,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3754,7 +4260,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3858,7 +4375,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -3962,7 +4490,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4066,7 +4605,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4170,7 +4720,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4274,7 +4835,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4378,7 +4950,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4482,7 +5065,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4586,7 +5180,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4690,7 +5295,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4794,7 +5410,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -4898,7 +5525,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -5002,7 +5640,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     },
     {
@@ -5106,7 +5755,18 @@
           },
           "common_fov": null
         },
-        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中"
+        "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+        "phased_array": {
+          "_comment": "相控阵天线配置 - 用于并发成像+数传",
+          "max_steering_angle_deg": 60.0,
+          "max_steering_angle_comment": "相控阵天线最大扫描角 ±60度",
+          "min_elevation_for_concurrent_deg": 30.0,
+          "min_elevation_comment": "并发数传要求地面站最小仰角 30度",
+          "max_concurrent_roll_deg": 30.0,
+          "max_concurrent_roll_comment": "允许并发数传的最大滚转角 30度（60-30=30度余量用于地面站跟踪）",
+          "data_rate_mbps": 300.0,
+          "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
+        }
       }
     }
   ],
