@@ -142,6 +142,19 @@
             "incidence_angle_range": [25, 50],
             "incidence_angle_range_comment": "入射角范围 25-50度",
             "description": "聚束模式，高分辨率成像，适合精细目标"
+          },
+          "spotlight_config": {
+            "_comment": "聚束模式物理参数 - 方案A（连续模型）",
+            "beam_model": "continuous",
+            "wavelength_m": 0.031,
+            "antenna_length_m": 6.0,
+            "antenna_width_m": 1.5,
+            "range_resolution_m": 1.0,
+            "prf_hz": 3000,
+            "max_azimuth_steering_deg": 2.0,
+            "max_range_steering_deg": 2.0,
+            "min_look_angle_deg": 20.0,
+            "max_look_angle_deg": 50.0
           }
         },
         "scan": {

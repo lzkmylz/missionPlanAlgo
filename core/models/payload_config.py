@@ -10,6 +10,7 @@ import copy
 
 from .imaging_mode import ImagingModeConfig, create_pmc_mode_config
 from .pmc_config import PitchMotionCompensationConfig
+from .sar_spotlight_config import SARSpotlightConfig
 
 
 @dataclass
@@ -27,6 +28,8 @@ class PayloadConfiguration:
         common_fov: 共享的FOV配置（可选）
         payload_id: 载荷标识符（可选）
         description: 载荷描述（可选）
+        sar_spotlight_configs: SAR聚束/滑动聚束模式物理参数，
+                               key 为模式名（如 "spotlight", "sliding_spotlight"）
     """
     payload_type: str  # "optical" 或 "sar"
     default_mode: str
@@ -34,6 +37,7 @@ class PayloadConfiguration:
     common_fov: Optional[Dict[str, Any]] = None
     payload_id: Optional[str] = None
     description: Optional[str] = None
+    sar_spotlight_configs: Dict[str, SARSpotlightConfig] = field(default_factory=dict)
 
     def __post_init__(self):
         """验证配置有效性"""
@@ -201,6 +205,20 @@ class PayloadConfiguration:
             for name, config in modes_data.items()
         }
 
+        # 解析各聚束/滑动聚束模式的物理参数配置
+        sar_spotlight_configs: Dict[str, SARSpotlightConfig] = {}
+        for mode_name, mode_raw in modes_data.items():
+            if 'spotlight_config' in mode_raw:
+                try:
+                    sar_spotlight_configs[mode_name] = SARSpotlightConfig.from_dict(
+                        mode_raw['spotlight_config']
+                    )
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Failed to parse spotlight_config for mode '{mode_name}': {e}"
+                    )
+
         return cls(
             payload_type=data['payload_type'],
             default_mode=data.get('default_mode', list(modes.keys())[0] if modes else ''),
@@ -208,6 +226,7 @@ class PayloadConfiguration:
             common_fov=data.get('common_fov'),
             payload_id=data.get('payload_id'),
             description=data.get('description'),
+            sar_spotlight_configs=sar_spotlight_configs,
         )
 
     def validate(self) -> bool:
@@ -238,6 +257,26 @@ class PayloadConfiguration:
     def copy(self) -> 'PayloadConfiguration':
         """创建深度拷贝"""
         return copy.deepcopy(self)
+
+    def get_spotlight_calculator(self, mode: str = 'spotlight'):
+        """
+        获取指定聚束模式的物理计算器实例。
+
+        Args:
+            mode: 模式名称（如 "spotlight"、"sliding_spotlight"）
+
+        Returns:
+            SARSpotlightCalculator，若该模式无 spotlight_config 则返回 None
+        """
+        cfg = self.sar_spotlight_configs.get(mode)
+        if cfg is None:
+            return None
+        from core.dynamics.sar_spotlight_calculator import SARSpotlightCalculator
+        return SARSpotlightCalculator(cfg)
+
+    def has_spotlight_config(self, mode: str = 'spotlight') -> bool:
+        """检查指定模式是否配置了聚束物理参数"""
+        return mode in self.sar_spotlight_configs
 
     def get_pmc_modes(self) -> List[str]:
         """

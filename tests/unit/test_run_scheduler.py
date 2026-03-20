@@ -143,6 +143,7 @@ class TestRunSingleAlgorithm:
         mock_mission.satellites = []
         mock_mission.targets = []
         mock_mission.ground_stations = []
+        mock_mission.relay_satellites = []
         mock_cache = Mock()
 
         # Mock UnifiedScheduler result
@@ -190,6 +191,7 @@ class TestRunSingleAlgorithm:
         mock_mission = Mock()
         mock_mission.satellites = []
         mock_mission.targets = []
+        mock_mission.relay_satellites = []
 
         # Mock ground station with proper attributes
         mock_gs = Mock()

@@ -119,6 +119,38 @@
             "antenna_slew_rate": 0.5,
             "antenna_slew_rate_comment": "天线转动速率 0.5度/秒 - 跟踪目标所需的转动速度",
             "description": "聚束模式，最高分辨率成像，适合精细目标识别"
+          },
+          "spotlight_config": {
+            "_comment": "聚束模式物理参数 - 方案B（离散波位，含完整参数）",
+            "beam_model": "discrete_beam",
+            "wavelength_m": 0.031,
+            "antenna_length_m": 10.0,
+            "antenna_width_m": 2.0,
+            "range_resolution_m": 1.0,
+            "beam_positions": [
+              {
+                "beam_id": "SL-01",
+                "center_incidence_angle_deg": 27.5,
+                "incidence_angle_min_deg": 20.0,
+                "incidence_angle_max_deg": 35.0,
+                "prf_hz": 3500,
+                "range_resolution_m": 1.0,
+                "azimuth_resolution_m": 1.0,
+                "scene_size_az_km": 10.0,
+                "scene_size_rg_km": 10.0
+              },
+              {
+                "beam_id": "SL-02",
+                "center_incidence_angle_deg": 45.0,
+                "incidence_angle_min_deg": 35.0,
+                "incidence_angle_max_deg": 55.0,
+                "prf_hz": 2800,
+                "range_resolution_m": 1.0,
+                "azimuth_resolution_m": 1.0,
+                "scene_size_az_km": 10.0,
+                "scene_size_rg_km": 12.0
+              }
+            ]
           }
         },
         "sliding_spotlight": {
@@ -150,6 +182,22 @@
             "antenna_slew_rate": 0.2,
             "antenna_slew_rate_comment": "天线转动速率 0.2度/秒",
             "description": "滑动聚束模式，高分辨率与大幅宽的折中"
+          },
+          "spotlight_config": {
+            "_comment": "滑动聚束模式物理参数 - 方案C（推导波位，仅中心入射角，其余参数由公式推导）",
+            "beam_model": "derived_beam",
+            "wavelength_m": 0.031,
+            "antenna_length_m": 10.0,
+            "antenna_width_m": 2.0,
+            "range_resolution_m": 2.0,
+            "max_azimuth_steering_deg": 3.0,
+            "max_range_steering_deg": 3.0,
+            "prf_safety_factor": 1.25,
+            "beam_positions": [
+              {"beam_id": "SSL-01", "center_incidence_angle_deg": 25.0},
+              {"beam_id": "SSL-02", "center_incidence_angle_deg": 35.0},
+              {"beam_id": "SSL-03", "center_incidence_angle_deg": 45.0}
+            ]
           }
         },
         "stripmap": {
