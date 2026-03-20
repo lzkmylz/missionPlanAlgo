@@ -30,7 +30,6 @@ from core.models.sar_spotlight_config import (
     BeamPosition,
     SARSpotlightConfig,
     SARSpotlightResult,
-    SPEED_OF_LIGHT,
     EARTH_RADIUS_M,
 )
 
@@ -185,7 +184,11 @@ class SARSpotlightCalculator:
     def _compute_continuous(
         self, altitude_m: float, look_angle_deg: float, v_sat: float
     ) -> SARSpotlightResult:
-        """方案A：连续模型"""
+        """方案A：连续模型
+
+        注意：星载SAR中PRF对驻留时间的约束来自方位向多普勒带宽，
+        而非简单的距离无模糊公式 c/(2*PRF)。后者不适用于星载SAR。
+        """
         cfg = self.config
 
         # 校验侧视角范围
@@ -201,22 +204,12 @@ class SARSpotlightCalculator:
 
         R = _slant_range(altitude_m, look_angle_deg)
 
-        # PRF距离上限（无模糊斜距约束）
-        R_max_unamb = SPEED_OF_LIGHT / (2.0 * cfg.prf_hz)
-        if R > R_max_unamb:
-            return SARSpotlightResult(
-                feasible=False,
-                limiting_constraint="infeasible",
-                reason=(
-                    f"斜距 {R/1000:.1f}km 超过PRF无模糊斜距上限 "
-                    f"{R_max_unamb/1000:.1f}km (PRF={cfg.prf_hz}Hz)"
-                ),
-            )
-
         # 方位向电子扫描驻留时间上限
         T_az = 2.0 * math.radians(cfg.max_azimuth_steering_deg) * R / v_sat
 
         # PRF多普勒模糊驻留时间上限
+        # T_prf_max = PRF * λ * R / (2 * V²)
+        # 推导：最大方位向场景 = PRF * λ * R / (2*V) 对应的驻留时间
         T_prf = cfg.prf_hz * cfg.wavelength_m * R / (2.0 * v_sat ** 2)
 
         T_dwell = min(T_az, T_prf)
@@ -258,19 +251,8 @@ class SARSpotlightCalculator:
 
         R = _slant_range(altitude_m, look_angle_deg)
 
-        # PRF距离无模糊约束
-        R_max_unamb = SPEED_OF_LIGHT / (2.0 * beam.prf_hz)
-        if R > R_max_unamb:
-            return SARSpotlightResult(
-                feasible=False,
-                limiting_constraint="infeasible",
-                reason=(
-                    f"斜距 {R/1000:.1f}km 超过波位 '{beam.beam_id}' "
-                    f"的PRF无模糊斜距上限 {R_max_unamb/1000:.1f}km"
-                ),
-            )
-
-        # 场景方位向尺寸上限 × PRF限制
+        # 场景方位向尺寸上限 × PRF多普勒模糊限制
+        # 注：星载SAR中 PRF 限制的是方位向多普勒带宽，而非简单的距离无模糊
         T_beam_scene = beam.scene_size_az_km * 1000.0 / v_sat
         T_prf = beam.prf_hz * cfg.wavelength_m * R / (2.0 * v_sat ** 2)
         T_dwell = min(T_beam_scene, T_prf)
@@ -322,19 +304,9 @@ class SARSpotlightCalculator:
 
         # --- 推导 PRF ---
         # 多普勒带宽下限（方位向过采样需求）
+        # PRF_min_doppler = safety_factor * V * L_az / (λ * R)
+        # 注：c/(2*R) 对星载SAR不适用（它约束的是脉冲波门大小，而非目标斜距）
         PRF_min_doppler = cfg.prf_safety_factor * v_sat * L_az_m / (cfg.wavelength_m * R)
-        # 距离无模糊上限
-        PRF_max_range = SPEED_OF_LIGHT / (2.0 * R)
-
-        if PRF_min_doppler > PRF_max_range:
-            return SARSpotlightResult(
-                feasible=False,
-                limiting_constraint="infeasible",
-                reason=(
-                    f"推导PRF矛盾：多普勒下限 {PRF_min_doppler:.1f}Hz > "
-                    f"距离无模糊上限 {PRF_max_range:.1f}Hz（斜距过大或场景过大）"
-                ),
-            )
 
         PRF_used = PRF_min_doppler  # 取多普勒下限作为工作PRF
 
@@ -354,18 +326,13 @@ class SARSpotlightCalculator:
         scene_az = v_sat * T_dwell / 1000.0
         area = scene_az * scene_rg
 
-        # 将推导结果写回 BeamPosition（方便上层查询，非持久化）
-        beam.prf_hz = PRF_used
-        beam.range_resolution_m = rho_rg
-        beam.azimuth_resolution_m = rho_az
-        beam.scene_size_az_km = scene_az
-        beam.scene_size_rg_km = scene_rg
-        # 推导波位入射角覆盖范围（±半波束宽度）
-        half_beam_width_deg = math.degrees(cfg.wavelength_m / cfg.antenna_width_m / 2.0)
-        if beam.incidence_angle_min_deg is None:
-            beam.incidence_angle_min_deg = beam.center_incidence_angle_deg - half_beam_width_deg
-        if beam.incidence_angle_max_deg is None:
-            beam.incidence_angle_max_deg = beam.center_incidence_angle_deg + half_beam_width_deg
+        # 首次调用时为该波位推导入射角覆盖范围（仅在尚未设置时写入，幂等操作）
+        if beam.incidence_angle_min_deg is None or beam.incidence_angle_max_deg is None:
+            half_beam_width_deg = math.degrees(cfg.wavelength_m / cfg.antenna_width_m / 2.0)
+            if beam.incidence_angle_min_deg is None:
+                beam.incidence_angle_min_deg = beam.center_incidence_angle_deg - half_beam_width_deg
+            if beam.incidence_angle_max_deg is None:
+                beam.incidence_angle_max_deg = beam.center_incidence_angle_deg + half_beam_width_deg
 
         return SARSpotlightResult(
             feasible=True,

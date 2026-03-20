@@ -2142,6 +2142,42 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         else:
             target_id = task.id
 
+        # SAR聚束模式物理计算（驻留时间、场景覆盖、波位匹配）
+        sar_beam_id = None
+        sar_prf_hz_used = None
+        sar_scene_az_km = None
+        sar_scene_rg_km = None
+        sar_scene_area_km2 = None
+        sar_limiting_constraint = None
+
+        _imaging_mode_str = imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode)
+        if (sat is not None
+                and _imaging_mode_str in ('spotlight', 'sliding_spotlight')
+                and hasattr(sat, 'payload_config')
+                and sat.payload_config is not None
+                and sat.payload_config.has_spotlight_config(_imaging_mode_str)):
+            try:
+                _calc = sat.payload_config.get_spotlight_calculator(_imaging_mode_str)
+                if _calc is not None:
+                    _orbit = getattr(sat, 'orbit', None)
+                    _alt_m = (getattr(_orbit, 'altitude', None) or 631_000) if _orbit else 631_000
+                    _look_deg = abs(roll_angle) if roll_angle is not None else 30.0
+                    _dwell_s = (actual_end - actual_start).total_seconds()
+                    _result = _calc.compute_scene_coverage(
+                        altitude_m=_alt_m,
+                        look_angle_deg=_look_deg,
+                        dwell_time_s=_dwell_s,
+                    )
+                    if _result.feasible:
+                        sar_beam_id = _result.matched_beam_id
+                        sar_prf_hz_used = _result.prf_hz_used
+                        sar_scene_az_km = _result.scene_size_az_km
+                        sar_scene_rg_km = _result.scene_size_rg_km
+                        sar_scene_area_km2 = _result.scene_area_km2
+                        sar_limiting_constraint = _result.limiting_constraint
+            except Exception as _e:
+                logger.debug(f"SAR spotlight physics calc failed for {task.id}: {_e}")
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
@@ -2149,7 +2185,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             target_id=target_id,
             imaging_start=actual_start,
             imaging_end=actual_end,
-            imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
+            imaging_mode=_imaging_mode_str,
             slew_angle=slew_angle,
             slew_time=slew_time_seconds,
             storage_before=storage_before,
@@ -2172,6 +2208,13 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             footprint_center=footprint_center,
             swath_width_km=swath_width_km,
             fov_config=fov_config,
+            # SAR聚束物理计算结果
+            sar_beam_id=sar_beam_id,
+            sar_prf_hz_used=sar_prf_hz_used,
+            sar_scene_az_km=sar_scene_az_km,
+            sar_scene_rg_km=sar_scene_rg_km,
+            sar_scene_area_km2=sar_scene_area_km2,
+            sar_limiting_constraint=sar_limiting_constraint,
         )
 
         # 如果是聚类任务，记录聚类调度信息

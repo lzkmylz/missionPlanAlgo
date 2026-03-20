@@ -109,10 +109,6 @@ class SARImager(Imager):
         self.azimuth_half_angle = azimuth_half_angle
         self.azimuth_exclusion_angle = azimuth_exclusion_angle
 
-        # SAR聚束模式物理参数（可选，由外部注入）
-        # key: 模式名（如 "spotlight", "sliding_spotlight"）
-        self._spotlight_configs: Dict[str, Any] = {}
-
         # 模式特定的参数
         self._mode_params = {
             SARImagingMode.SPOTLIGHT: {
@@ -406,32 +402,3 @@ class SARImager(Imager):
             self.azimuth_exclusion_angle is not None
         )
 
-    def set_spotlight_config(self, mode: str, config) -> None:
-        """
-        注入指定模式的聚束物理参数配置（通常由 PayloadConfiguration 在构建时调用）。
-
-        Args:
-            mode: 模式名称（如 "spotlight", "sliding_spotlight"）
-            config: SARSpotlightConfig 实例
-        """
-        self._spotlight_configs[mode] = config
-
-    def get_spotlight_calculator(self, mode: str = 'spotlight'):
-        """
-        获取指定聚束模式的物理计算器。
-
-        Args:
-            mode: 模式名称（如 "spotlight", "sliding_spotlight"）
-
-        Returns:
-            SARSpotlightCalculator，若未配置则返回 None
-        """
-        cfg = self._spotlight_configs.get(mode)
-        if cfg is None:
-            return None
-        from core.dynamics.sar_spotlight_calculator import SARSpotlightCalculator
-        return SARSpotlightCalculator(cfg)
-
-    def has_spotlight_config(self, mode: str = 'spotlight') -> bool:
-        """检查指定模式是否有聚束物理参数配置"""
-        return mode in self._spotlight_configs

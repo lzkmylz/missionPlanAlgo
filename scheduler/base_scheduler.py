@@ -133,6 +133,13 @@ class ScheduledTask:
     footprint_center: Optional[Tuple[float, float]] = None  # 中心点坐标 (lon, lat)
     swath_width_km: float = 0.0                # 实际幅宽（公里）
     fov_config: Dict[str, Any] = field(default_factory=dict)  # 使用的FOV配置
+    # SAR聚束模式物理计算结果（非聚束模式或未配置时为 None）
+    sar_beam_id: Optional[str] = None           # 匹配的波位ID（方案B/C）
+    sar_prf_hz_used: Optional[float] = None     # 实际使用的PRF（Hz）
+    sar_scene_az_km: Optional[float] = None     # 物理计算的方位向场景长度（km）
+    sar_scene_rg_km: Optional[float] = None     # 物理计算的距离向场景长度（km）
+    sar_scene_area_km2: Optional[float] = None  # 物理计算的覆盖面积（km²）
+    sar_limiting_constraint: Optional[str] = None  # 驻留时间限制因素
 
     def to_dict(self) -> Dict[str, Any]:
         # Calculate imaging_duration if not explicitly set
@@ -182,6 +189,13 @@ class ScheduledTask:
             'footprint_center': self.footprint_center,
             'swath_width_km': self.swath_width_km,
             'fov_config': self.fov_config,
+            # SAR聚束模式物理计算结果
+            'sar_beam_id': self.sar_beam_id,
+            'sar_prf_hz_used': self.sar_prf_hz_used,
+            'sar_scene_az_km': self.sar_scene_az_km,
+            'sar_scene_rg_km': self.sar_scene_rg_km,
+            'sar_scene_area_km2': self.sar_scene_area_km2,
+            'sar_limiting_constraint': self.sar_limiting_constraint,
         }
 
 
