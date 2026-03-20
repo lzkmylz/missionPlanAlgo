@@ -84,6 +84,38 @@ public BatchResult computeAllVisibilityWindows(
 - 总体增加约1-2秒计算时间
 ```
 
+### 中继卫星可见窗口计算
+
+**核心原则**: 中继卫星窗口**必须**使用Java后端预计算，**禁止**使用几何模型简化。
+
+**计算方法** (`RelayVisibilityCalculator.java`):
+```java
+// 两阶段扫描策略（与地面站窗口保持一致）
+public Map<String, List<VisibilityWindow>> computeRelayVisibilityWindows(
+    List<SatelliteConfig> satellites,
+    List<RelaySatelliteConfig> relays,
+    AbsoluteDate startTime,
+    AbsoluteDate endTime,
+    double coarseStep,  // 粗扫描步长（秒，默认5.0）
+    double fineStep     // 精扫描步长（秒，默认1.0）
+)
+```
+
+**两阶段扫描流程**:
+1. **粗扫描** (`coarseStep=5.0s`): 使用较大步长快速定位可见窗口大致位置
+2. **精扫描** (`fineStep=1.0s`): 在粗扫描发现的窗口边界附近使用小步长精确定位
+
+**关键设计决策**:
+- **强制预计算**: `_get_relay_windows()` 若未在缓存中找到中继窗口，抛出 `RuntimeError` 要求重新计算
+- **禁止回退**: 禁用几何模型计算中继窗口，确保与地面站/目标窗口使用相同精度
+- **数据来源**: 必须使用HPOP轨道数据预计算的 `orbits.json.gz`
+
+**窗口标识**: 目标ID使用 `RELAY:` 前缀，如 `RELAY:RELAY-01`
+
+**典型性能**:
+- 60卫星 × 3中继，5s粗扫+1s精扫：约0.3秒，生成~2,640个窗口
+- 窗口平均时长：~38.9分钟
+
 ---
 
 ## 关键配置参数
@@ -1498,4 +1530,57 @@ print(f"SNR增益: {result.snr_gain_db:.2f}dB")
 - `required_satellite_type`: 要求的卫星类型（'optical' 或 'sar'）
 - `pmc_priority`: PMC模式优先级（0-3）
 - `pmc_speed_reduction_range`: 期望降速比范围
+
+---
+
+## 经验教训：中继卫星窗口计算
+
+### 核心原则
+
+1. **高精度一致性**: 中继窗口必须与目标窗口、地面站窗口使用相同精度（HPOP+两阶段扫描）
+2. **禁止简化模型**: 禁用几何近似计算，必须通过Java后端预计算
+3. **强制缓存检查**: `_get_relay_windows()` 若缓存缺失立即报错，不静默回退
+
+### 技术决策
+
+| 方案 | 结果 | 结论 |
+|------|------|------|
+| 60秒步长 | 0个窗口 | 太粗，漏检 |
+| 1秒步长 | 计算无法完成 | 太慢，不可行 |
+| **5秒粗扫+1秒精扫** | **2,640个窗口/0.3秒** | **✅ 推荐** |
+
+### 数传规划策略
+
+```
+成像任务 → 优先地面站 → 失败 → 中继卫星兜底
+              ↓ success
+         记录数传任务明细
+              ↓ fail
+         检查中继窗口 → 可用 → 安排中继数传
+              ↓ no window
+         记录数传失败（不应发生）
+```
+
+### 关键代码模式
+
+```python
+# unified_scheduler.py - 强制预计算检查
+def _get_relay_windows(self):
+    if not cache_hit:
+        raise RuntimeError(
+            "缓存中未找到中继卫星可见性窗口。"
+            "请使用Java后端重新计算可见性窗口。"
+        )
+```
+
+```java
+// LargeScaleFrequencyTest.java - 两阶段扫描调用
+double relayCoarseStep = 5.0;   // 粗扫描步长
+double relayFineStep = 1.0;     // 精扫描步长
+Map<String, List<VisibilityWindow>> relayWindows =
+    relayCalculator.computeRelayVisibilityWindows(
+        satellites, relaySatellites, startTime, endTime,
+        relayCoarseStep, relayFineStep
+    );
+```
 
