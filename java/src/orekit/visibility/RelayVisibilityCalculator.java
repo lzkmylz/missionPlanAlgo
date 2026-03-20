@@ -10,8 +10,6 @@ import org.orekit.frames.Frame;
 import org.orekit.frames.FramesFactory;
 import org.orekit.frames.Transform;
 import org.orekit.models.earth.ReferenceEllipsoid;
-import org.orekit.orbits.KeplerianOrbit;
-import org.orekit.orbits.PositionAngle;
 import org.orekit.propagation.SpacecraftState;
 import org.orekit.propagation.analytical.KeplerianPropagator;
 import org.orekit.time.AbsoluteDate;
@@ -97,7 +95,7 @@ public class RelayVisibilityCalculator {
     }
 
     /**
-     * 批量计算所有卫星-中继卫星对的可见窗口
+     * 批量计算所有卫星-中继卫星对的可见窗口（单步长模式）
      *
      * @param satellites 卫星配置列表（LEO）
      * @param relays 中继卫星配置列表（GEO）
@@ -112,6 +110,29 @@ public class RelayVisibilityCalculator {
             AbsoluteDate startTime,
             AbsoluteDate endTime,
             double timeStep) {
+        return computeRelayVisibilityWindows(satellites, relays, startTime, endTime, timeStep, timeStep);
+    }
+
+    /**
+     * 批量计算所有卫星-中继卫星对的可见窗口（两阶段自适应模式）
+     *
+     * 采用与地面站窗口相同的策略：粗扫描定位窗口，精扫描精确边界
+     *
+     * @param satellites 卫星配置列表（LEO）
+     * @param relays 中继卫星配置列表（GEO）
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @param coarseStep 粗扫描步长（秒，默认5.0）
+     * @param fineStep 精扫描步长（秒，默认1.0）
+     * @return Map<satId_relayId, List<VisibilityWindow>>
+     */
+    public Map<String, List<VisibilityWindow>> computeRelayVisibilityWindows(
+            List<SatelliteConfig> satellites,
+            List<RelaySatelliteConfig> relays,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double coarseStep,
+            double fineStep) {
 
         long startNs = System.nanoTime();
 
@@ -124,7 +145,9 @@ public class RelayVisibilityCalculator {
         }
 
         // 确保轨道缓存已预计算
-        if (!orbitCache.hasSatellite(satellites.get(0).getId())) {
+        String testSatId = satellites.get(0).getId();
+
+        if (!orbitCache.hasSatellite(testSatId)) {
             throw new IllegalStateException(
                 "Orbit cache not precomputed. Call orbitCache.precomputeAllOrbits() first."
             );
@@ -145,14 +168,14 @@ public class RelayVisibilityCalculator {
             }
         }
 
-        // 并行计算所有对的可见窗口
+        // 并行计算所有对的可见窗口（使用两阶段扫描）
         Map<String, List<VisibilityWindow>> relayWindows = new ConcurrentHashMap<>();
 
         int totalWindows = pairs.parallelStream()
             .mapToInt(pair -> {
-                List<VisibilityWindow> windows = computeRelayWindowsUsingCache(
+                List<VisibilityWindow> windows = computeRelayWindowsTwoPhase(
                     pair.sat, pair.relay, relayPositions.get(pair.relay.getId()),
-                    startTime, endTime, timeStep
+                    startTime, endTime, coarseStep, fineStep
                 );
 
                 if (!windows.isEmpty()) {
@@ -220,7 +243,8 @@ public class RelayVisibilityCalculator {
 
             // 计算LEO卫星与GEO中继卫星之间的几何关系
             VisibilityResult visibility = calculateVisibility(
-                state, relayPosition, minElevationRad, maxRange
+                state, relayPosition, minElevationRad, maxRange,
+                sat.getId(), relay.getId()
             );
 
             if (visibility.isVisible != wasVisible) {
@@ -228,10 +252,11 @@ public class RelayVisibilityCalculator {
                     // 窗口结束，创建窗口对象
                     AbsoluteDate windowEnd = startTime.shiftedBy(t);
                     VisibilityWindow window = new VisibilityWindow(
+                        sat.getId(),
+                        "RELAY:" + relay.getId(),
                         windowStart,
                         windowEnd,
-                        Math.toDegrees(maxElevationInWindow),
-                        maxElevationTime != null ? maxElevationTime : windowStart
+                        Math.toDegrees(maxElevationInWindow)
                     );
                     windows.add(window);
                 } else {
@@ -254,12 +279,145 @@ public class RelayVisibilityCalculator {
         if (wasVisible && windowStart != null) {
             AbsoluteDate windowEnd = endTime;
             VisibilityWindow window = new VisibilityWindow(
+                sat.getId(),
+                "RELAY:" + relay.getId(),
                 windowStart,
                 windowEnd,
-                Math.toDegrees(maxElevationInWindow),
-                maxElevationTime != null ? maxElevationTime : windowStart
+                Math.toDegrees(maxElevationInWindow)
             );
             windows.add(window);
+        }
+
+        return windows;
+    }
+
+    /**
+     * 使用两阶段扫描（粗扫+精扫）计算单个卫星-中继对的可见窗口
+     *
+     * 策略：
+     * 1. 粗扫描：使用较大步长快速定位可见窗口的大概位置
+     * 2. 精扫描：在粗扫描发现的窗口边界附近使用小步长精确确定窗口边界
+     *
+     * @param sat 卫星配置
+     * @param relay 中继卫星配置
+     * @param relayPosition 中继卫星位置（固定）
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @param coarseStep 粗扫描步长（秒，默认5.0）
+     * @param fineStep 精扫描步长（秒，默认1.0）
+     * @return 可见窗口列表
+     */
+    private List<VisibilityWindow> computeRelayWindowsTwoPhase(
+            SatelliteConfig sat,
+            RelaySatelliteConfig relay,
+            Vector3D relayPosition,
+            AbsoluteDate startTime,
+            AbsoluteDate endTime,
+            double coarseStep,
+            double fineStep) {
+
+        List<VisibilityWindow> windows = new ArrayList<>();
+
+        // 中继卫星参数
+        double minElevationRad = Math.toRadians(relay.getMinElevation());
+        double maxRange = relay.getMaxRange();
+
+        // 计算总时长
+        double duration = endTime.durationFrom(startTime);
+
+        // ===== 阶段1: 粗扫描 =====
+        List<double[]> coarseWindows = new ArrayList<>(); // 存储[start, end]区间
+        boolean wasVisible = false;
+        double windowStartT = 0;
+
+        for (double t = 0; t <= duration; t += coarseStep) {
+            OrbitStateCache.OrbitState state = orbitCache.getStateAtTime(sat.getId(), t);
+            if (state == null) continue;
+
+            VisibilityResult visibility = calculateVisibility(
+                state, relayPosition, minElevationRad, maxRange, sat.getId(), relay.getId()
+            );
+
+            if (visibility.isVisible != wasVisible) {
+                if (wasVisible) {
+                    // 窗口结束（粗粒度）
+                    coarseWindows.add(new double[]{windowStartT, t});
+                } else {
+                    // 窗口开始
+                    windowStartT = t;
+                }
+                wasVisible = visibility.isVisible;
+            }
+        }
+
+        // 处理最后一个粗扫描窗口
+        if (wasVisible) {
+            coarseWindows.add(new double[]{windowStartT, duration});
+        }
+
+        // ===== 阶段2: 精扫描窗口边界 =====
+        for (double[] coarseWindow : coarseWindows) {
+            double coarseStart = coarseWindow[0];
+            double coarseEnd = coarseWindow[1];
+
+            // 扩展边界以确保捕获完整窗口
+            double fineStartT = Math.max(0, coarseStart - coarseStep);
+            double fineEndT = Math.min(duration, coarseEnd + coarseStep);
+
+            // 精扫描
+            AbsoluteDate windowStart = null;
+            AbsoluteDate maxElevationTime = null;
+            double maxElevationInWindow = 0.0;
+            boolean inWindow = false;
+
+            for (double t = fineStartT; t <= fineEndT; t += fineStep) {
+                OrbitStateCache.OrbitState state = orbitCache.getStateAtTime(sat.getId(), t);
+                if (state == null) continue;
+
+                VisibilityResult visibility = calculateVisibility(
+                    state, relayPosition, minElevationRad, maxRange, sat.getId(), relay.getId()
+                );
+
+                if (visibility.isVisible != inWindow) {
+                    if (inWindow && windowStart != null) {
+                        // 窗口结束
+                        AbsoluteDate windowEnd = startTime.shiftedBy(t);
+                        VisibilityWindow window = new VisibilityWindow(
+                            sat.getId(),
+                            "RELAY:" + relay.getId(),
+                            windowStart,
+                            windowEnd,
+                            Math.toDegrees(maxElevationInWindow)
+                        );
+                        windows.add(window);
+                    } else {
+                        // 窗口开始
+                        windowStart = startTime.shiftedBy(t);
+                        maxElevationInWindow = 0.0;
+                        maxElevationTime = null;
+                    }
+                    inWindow = visibility.isVisible;
+                }
+
+                // 跟踪窗口内的最大仰角
+                if (visibility.isVisible && visibility.elevation > maxElevationInWindow) {
+                    maxElevationInWindow = visibility.elevation;
+                    maxElevationTime = startTime.shiftedBy(t);
+                }
+            }
+
+            // 处理最后一个精扫描窗口
+            if (inWindow && windowStart != null) {
+                AbsoluteDate windowEnd = startTime.shiftedBy(Math.min(fineEndT, duration));
+                VisibilityWindow window = new VisibilityWindow(
+                    sat.getId(),
+                    "RELAY:" + relay.getId(),
+                    windowStart,
+                    windowEnd,
+                    Math.toDegrees(maxElevationInWindow)
+                );
+                windows.add(window);
+            }
         }
 
         return windows;
@@ -278,10 +436,12 @@ public class RelayVisibilityCalculator {
             OrbitStateCache.OrbitState leoState,
             Vector3D relayPosition,
             double minElevationRad,
-            double maxRange) {
+            double maxRange,
+            String satId,
+            String relayId) {
 
         // LEO卫星位置
-        Vector3D leoPosition = new Vector3D(leoState.px, leoState.py, leoState.pz);
+        Vector3D leoPosition = new Vector3D(leoState.x, leoState.y, leoState.z);
 
         // 计算距离
         double distance = leoPosition.distance(relayPosition);
@@ -294,8 +454,8 @@ public class RelayVisibilityCalculator {
             return new VisibilityResult(false, 0.0);
         }
 
-        // 计算仰角（从GEO看向LEO的仰角）
-        double elevation = calculateElevation(relayPosition, leoPosition);
+        // 计算仰角（从LEO看向GEO的仰角）
+        double elevation = calculateElevation(leoPosition, relayPosition);
 
         boolean isVisible = elevation >= minElevationRad;
         return new VisibilityResult(isVisible, elevation);
@@ -315,7 +475,7 @@ public class RelayVisibilityCalculator {
         }
 
         // 计算最近点
-        Vector3D closestPoint = from.add(direction.multiply(t));
+        Vector3D closestPoint = from.add(direction.scalarMultiply(t));
         double closestDistance = closestPoint.getNorm();
 
         // 如果最近点距离小于地球半径，则被遮挡
@@ -323,21 +483,21 @@ public class RelayVisibilityCalculator {
     }
 
     /**
-     * 计算从GEO位置看向LEO位置的仰角
+     * 计算从观察者位置看向目标位置的仰角
      *
-     * @param geoPosition GEO位置
-     * @param leoPosition LEO位置
-     * @return 仰角（弧度）
+     * @param observerPosition 观察者位置（如LEO卫星）
+     * @param targetPosition 目标位置（如GEO中继卫星）
+     * @return 仰角（弧度），正值表示目标在观察者地平线以上
      */
-    private double calculateElevation(Vector3D geoPosition, Vector3D leoPosition) {
-        // 从GEO指向LEO的向量
-        Vector3D toLeo = leoPosition.subtract(geoPosition);
+    private double calculateElevation(Vector3D observerPosition, Vector3D targetPosition) {
+        // 从观察者指向目标的向量
+        Vector3D toTarget = targetPosition.subtract(observerPosition);
 
-        // GEO位置的径向向外向量（从地心指向GEO）
-        Vector3D geoRadial = geoPosition.normalize();
+        // 观察者位置的径向向外向量（从地心指向观察者）
+        Vector3D observerRadial = observerPosition.normalize();
 
         // 计算仰角：90° - 与径向向量的夹角
-        double cosAngle = geoRadial.dotProduct(toLeo.normalize());
+        double cosAngle = observerRadial.dotProduct(toTarget.normalize());
         double angleFromRadial = Math.acos(Math.max(-1.0, Math.min(1.0, cosAngle)));
 
         // 仰角 = 90° - 与径向的夹角

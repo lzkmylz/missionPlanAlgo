@@ -1,8 +1,8 @@
 {
-  "name": "台湾本岛区域目标拼幅覆盖场景",
-  "description": "60颗卫星(30光学+30SAR)覆盖台湾本岛大范围区域，测试区域目标拼幅覆盖功能，配置天链式中继卫星，支持混合数传",
-  "version": "1.1+payload_config+relay",
-  "generated_at": "2026-03-16T00:00:00+00:00",
+  "name": "混合目标场景：台湾区域+日本点目标",
+  "description": "60颗卫星(30光学+30SAR)，同时覆盖台湾本岛区域目标（拼幅）和150个日本点目标（频次约束），配置天链式中继卫星，支持混合数传",
+  "version": "1.0+payload_config+relay+mix",
+  "generated_at": "2026-03-19T22:51:38+00:00",
   "duration": {
     "start": "2024-03-15T00:00:00Z",
     "end": "2024-03-16T00:00:00Z"
@@ -5166,6 +5166,1806 @@
       "tile_priority_mode": "center_first",
       "coverage_strategy": "max_coverage",
       "dynamic_tile_sizing": true
+    },
+    {
+      "id": "TGT-0000",
+      "name": "japan_001",
+      "location": [
+        135.3672,
+        45.2114
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.197316968394073
+    },
+    {
+      "id": "TGT-0001",
+      "name": "japan_002",
+      "location": [
+        131.6523,
+        32.4959
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.73235229154987
+    },
+    {
+      "id": "TGT-0002",
+      "name": "japan_003",
+      "location": [
+        139.219,
+        41.3292
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.939819704323988
+    },
+    {
+      "id": "TGT-0003",
+      "name": "japan_004",
+      "location": [
+        143.1515,
+        33.3974
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.366809019706867
+    },
+    {
+      "id": "TGT-0004",
+      "name": "japan_005",
+      "location": [
+        134.1721,
+        38.3961
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.582458280396084
+    },
+    {
+      "id": "TGT-0005",
+      "name": "japan_006",
+      "location": [
+        139.4015,
+        32.2319
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.732723686587383
+    },
+    {
+      "id": "TGT-0006",
+      "name": "japan_007",
+      "location": [
+        136.7532,
+        42.5628
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.028468876827223
+    },
+    {
+      "id": "TGT-0007",
+      "name": "japan_008",
+      "location": [
+        139.071,
+        30.7432
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.341048247374583
+    },
+    {
+      "id": "TGT-0008",
+      "name": "japan_009",
+      "location": [
+        130.1059,
+        45.1822
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.6167946962329225
+    },
+    {
+      "id": "TGT-0009",
+      "name": "japan_010",
+      "location": [
+        134.1784,
+        31.5628
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.880304987479203
+    },
+    {
+      "id": "TGT-0010",
+      "name": "japan_011",
+      "location": [
+        131.0746,
+        37.9228
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.818640804157564
+    },
+    {
+      "id": "TGT-0011",
+      "name": "japan_012",
+      "location": [
+        133.3993,
+        40.6004
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.040136042355622
+    },
+    {
+      "id": "TGT-0012",
+      "name": "japan_013",
+      "location": [
+        138.2941,
+        32.9577
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.550265646722229
+    },
+    {
+      "id": "TGT-0013",
+      "name": "japan_014",
+      "location": [
+        144.9715,
+        44.3172
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.843748470046234
+    },
+    {
+      "id": "TGT-0014",
+      "name": "japan_015",
+      "location": [
+        130.5044,
+        33.1357
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.650660661526529
+    },
+    {
+      "id": "TGT-0015",
+      "name": "japan_016",
+      "location": [
+        135.6075,
+        34.3416
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.713506653387179
+    },
+    {
+      "id": "TGT-0016",
+      "name": "japan_017",
+      "location": [
+        133.7759,
+        38.6831
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.604393961508079
+    },
+    {
+      "id": "TGT-0017",
+      "name": "japan_018",
+      "location": [
+        130.2674,
+        45.7902
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.397431363068344
+    },
+    {
+      "id": "TGT-0018",
+      "name": "japan_019",
+      "location": [
+        129.0939,
+        43.0474
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.458014336081975
+    },
+    {
+      "id": "TGT-0019",
+      "name": "japan_020",
+      "location": [
+        142.1116,
+        31.1847
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.231738119050259
+    },
+    {
+      "id": "TGT-0020",
+      "name": "japan_021",
+      "location": [
+        143.6728,
+        39.9728
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.1271167005720475
+    },
+    {
+      "id": "TGT-0021",
+      "name": "japan_022",
+      "location": [
+        134.2867,
+        35.2029
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.2751149427104265
+    },
+    {
+      "id": "TGT-0022",
+      "name": "japan_023",
+      "location": [
+        144.0826,
+        37.5554
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.42648957444599
+    },
+    {
+      "id": "TGT-0023",
+      "name": "japan_024",
+      "location": [
+        141.9333,
+        38.9804
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.9875911927287815
+    },
+    {
+      "id": "TGT-0024",
+      "name": "japan_025",
+      "location": [
+        137.8865,
+        36.8407
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.2157828539866085
+    },
+    {
+      "id": "TGT-0025",
+      "name": "japan_026",
+      "location": [
+        129.5343,
+        40.1826
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.017141382329406
+    },
+    {
+      "id": "TGT-0026",
+      "name": "japan_027",
+      "location": [
+        144.4286,
+        33.9887
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.511102277086097
+    },
+    {
+      "id": "TGT-0027",
+      "name": "japan_028",
+      "location": [
+        132.8896,
+        31.2317
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.322442574508009
+    },
+    {
+      "id": "TGT-0028",
+      "name": "japan_029",
+      "location": [
+        144.8049,
+        42.9299
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.742921180375435
+    },
+    {
+      "id": "TGT-0029",
+      "name": "japan_030",
+      "location": [
+        142.6624,
+        32.9851
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.078684483831301
+    },
+    {
+      "id": "TGT-0030",
+      "name": "japan_031",
+      "location": [
+        142.7265,
+        44.3375
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.220103849055354
+    },
+    {
+      "id": "TGT-0031",
+      "name": "japan_032",
+      "location": [
+        132.8749,
+        36.8337
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.721461166512687
+    },
+    {
+      "id": "TGT-0032",
+      "name": "japan_033",
+      "location": [
+        129.1182,
+        38.172
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.444215620941461
+    },
+    {
+      "id": "TGT-0033",
+      "name": "japan_034",
+      "location": [
+        131.0377,
+        35.4018
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.64640586404151
+    },
+    {
+      "id": "TGT-0034",
+      "name": "japan_035",
+      "location": [
+        137.8194,
+        41.2483
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.943564165441922
+    },
+    {
+      "id": "TGT-0035",
+      "name": "japan_036",
+      "location": [
+        145.3616,
+        34.0285
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.601756619633539
+    },
+    {
+      "id": "TGT-0036",
+      "name": "japan_037",
+      "location": [
+        133.8423,
+        30.5902
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.005358046457723
+    },
+    {
+      "id": "TGT-0037",
+      "name": "japan_038",
+      "location": [
+        129.8751,
+        34.4583
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.479123781333945
+    },
+    {
+      "id": "TGT-0038",
+      "name": "japan_039",
+      "location": [
+        131.4632,
+        37.8312
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.484110543023001
+    },
+    {
+      "id": "TGT-0039",
+      "name": "japan_040",
+      "location": [
+        140.4263,
+        42.1859
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.456432697223719
+    },
+    {
+      "id": "TGT-0040",
+      "name": "japan_041",
+      "location": [
+        135.2523,
+        40.1169
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.071549368149517
+    },
+    {
+      "id": "TGT-0041",
+      "name": "japan_042",
+      "location": [
+        130.5349,
+        43.3648
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.373037020799709
+    },
+    {
+      "id": "TGT-0042",
+      "name": "japan_043",
+      "location": [
+        129.6932,
+        39.4543
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.033175657855712
+    },
+    {
+      "id": "TGT-0043",
+      "name": "japan_044",
+      "location": [
+        137.7056,
+        33.6239
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.348732858009983
+    },
+    {
+      "id": "TGT-0044",
+      "name": "japan_045",
+      "location": [
+        140.7459,
+        36.1878
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.2750418882919865
+    },
+    {
+      "id": "TGT-0045",
+      "name": "japan_046",
+      "location": [
+        134.7981,
+        31.8156
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.754678706761962
+    },
+    {
+      "id": "TGT-0046",
+      "name": "japan_047",
+      "location": [
+        133.385,
+        40.5597
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.110401623198925
+    },
+    {
+      "id": "TGT-0047",
+      "name": "japan_048",
+      "location": [
+        138.0041,
+        33.8696
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.794431515906654
+    },
+    {
+      "id": "TGT-0048",
+      "name": "japan_049",
+      "location": [
+        144.3071,
+        40.1296
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.698419149225321
+    },
+    {
+      "id": "TGT-0049",
+      "name": "japan_050",
+      "location": [
+        141.3412,
+        44.3538
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.559751091715247
+    },
+    {
+      "id": "TGT-0050",
+      "name": "japan_051",
+      "location": [
+        139.9145,
+        31.3462
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.797108377054158
+    },
+    {
+      "id": "TGT-0051",
+      "name": "japan_052",
+      "location": [
+        139.3093,
+        30.1472
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.327003538216111
+    },
+    {
+      "id": "TGT-0052",
+      "name": "japan_053",
+      "location": [
+        129.086,
+        32.5729
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.383790395385386
+    },
+    {
+      "id": "TGT-0053",
+      "name": "japan_054",
+      "location": [
+        140.0833,
+        33.5883
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.474498174993601
+    },
+    {
+      "id": "TGT-0054",
+      "name": "japan_055",
+      "location": [
+        134.5318,
+        41.9439
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.698446820988356
+    },
+    {
+      "id": "TGT-0055",
+      "name": "japan_056",
+      "location": [
+        140.1794,
+        39.0929
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.735431606118867
+    },
+    {
+      "id": "TGT-0056",
+      "name": "japan_057",
+      "location": [
+        133.5084,
+        33.9038
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.786195449333521
+    },
+    {
+      "id": "TGT-0057",
+      "name": "japan_058",
+      "location": [
+        144.1648,
+        40.0982
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.005274186210384
+    },
+    {
+      "id": "TGT-0058",
+      "name": "japan_059",
+      "location": [
+        138.8074,
+        37.8803
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.444904230523011
+    },
+    {
+      "id": "TGT-0059",
+      "name": "japan_060",
+      "location": [
+        133.7731,
+        30.3891
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.354221358814097
+    },
+    {
+      "id": "TGT-0060",
+      "name": "japan_061",
+      "location": [
+        144.9878,
+        45.2629
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.740317400510889
+    },
+    {
+      "id": "TGT-0061",
+      "name": "japan_062",
+      "location": [
+        129.2628,
+        44.8531
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.933309638087339
+    },
+    {
+      "id": "TGT-0062",
+      "name": "japan_063",
+      "location": [
+        145.3815,
+        43.6482
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.770195457203851
+    },
+    {
+      "id": "TGT-0063",
+      "name": "japan_064",
+      "location": [
+        143.4693,
+        35.0708
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.1136025249167005
+    },
+    {
+      "id": "TGT-0064",
+      "name": "japan_065",
+      "location": [
+        144.9146,
+        41.1365
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.194352987541537
+    },
+    {
+      "id": "TGT-0065",
+      "name": "japan_066",
+      "location": [
+        139.4551,
+        45.8409
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.036659304727474
+    },
+    {
+      "id": "TGT-0066",
+      "name": "japan_067",
+      "location": [
+        143.9153,
+        41.8523
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.404968167974219
+    },
+    {
+      "id": "TGT-0067",
+      "name": "japan_068",
+      "location": [
+        135.1113,
+        34.6975
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.6202267893583615
+    },
+    {
+      "id": "TGT-0068",
+      "name": "japan_069",
+      "location": [
+        143.7402,
+        44.6118
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.003032589374399
+    },
+    {
+      "id": "TGT-0069",
+      "name": "japan_070",
+      "location": [
+        142.571,
+        40.3994
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.591585338872202
+    },
+    {
+      "id": "TGT-0070",
+      "name": "japan_071",
+      "location": [
+        144.1301,
+        35.4079
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.187963879681738
+    },
+    {
+      "id": "TGT-0071",
+      "name": "japan_072",
+      "location": [
+        138.8308,
+        30.5751
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.085289269415153
+    },
+    {
+      "id": "TGT-0072",
+      "name": "japan_073",
+      "location": [
+        133.8712,
+        39.4533
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.074696377498428
+    },
+    {
+      "id": "TGT-0073",
+      "name": "japan_074",
+      "location": [
+        142.9842,
+        35.7631
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.044486520109609
+    },
+    {
+      "id": "TGT-0074",
+      "name": "japan_075",
+      "location": [
+        142.0899,
+        33.4531
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.170694929987536
+    },
+    {
+      "id": "TGT-0075",
+      "name": "japan_076",
+      "location": [
+        129.8786,
+        38.5017
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.2748598029964135
+    },
+    {
+      "id": "TGT-0076",
+      "name": "japan_077",
+      "location": [
+        141.3436,
+        45.6136
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.6459129458824915
+    },
+    {
+      "id": "TGT-0077",
+      "name": "japan_078",
+      "location": [
+        142.5182,
+        34.3333
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.156912762684532
+    },
+    {
+      "id": "TGT-0078",
+      "name": "japan_079",
+      "location": [
+        129.431,
+        45.4024
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.391948412187396
+    },
+    {
+      "id": "TGT-0079",
+      "name": "japan_080",
+      "location": [
+        135.9522,
+        32.7727
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.50048579632919
+    },
+    {
+      "id": "TGT-0080",
+      "name": "japan_081",
+      "location": [
+        138.3369,
+        41.4335
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.559867793891886
+    },
+    {
+      "id": "TGT-0081",
+      "name": "japan_082",
+      "location": [
+        145.2327,
+        41.8064
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.223441492468704
+    },
+    {
+      "id": "TGT-0082",
+      "name": "japan_083",
+      "location": [
+        136.1332,
+        33.9637
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.515692220928738
+    },
+    {
+      "id": "TGT-0083",
+      "name": "japan_084",
+      "location": [
+        129.2447,
+        31.8572
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.08145760463794
+    },
+    {
+      "id": "TGT-0084",
+      "name": "japan_085",
+      "location": [
+        143.5428,
+        41.2585
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.195668321302003
+    },
+    {
+      "id": "TGT-0085",
+      "name": "japan_086",
+      "location": [
+        137.3575,
+        37.5755
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.867703298475946
+    },
+    {
+      "id": "TGT-0086",
+      "name": "japan_087",
+      "location": [
+        135.7746,
+        39.8536
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.090608019544089
+    },
+    {
+      "id": "TGT-0087",
+      "name": "japan_088",
+      "location": [
+        135.3684,
+        40.0138
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.712979682376645
+    },
+    {
+      "id": "TGT-0088",
+      "name": "japan_089",
+      "location": [
+        140.1978,
+        32.607
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.284838556412631
+    },
+    {
+      "id": "TGT-0089",
+      "name": "japan_090",
+      "location": [
+        129.4507,
+        39.3724
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.150948355751758
+    },
+    {
+      "id": "TGT-0090",
+      "name": "japan_091",
+      "location": [
+        135.5989,
+        40.2926
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.09123357863187
+    },
+    {
+      "id": "TGT-0091",
+      "name": "japan_092",
+      "location": [
+        145.0049,
+        36.1776
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.8107012839121275
+    },
+    {
+      "id": "TGT-0092",
+      "name": "japan_093",
+      "location": [
+        132.3284,
+        31.1098
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.0364436513031
+    },
+    {
+      "id": "TGT-0093",
+      "name": "japan_094",
+      "location": [
+        130.6055,
+        40.9281
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.637951260587522
+    },
+    {
+      "id": "TGT-0094",
+      "name": "japan_095",
+      "location": [
+        143.3629,
+        30.3724
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.5637095495468
+    },
+    {
+      "id": "TGT-0095",
+      "name": "japan_096",
+      "location": [
+        131.0088,
+        41.1478
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.754944027054106
+    },
+    {
+      "id": "TGT-0096",
+      "name": "japan_097",
+      "location": [
+        141.4962,
+        42.8557
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.354879087559445
+    },
+    {
+      "id": "TGT-0097",
+      "name": "japan_098",
+      "location": [
+        141.7605,
+        42.9094
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.825235353822853
+    },
+    {
+      "id": "TGT-0098",
+      "name": "japan_099",
+      "location": [
+        135.3243,
+        42.4226
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.86151465120713
+    },
+    {
+      "id": "TGT-0099",
+      "name": "japan_100",
+      "location": [
+        143.593,
+        36.8639
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.5090857481693645
+    },
+    {
+      "id": "TGT-0100",
+      "name": "japan_101",
+      "location": [
+        130.7531,
+        44.4408
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.6529149322154835
+    },
+    {
+      "id": "TGT-0101",
+      "name": "japan_102",
+      "location": [
+        134.4408,
+        44.3284
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.021675302960597
+    },
+    {
+      "id": "TGT-0102",
+      "name": "japan_103",
+      "location": [
+        144.3915,
+        31.4606
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.90012393410161
+    },
+    {
+      "id": "TGT-0103",
+      "name": "japan_104",
+      "location": [
+        145.1603,
+        39.175
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.896891043956639
+    },
+    {
+      "id": "TGT-0104",
+      "name": "japan_105",
+      "location": [
+        133.9846,
+        35.2586
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.50474905887536
+    },
+    {
+      "id": "TGT-0105",
+      "name": "japan_106",
+      "location": [
+        142.4568,
+        42.6339
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.9888406094051625
+    },
+    {
+      "id": "TGT-0106",
+      "name": "japan_107",
+      "location": [
+        129.9785,
+        38.7925
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.7754083655166
+    },
+    {
+      "id": "TGT-0107",
+      "name": "japan_108",
+      "location": [
+        134.9656,
+        31.8731
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.523021263434945
+    },
+    {
+      "id": "TGT-0108",
+      "name": "japan_109",
+      "location": [
+        139.5097,
+        31.618
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.4019382629182395
+    },
+    {
+      "id": "TGT-0109",
+      "name": "japan_110",
+      "location": [
+        130.237,
+        43.1498
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.1626975612837995
+    },
+    {
+      "id": "TGT-0110",
+      "name": "japan_111",
+      "location": [
+        130.4422,
+        45.7862
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.741284294133782
+    },
+    {
+      "id": "TGT-0111",
+      "name": "japan_112",
+      "location": [
+        142.8176,
+        45.156
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.506756370517883
+    },
+    {
+      "id": "TGT-0112",
+      "name": "japan_113",
+      "location": [
+        135.3964,
+        31.336
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.11680849947161
+    },
+    {
+      "id": "TGT-0113",
+      "name": "japan_114",
+      "location": [
+        136.2118,
+        44.5017
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.985250208581718
+    },
+    {
+      "id": "TGT-0114",
+      "name": "japan_115",
+      "location": [
+        129.193,
+        37.4986
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.237635832536144
+    },
+    {
+      "id": "TGT-0115",
+      "name": "japan_116",
+      "location": [
+        130.9979,
+        40.3874
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.166737530194319
+    },
+    {
+      "id": "TGT-0116",
+      "name": "japan_117",
+      "location": [
+        145.3569,
+        35.9979
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.737198256378921
+    },
+    {
+      "id": "TGT-0117",
+      "name": "japan_118",
+      "location": [
+        132.8011,
+        45.4116
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.939757653415278
+    },
+    {
+      "id": "TGT-0118",
+      "name": "japan_119",
+      "location": [
+        129.7337,
+        44.2583
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.985929592238601
+    },
+    {
+      "id": "TGT-0119",
+      "name": "japan_120",
+      "location": [
+        130.2545,
+        38.8617
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.046195688340298
+    },
+    {
+      "id": "TGT-0120",
+      "name": "japan_121",
+      "location": [
+        139.6998,
+        41.132
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.255116160168127
+    },
+    {
+      "id": "TGT-0121",
+      "name": "japan_122",
+      "location": [
+        138.9333,
+        44.4185
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.56192637918446
+    },
+    {
+      "id": "TGT-0122",
+      "name": "japan_123",
+      "location": [
+        145.157,
+        44.2442
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.240265195603073
+    },
+    {
+      "id": "TGT-0123",
+      "name": "japan_124",
+      "location": [
+        133.7155,
+        33.0099
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.706704456052106
+    },
+    {
+      "id": "TGT-0124",
+      "name": "japan_125",
+      "location": [
+        138.9222,
+        31.2438
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.972421488959206
+    },
+    {
+      "id": "TGT-0125",
+      "name": "japan_126",
+      "location": [
+        140.8687,
+        38.5775
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.627590039413898
+    },
+    {
+      "id": "TGT-0126",
+      "name": "japan_127",
+      "location": [
+        140.6404,
+        32.6019
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.645074485846338
+    },
+    {
+      "id": "TGT-0127",
+      "name": "japan_128",
+      "location": [
+        145.1466,
+        41.6115
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.836486072581238
+    },
+    {
+      "id": "TGT-0128",
+      "name": "japan_129",
+      "location": [
+        144.8564,
+        43.857
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.052733948994504
+    },
+    {
+      "id": "TGT-0129",
+      "name": "japan_130",
+      "location": [
+        135.3999,
+        42.9689
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.300833782207056
+    },
+    {
+      "id": "TGT-0130",
+      "name": "japan_131",
+      "location": [
+        139.1002,
+        36.0943
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.684237846271417
+    },
+    {
+      "id": "TGT-0131",
+      "name": "japan_132",
+      "location": [
+        143.2516,
+        37.4991
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.546814143861413
+    },
+    {
+      "id": "TGT-0132",
+      "name": "japan_133",
+      "location": [
+        129.9584,
+        43.8356
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.999435346572261
+    },
+    {
+      "id": "TGT-0133",
+      "name": "japan_134",
+      "location": [
+        145.9428,
+        38.8869
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.889531459764856
+    },
+    {
+      "id": "TGT-0134",
+      "name": "japan_135",
+      "location": [
+        143.444,
+        33.9576
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.25831883030299
+    },
+    {
+      "id": "TGT-0135",
+      "name": "japan_136",
+      "location": [
+        145.2189,
+        39.6988
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.343401368811714
+    },
+    {
+      "id": "TGT-0136",
+      "name": "japan_137",
+      "location": [
+        139.5082,
+        35.7306
+      ],
+      "priority": 5,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 5.343146391185599
+    },
+    {
+      "id": "TGT-0137",
+      "name": "japan_138",
+      "location": [
+        137.8452,
+        42.3571
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 5.7043630006370805
+    },
+    {
+      "id": "TGT-0138",
+      "name": "japan_139",
+      "location": [
+        138.3824,
+        38.975
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.8069657324247945
+    },
+    {
+      "id": "TGT-0139",
+      "name": "japan_140",
+      "location": [
+        131.2783,
+        30.4605
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.24061910270693
+    },
+    {
+      "id": "TGT-0140",
+      "name": "japan_141",
+      "location": [
+        140.9694,
+        33.4074
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.029089331335764
+    },
+    {
+      "id": "TGT-0141",
+      "name": "japan_142",
+      "location": [
+        134.96,
+        39.4387
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.874949844047459
+    },
+    {
+      "id": "TGT-0142",
+      "name": "japan_143",
+      "location": [
+        144.3707,
+        35.5721
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.567306025482286
+    },
+    {
+      "id": "TGT-0143",
+      "name": "japan_144",
+      "location": [
+        135.7412,
+        39.9534
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 5.899041247315284
+    },
+    {
+      "id": "TGT-0144",
+      "name": "japan_145",
+      "location": [
+        131.5002,
+        44.8254
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 2,
+      "min_revisit_interval": 4.5164887765979165
+    },
+    {
+      "id": "TGT-0145",
+      "name": "japan_146",
+      "location": [
+        136.8053,
+        45.6805
+      ],
+      "priority": 2,
+      "direction": "japan",
+      "required_observations": 3,
+      "min_revisit_interval": 4.657503220575016
+    },
+    {
+      "id": "TGT-0146",
+      "name": "japan_147",
+      "location": [
+        139.7678,
+        33.8423
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.257759443821298
+    },
+    {
+      "id": "TGT-0147",
+      "name": "japan_148",
+      "location": [
+        131.1768,
+        32.4304
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 5.28174948960643
+    },
+    {
+      "id": "TGT-0148",
+      "name": "japan_149",
+      "location": [
+        132.092,
+        35.5307
+      ],
+      "priority": 4,
+      "direction": "japan",
+      "required_observations": 5,
+      "min_revisit_interval": 4.947923280525744
+    },
+    {
+      "id": "TGT-0149",
+      "name": "japan_150",
+      "location": [
+        140.3485,
+        32.7571
+      ],
+      "priority": 3,
+      "direction": "japan",
+      "required_observations": 4,
+      "min_revisit_interval": 4.081737232532958
     }
   ],
   "ground_stations": [
@@ -5302,19 +7102,6 @@
       "data_rate": 500.0
     }
   ],
-  "scheduling_config": {
-    "algorithm": "greedy",
-    "heuristic": "priority",
-    "consider_power": true,
-    "consider_storage": true,
-    "enable_area_coverage": true,
-    "area_coverage_strategy": "max_coverage",
-    "area_overlap_ratio": 0.15,
-    "min_area_coverage_ratio": 0.95,
-    "tile_priority_mode": "center_first"
-  },
-  "migrated_at": "2026-03-16T22:26:56.701880",
-  "migration_note": "已迁移到payload_config格式，支持多成像模式配置",
   "relay_satellites": [
     {
       "id": "RELAY-01",
@@ -5347,6 +7134,27 @@
       "downlink_capacity": 300.0
     }
   ],
-  "updated_at": "2026-03-17T17:33:32.249543",
-  "update_note": "添加天链式中继卫星配置，支持混合数传"
+  "scheduling_config": {
+    "algorithm": "greedy",
+    "heuristic": "priority",
+    "consider_power": true,
+    "consider_storage": true,
+    "enable_area_coverage": true,
+    "area_coverage_strategy": "max_coverage",
+    "area_overlap_ratio": 0.15,
+    "min_area_coverage_ratio": 0.95,
+    "tile_priority_mode": "center_first",
+    "enable_frequency": true,
+    "consider_frequency": true
+  },
+  "statistics": {
+    "total_satellites": 60,
+    "optical_satellites": 30,
+    "sar_satellites": 30,
+    "total_targets": 151,
+    "area_targets": 1,
+    "point_targets": 150,
+    "ground_stations": 12,
+    "relay_satellites": 3
+  }
 }

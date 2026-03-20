@@ -953,6 +953,9 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
                 task = self.tasks[task_idx]
                 # Get priority (default to 50 if not specified)
                 priority = getattr(task, 'priority', 50)
+                # Ensure priority is a valid integer (guard against Mock objects)
+                if not isinstance(priority, (int, float)):
+                    priority = 50
                 # Clamp to valid range
                 priority = max(1, min(100, priority))
                 # Lower priority value = higher priority, so use (101 - priority) for bonus

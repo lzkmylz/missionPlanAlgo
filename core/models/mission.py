@@ -26,6 +26,7 @@ class Mission:
         satellites: 卫星列表
         targets: 目标列表
         ground_stations: 地面站列表
+        relay_satellites: 中继卫星原始配置列表（字典格式，供RelayNetwork构建使用）
         description: 场景描述
     """
     name: str
@@ -34,6 +35,7 @@ class Mission:
     satellites: List[Satellite] = field(default_factory=list)
     targets: List[Target] = field(default_factory=list)
     ground_stations: List[GroundStation] = field(default_factory=list)
+    relay_satellites: List[Dict[str, Any]] = field(default_factory=list)
     description: str = ""
 
     def __post_init__(self):
@@ -110,6 +112,8 @@ class Mission:
         start_time_str = start_time_str.replace('Z', '+00:00')
         end_time_str = end_time_str.replace('Z', '+00:00')
 
+        relay_satellites = data.get('relay_satellites', [])
+
         return cls(
             name=data['name'],
             start_time=datetime.fromisoformat(start_time_str),
@@ -117,6 +121,7 @@ class Mission:
             satellites=satellites,
             targets=targets,
             ground_stations=ground_stations,
+            relay_satellites=relay_satellites,
             description=data.get('description', ''),
         )
 

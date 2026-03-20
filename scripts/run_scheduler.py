@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.models import Mission
 from core.resources.ground_station_pool import GroundStationPool
+from core.network.relay_satellite import RelayNetwork, RelaySatellite
 from scheduler.unified_scheduler import UnifiedScheduler, UnifiedScheduleResult
 from evaluation.metrics import MetricsCalculator
 
@@ -239,6 +240,22 @@ def run_single_algorithm(
     if enable_downlink and mission.ground_stations:
         ground_station_pool = GroundStationPool(mission.ground_stations)
 
+    # 准备中继卫星网络（场景有中继卫星时自动启用）
+    relay_network = None
+    if enable_downlink and mission.relay_satellites:
+        relay_sats = [
+            RelaySatellite(
+                id=r['id'],
+                name=r.get('name', r['id']),
+                orbit_type=r.get('orbit_type', 'GEO'),
+                longitude=r['longitude'],
+                uplink_capacity=r.get('uplink_capacity', 300.0),
+                downlink_capacity=r.get('downlink_capacity', 300.0),
+            )
+            for r in mission.relay_satellites
+        ]
+        relay_network = RelayNetwork(relay_sats)
+
     # 获取算法配置
     overrides = {}
     if algorithm_name == 'ga' and ga_params:
@@ -257,6 +274,7 @@ def run_single_algorithm(
         mission=mission,
         window_cache=cache,
         ground_station_pool=ground_station_pool,
+        relay_network=relay_network,
         config=scheduler_config
     )
 
@@ -316,6 +334,24 @@ def run_single_algorithm(
         }
         scheduled_tasks.append(task_dict)
 
+    # 序列化数传任务明细
+    downlink_tasks = []
+    if result.downlink_result:
+        for dt in result.downlink_result.downlink_tasks:
+            is_relay = dt.ground_station_id.startswith('RELAY:')
+            downlink_tasks.append({
+                'task_id': dt.task_id,
+                'related_imaging_task_id': dt.related_imaging_task_id,
+                'satellite_id': dt.satellite_id,
+                'ground_station_id': dt.ground_station_id,
+                'downlink_type': 'relay' if is_relay else 'ground_station',
+                'start_time': dt.start_time.isoformat() if dt.start_time else None,
+                'end_time': dt.end_time.isoformat() if dt.end_time else None,
+                'data_size_gb': dt.data_size_gb,
+                'effective_data_rate_mbps': dt.effective_data_rate,
+                'duration_seconds': dt.get_duration_seconds(),
+            })
+
     return {
         'algorithm': algorithm_name,
         'algorithm_name': get_algorithm_name(algorithm_name),
@@ -327,9 +363,11 @@ def run_single_algorithm(
         'solution_quality': metrics.solution_quality,
         'computation_time': computation_time,
         'downlink_count': len(result.downlink_result.downlink_tasks) if result.downlink_result else 0,
+        'downlink_failed_count': len(result.downlink_result.failed_tasks) if result.downlink_result else 0,
         'frequency_satisfaction': result.target_observations if enable_frequency else None,
         'clustering_summary': clustering_summary,
         'scheduled_tasks': scheduled_tasks,
+        'downlink_tasks': downlink_tasks,
     }
 
 
@@ -409,8 +447,13 @@ def print_single_result(result: Dict[str, Any]) -> None:
     print(f"完成时间跨度: {result['makespan_hours']:.2f} 小时")
     print(f"计算时间: {result['computation_time']:.2f} 秒")
 
-    if result.get('downlink_count'):
-        print(f"数传任务: {result['downlink_count']} 个")
+    if result.get('downlink_count') is not None:
+        dl_tasks = result.get('downlink_tasks', [])
+        gs_count = sum(1 for t in dl_tasks if t['downlink_type'] == 'ground_station')
+        relay_count = sum(1 for t in dl_tasks if t['downlink_type'] == 'relay')
+        failed = result.get('downlink_failed_count', 0)
+        print(f"数传成功: {result['downlink_count']} 个"
+              f"（地面站: {gs_count}，中继: {relay_count}），失败: {failed} 个")
 
     if result.get('frequency_satisfaction'):
         satisfied = sum(1 for info in result['frequency_satisfaction'].values() if info.get('satisfied'))

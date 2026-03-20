@@ -1030,7 +1030,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 continue
 
             # 快速能力检查（每个卫星只检查一次）
-            if self._constraint_checker is None and not self._can_satellite_perform_task(sat, task):
+            if not self._can_satellite_perform_task(sat, task):
                 continue
 
             for window in windows:
@@ -1057,10 +1057,9 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                     continue
 
                 # 快速资源检查
-                if self._constraint_checker is None:
-                    if not self._check_resource_constraints(sat, task, imaging_mode):
-                        phase1_resource_reject += 1
-                        continue
+                if not self._check_resource_constraints(sat, task, imaging_mode):
+                    phase1_resource_reject += 1
+                    continue
 
                 candidates.append((sat, window, imaging_mode, imaging_duration, window_start, window_end))
                 self._rejection_stats['total_passed'] += 1
@@ -1305,6 +1304,23 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                         power_needed = power_profile.total_energy if hasattr(power_profile, 'total_energy') else 0.0
                         storage_produced = getattr(imaging_mode, 'data_rate', 0.0) * imaging_duration
                     except:
+                        pass
+
+                # 回退：使用 _power_profile 和 _imaging_calculator 计算资源需求
+                if power_needed == 0.0 and self.consider_power:
+                    try:
+                        power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
+                        power_needed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
+                    except Exception:
+                        pass
+
+                if storage_produced == 0.0 and self.consider_storage:
+                    try:
+                        data_rate = getattr(sat.capabilities, 'data_rate', 300.0)
+                        storage_produced = self._imaging_calculator.get_storage_consumption(
+                            task, imaging_mode, data_rate
+                        )
+                    except Exception:
                         pass
 
                 # 获取卫星位置

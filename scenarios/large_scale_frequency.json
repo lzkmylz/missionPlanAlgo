@@ -1,7 +1,7 @@
 {
   "name": "大规模星座任务规划实验场景（含频次约束）",
-  "description": "60颗卫星(30光学+30SAR) vs 1000目标，总观测需求2638次，24小时规划周期",
-  "version": "2.0+payload_config",
+  "description": "60颗卫星(30光学+30SAR) vs 1000目标，总观测需求2638次，24小时规划周期，配置天链式中继卫星，支持混合数传",
+  "version": "2.2+payload_config+relay",
   "generated_at": "2026-03-15T11:48:58.329112+00:00",
   "seed": 42,
   "duration": {
@@ -17259,5 +17259,39 @@
     }
   },
   "migrated_at": "2026-03-16T22:26:56.708600",
-  "migration_note": "已迁移到payload_config格式，支持多成像模式配置"
+  "migration_note": "已迁移到payload_config格式，支持多成像模式配置",
+  "relay_satellites": [
+    {
+      "id": "RELAY-01",
+      "name": "天链-1号",
+      "orbit_type": "GEO",
+      "longitude": 120.0,
+      "min_elevation": 5.0,
+      "max_range": 45000000,
+      "uplink_capacity": 450.0,
+      "downlink_capacity": 450.0
+    },
+    {
+      "id": "RELAY-02",
+      "name": "天链-2号",
+      "orbit_type": "GEO",
+      "longitude": -60.0,
+      "min_elevation": 5.0,
+      "max_range": 45000000,
+      "uplink_capacity": 450.0,
+      "downlink_capacity": 450.0
+    },
+    {
+      "id": "RELAY-03",
+      "name": "天链-3号",
+      "orbit_type": "GEO",
+      "longitude": 80.0,
+      "min_elevation": 5.0,
+      "max_range": 45000000,
+      "uplink_capacity": 300.0,
+      "downlink_capacity": 300.0
+    }
+  ],
+  "updated_at": "2026-03-17T17:33:32.238938",
+  "update_note": "添加天链式中继卫星配置，支持混合数传"
 }

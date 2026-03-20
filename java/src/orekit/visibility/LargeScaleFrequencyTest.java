@@ -2,10 +2,13 @@ package orekit.visibility;
 
 import orekit.visibility.model.BatchResult;
 import orekit.visibility.model.GroundStationConfig;
+import orekit.visibility.model.RelaySatelliteConfig;
 import orekit.visibility.model.SatelliteConfig;
 import orekit.visibility.model.TargetConfig;
 import orekit.visibility.model.VisibilityWindow;
 import orekit.visibility.JsonScenarioLoader.ObservationRequirement;
+import java.util.Map;
+import orekit.visibility.RelayVisibilityCalculator;
 
 import org.orekit.data.DataContext;
 import org.orekit.data.DirectoryCrawler;
@@ -214,6 +217,10 @@ public class LargeScaleFrequencyTest {
             System.out.println("  频次需求: " + requirements.size() + "个目标有频次约束");
             System.out.println("  时间跨度: 24小时");
 
+            // 加载中继卫星配置
+            List<RelaySatelliteConfig> relaySatellites = loader.loadRelaySatellites();
+            System.out.println("  中继卫星数量: " + relaySatellites.size());
+
         // 执行可见性计算（包含卫星-目标 + 卫星-地面站）
         System.out.println("\n[2/4] 执行可见性计算...");
         System.out.println("  计算卫星-目标窗口: " + satellites.size() + "卫星 x " + targets.size() + "目标");
@@ -234,6 +241,47 @@ public class LargeScaleFrequencyTest {
             long calcTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - calcStart);
             System.out.println("  计算完成: " + String.format("%.2f", calcTime/1000.0) + "秒");
             System.out.println("  发现窗口: " + result.getStatistics().getTotalWindows());
+
+            // 计算卫星-中继卫星窗口（如果有中继卫星）
+            if (!relaySatellites.isEmpty()) {
+                System.out.println("\n[2.5/4] 计算中继卫星可见窗口...");
+                System.out.println("  计算卫星-中继窗口: " + satellites.size() + "卫星 x " + relaySatellites.size() + "中继");
+                long relayStart = System.nanoTime();
+
+                RelayVisibilityCalculator relayCalculator = new RelayVisibilityCalculator(calculator.getOrbitCache());
+                // 使用两阶段扫描策略：粗扫描(5秒步长) + 精扫描(1秒步长)
+                // 与地面站窗口计算策略保持一致，确保窗口边界精度
+                double relayCoarseStep = 5.0;   // 粗扫描步长
+                double relayFineStep = 1.0;     // 精扫描步长（与轨道数据步长一致）
+                Map<String, List<VisibilityWindow>> relayWindows = relayCalculator.computeRelayVisibilityWindows(
+                    satellites,
+                    relaySatellites,
+                    startTime,
+                    endTime,
+                    relayCoarseStep,  // 粗扫描步长
+                    relayFineStep     // 精扫描步长
+                );
+
+                // 将中继窗口添加到结果中
+                int totalRelayWindows = 0;
+                for (Map.Entry<String, List<VisibilityWindow>> entry : relayWindows.entrySet()) {
+                    String key = entry.getKey();  // 格式: satId_RELAY:relayId
+                    List<VisibilityWindow> windows = entry.getValue();
+                    totalRelayWindows += windows.size();
+
+                    // 解析key获取satelliteId和targetId
+                    String[] parts = key.split("_", 2);
+                    if (parts.length == 2) {
+                        String satId = parts[0];
+                        String relayId = parts[1];  // 已经是RELAY:xxx格式
+                        result.addWindows(satId, relayId, windows);
+                    }
+                }
+
+                long relayTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - relayStart);
+                System.out.println("  中继窗口计算完成: " + String.format("%.2f", relayTime/1000.0) + "秒");
+                System.out.println("  发现中继窗口: " + totalRelayWindows);
+            }
 
             // 频次需求分析
             System.out.println("\n[3/4] 频次需求分析...");

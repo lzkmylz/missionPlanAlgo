@@ -75,8 +75,16 @@ class GroundStationScheduler:
         # 跟踪已分配的数传窗口
         self._downlink_allocations: Dict[Tuple[str, str], List[Tuple[datetime, datetime, str, float]]] = {}
 
-        # 初始化所有天线的分配记录
+        # 初始化所有天线的分配记录；对没有配置天线的地面站自动添加默认天线
         for gs_id, gs in ground_station_pool.stations.items():
+            if not gs.antennas:
+                default_antenna = Antenna(
+                    id=f"{gs_id}-ANT-1",
+                    name="默认天线",
+                    data_rate=data_rate_mbps,
+                    acquisition_time_seconds=link_setup_time_seconds,
+                )
+                gs.antennas.append(default_antenna)
             for antenna in gs.antennas:
                 key = (gs_id, antenna.id)
                 self._downlink_allocations[key] = []
@@ -528,9 +536,15 @@ class GroundStationScheduler:
     def schedule_downlinks_for_tasks(
         self,
         scheduled_tasks: List[ScheduledTask],
-        visibility_windows: Dict[str, List[Tuple[datetime, datetime]]]
+        visibility_windows: Dict[str, List]
     ) -> GroundStationScheduleResult:
-        """为多个成像任务安排数传计划"""
+        """为多个成像任务安排数传计划
+
+        Args:
+            scheduled_tasks: 已调度的成像任务列表
+            visibility_windows: Dict[sat_id, List[(gs_id, start, end)]] 或
+                                 Dict[sat_id, List[(start, end)]]（兼容旧格式）
+        """
         result = GroundStationScheduleResult()
 
         # Auto-initialize storage for any unknown satellites
@@ -565,11 +579,21 @@ class GroundStationScheduler:
     def _try_schedule_single_task(
         self,
         task: ScheduledTask,
-        windows: List[Tuple[datetime, datetime]]
+        windows: List
     ) -> Optional[DownlinkTask]:
-        """尝试为单个任务调度数传"""
+        """尝试为单个任务调度数传
+
+        Args:
+            task: 成像任务
+            windows: List[(gs_id, start, end)] 或 List[(start, end)]（兼容旧格式）
+        """
         for window in windows:
-            downlink_task = self.plan_downlink_for_task(task, window)
+            # 支持新格式 (gs_id, start, end) 和旧格式 (start, end)
+            if len(window) == 3:
+                gs_id, start, end = window
+                downlink_task = self.plan_downlink_for_task(task, (start, end), ground_station_id=gs_id)
+            else:
+                downlink_task = self.plan_downlink_for_task(task, window)
             if downlink_task:
                 return downlink_task
         return None

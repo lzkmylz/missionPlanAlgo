@@ -340,28 +340,63 @@ class UnifiedScheduler:
 
     def _get_relay_windows(self) -> Dict[str, List[Tuple[datetime, datetime]]]:
         """
-        获取卫星-中继卫星可见窗口
+        获取卫星-中继卫星可见窗口。
+
+        必须从Java后端预计算的缓存加载中继可见性窗口。
+        如果缓存中不存在中继窗口，将抛出错误，要求重新计算可见性窗口。
 
         Returns:
             Dict[satellite_id, List[(start, end)]]: 每个卫星的中继可见窗口列表
+
+        Raises:
+            RuntimeError: 如果缓存中没有找到中继卫星可见性窗口
         """
         windows: Dict[str, List[Tuple[datetime, datetime]]] = {}
 
-        if self.window_cache is None or self.relay_network is None:
+        if self.relay_network is None:
             return windows
 
-        for sat in self.mission.satellites:
-            sat_windows = []
-            for relay_id in self.relay_network.relays:
-                # 从缓存获取卫星-中继窗口
-                key = (sat.id, f"RELAY:{relay_id}")
-                if hasattr(self.window_cache, '_windows') and key in self.window_cache._windows:
-                    for window in self.window_cache._windows[key]:
-                        sat_windows.append((window.start_time, window.end_time))
+        # 从缓存加载中继窗口
+        cache_hit = False
+        missing_relays = set()
 
-            if sat_windows:
-                windows[sat.id] = sorted(sat_windows, key=lambda x: x[0])
+        if self.window_cache is not None:
+            for sat in self.mission.satellites:
+                sat_windows = []
+                for relay_id in self.relay_network.relays:
+                    key = (sat.id, f"RELAY:{relay_id}")
+                    if hasattr(self.window_cache, '_windows') and key in self.window_cache._windows:
+                        for window in self.window_cache._windows[key]:
+                            sat_windows.append((window.start_time, window.end_time))
+                            # 同步注入 RelayNetwork 可见性（供 can_relay_data 使用）
+                            self.relay_network.add_visibility_window(
+                                sat.id, relay_id, window.start_time, window.end_time
+                            )
+                        cache_hit = True
+                    else:
+                        missing_relays.add(relay_id)
 
+                if sat_windows:
+                    windows[sat.id] = sorted(sat_windows, key=lambda x: x[0])
+
+        # 检查是否找到任何中继窗口
+        if not cache_hit:
+            raise RuntimeError(
+                f"缓存中未找到中继卫星可见性窗口。\n"
+                f"请使用Java后端重新计算可见性窗口，确保包含中继卫星。\n"
+                f"命令: cd java && java -cp \"classes:lib/*\" "
+                f"orekit.visibility.LargeScaleFrequencyTest "
+                f"--scenario {self.mission.name}.json "
+                f"--output output/frequency_scenario"
+            )
+
+        # 记录缺失的中继窗口警告
+        if missing_relays:
+            logger.warning(
+                f"部分中继卫星窗口未在缓存中找到: {missing_relays}"
+            )
+
+        logger.info(f"从缓存加载了 {len(windows)} 颗卫星的中继可见性窗口")
         return windows
 
     def _schedule_hybrid_downlinks(
@@ -508,14 +543,15 @@ class UnifiedScheduler:
             visibility_windows=gs_windows
         )
 
-    def _get_ground_station_windows(self) -> Dict[str, List[Tuple[datetime, datetime]]]:
+    def _get_ground_station_windows(self) -> Dict[str, List[Tuple[str, datetime, datetime]]]:
         """
         获取卫星-地面站可见窗口
 
         Returns:
-            Dict[satellite_id, List[(start, end)]]: 每个卫星的地面站可见窗口列表
+            Dict[satellite_id, List[(gs_id, start, end)]]: 每个卫星的地面站可见窗口列表，
+            包含地面站ID，按开始时间排序
         """
-        windows: Dict[str, List[Tuple[datetime, datetime]]] = {}
+        windows: Dict[str, List[Tuple[str, datetime, datetime]]] = {}
 
         if self.window_cache is None:
             return windows
@@ -527,10 +563,10 @@ class UnifiedScheduler:
                 key = (sat.id, f"GS:{gs.id}")
                 if hasattr(self.window_cache, '_windows') and key in self.window_cache._windows:
                     for window in self.window_cache._windows[key]:
-                        sat_windows.append((window.start_time, window.end_time))
+                        sat_windows.append((gs.id, window.start_time, window.end_time))
 
             if sat_windows:
-                windows[sat.id] = sorted(sat_windows, key=lambda x: x[0])
+                windows[sat.id] = sorted(sat_windows, key=lambda x: x[1])
 
         return windows
 
