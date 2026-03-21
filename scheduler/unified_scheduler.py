@@ -172,6 +172,7 @@ class UnifiedScheduler:
         # ISL router and scheduler (optional, initialised lazily)
         self._isl_router = None            # TimeVaryingISLRouter | None
         self._isl_downlink_scheduler: Optional[ISLDownlinkScheduler] = None
+        self._isl_satellite_configs: Dict[str, Any] = {}  # sat_id -> ISLCapabilityConfig
 
         # 内部状态
         self._imaging_scheduler: Optional[BaseScheduler] = None
@@ -340,11 +341,15 @@ class UnifiedScheduler:
 
             satellite_isl_configs: Dict[str, Any] = {}
             for sat in self.mission.satellites:
-                isl_cfg = getattr(getattr(sat, 'capabilities', None), 'isl', None)
+                # 字段名统一使用 isl_capability（与 SatelliteCapabilities 定义一致）
+                isl_cfg = getattr(getattr(sat, 'capabilities', None), 'isl_capability', None)
                 if isl_cfg is None:
                     isl_cfg = getattr(sat, 'isl_config', None)
                 if isl_cfg is not None and getattr(isl_cfg, 'enabled', False):
                     satellite_isl_configs[sat.id] = isl_cfg
+
+            # 存储供 _schedule_isl_downlinks 复用，避免重复遍历卫星列表
+            self._isl_satellite_configs = satellite_isl_configs
 
             if not satellite_isl_configs:
                 logger.debug("没有卫星启用了ISL，跳过ISL网络构建")
@@ -614,8 +619,13 @@ class UnifiedScheduler:
             return [], [t.task_id for t in imaging_tasks]
 
         # 懒加载 ISLDownlinkScheduler
+        # 优先使用 _build_isl_network_from_config 构建时保存的配置；
+        # 回退到 config 字典中的手动配置（向后兼容）
         if self._isl_downlink_scheduler is None:
-            isl_configs = self.config.get('satellite_isl_configs', {})
+            isl_configs = (
+                self._isl_satellite_configs
+                or self.config.get('satellite_isl_configs', {})
+            )
             self._isl_downlink_scheduler = ISLDownlinkScheduler(
                 isl_router=self._isl_router,
                 satellite_isl_configs=isl_configs,
@@ -623,11 +633,22 @@ class UnifiedScheduler:
                 deadline_buffer_s=self.config.get('isl_deadline_buffer_s', 3600.0),
             )
 
-        isl_tasks, failed_ids = self._isl_downlink_scheduler.schedule_isl_downlinks_for_tasks(
-            imaging_tasks=imaging_tasks,
-            satellite_states={},
-            existing_tasks=[],
-        )
+        # 逐任务调度并累积已生成的 ISL 任务，以便后续任务的波束容量检查能看到
+        # 前面任务占用的资源（HIGH-2：避免 existing_tasks 永远为空）
+        all_isl_tasks: List[ISLDownlinkTask] = []
+        all_failed_ids: List[str] = []
+        for task in imaging_tasks:
+            single_isl, single_failed = (
+                self._isl_downlink_scheduler.schedule_isl_downlinks_for_tasks(
+                    imaging_tasks=[task],
+                    satellite_states={},
+                    existing_tasks=list(all_isl_tasks),  # 传入已累积的任务
+                )
+            )
+            all_isl_tasks.extend(single_isl)
+            all_failed_ids.extend(single_failed)
+
+        isl_tasks, failed_ids = all_isl_tasks, all_failed_ids
 
         if isl_tasks:
             stats = self._isl_downlink_scheduler.get_statistics(isl_tasks)

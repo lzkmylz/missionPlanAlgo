@@ -70,6 +70,21 @@ class ISLDownlinkTask:
         """Number of relay hops (intermediate satellites only)."""
         return len(self.relay_hops)
 
+    @property
+    def link_type(self) -> str:
+        """Primary ISL link type for this relay task ('laser' or 'microwave').
+
+        Returns the first non-``gs_downlink`` entry in ``link_types``, or
+        ``'laser'`` as a safe default when ``link_types`` is empty or contains
+        only ``gs_downlink`` entries.  This scalar property is used by
+        ``ISLDownlinkScheduler._check_relay_constraints`` to count active laser
+        and microwave tasks separately against per-technology beam limits.
+        """
+        for lt in self.link_types:
+            if lt not in ('gs_downlink',):
+                return lt
+        return 'laser'
+
     # ------------------------------------------------------------------
     # Serialisation
     # ------------------------------------------------------------------
