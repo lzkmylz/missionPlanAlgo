@@ -17,6 +17,11 @@ import logging
 
 from core.models import Mission, Satellite, Target
 from scheduler.base_scheduler import ScheduledTask, TaskFailureReason
+from scheduler.constraints.precise_requirement_checker import (
+    get_sat_type_category as _get_sat_type_category_fn,
+    check_precise_requirements as _check_precise_requirements_fn,
+    select_imaging_mode_for_task as _select_imaging_mode_fn,
+)
 from payload.imaging_time_calculator import ImagingTimeCalculator, PowerProfile
 
 # 批量约束检查器导入 - 与greedy调度器保持一致
@@ -291,6 +296,24 @@ class MetaheuristicConstraintChecker:
         if self._maneuver_checker is not None:
             self._maneuver_checker.reset()
 
+    def _get_sat_type_category(self, sat: Any) -> str:
+        """
+        获取卫星大类标签（'optical' 或 'sar'）。
+
+        委托给 ``scheduler.constraints.precise_requirement_checker.get_sat_type_category``，
+        保留实例方法签名以向后兼容。
+        """
+        return _get_sat_type_category_fn(sat)
+
+    def _check_precise_requirements(self, sat: Any, task: Any) -> bool:
+        """
+        检查卫星是否满足任务的精准观测需求约束。
+
+        委托给 ``scheduler.constraints.precise_requirement_checker.check_precise_requirements``，
+        保留实例方法签名以向后兼容。详细文档见该模块。
+        """
+        return _check_precise_requirements_fn(sat, task)
+
     def check_task_feasibility(
         self,
         sat_id: str,
@@ -318,6 +341,10 @@ class MetaheuristicConstraintChecker:
         sat = self.mission.get_satellite_by_id(sat_id)
         if not sat:
             return False, "Satellite not found", None
+
+        # 精准需求检查（类型/ID/模式约束，所有调用路径统一门卫）
+        if not self._check_precise_requirements(sat, target):
+            return False, "Precise requirement not met (type/id/mode constraint)", None
 
         # 选择成像模式
         if imaging_mode is None:
@@ -413,17 +440,12 @@ class MetaheuristicConstraintChecker:
         return True, None, info
 
     def _select_imaging_mode(self, sat: Satellite, target: Target):
-        """选择成像模式"""
-        from core.models import ImagingMode
+        """
+        选择成像模式，优先满足目标的精准模式约束。
 
-        modes = sat.capabilities.imaging_modes
-        if not modes:
-            return ImagingMode.PUSH_BROOM
-
-        mode = modes[0]
-        if hasattr(mode, '_mock_name') or not isinstance(mode, (ImagingMode, str)):
-            return ImagingMode.PUSH_BROOM
-        return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+        委托给 ``scheduler.constraints.precise_requirement_checker.select_imaging_mode_for_task``。
+        """
+        return _select_imaging_mode_fn(sat, target)
 
     def check_task_placement(
         self,

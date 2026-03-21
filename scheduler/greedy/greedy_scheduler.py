@@ -47,6 +47,7 @@ try:
 except ImportError:
     HAS_NUMPY = False
 from core.models.target import Target
+from core.models import ImagingMode
 from core.quality.quality_config import QualityScoreConfig
 
 # 模块级别logger定义
@@ -1472,6 +1473,10 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             if not sat.capabilities.can_satisfy_resolution(required_resolution):
                 return False
 
+        # Check precise observation requirements
+        if not self._check_precise_requirements(sat, task):
+            return False
+
         return True
 
     def _get_windows(self, sat: Any, task: Any) -> List[Any]:
@@ -1669,28 +1674,13 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         return self._imaging_calculator.calculate(task, imaging_mode, satellite=sat)
 
     def _select_imaging_mode(self, sat: Any, task: Any) -> Any:
+        """为卫星-任务对选择成像模式。
+
+        委托给 ``scheduler.constraints.precise_requirement_checker.select_imaging_mode_for_task``，
+        优先选择满足精准约束的模式，回退到卫星默认第一个模式。
         """
-        Select appropriate imaging mode for satellite-task pair
-
-        Args:
-            sat: Satellite
-            task: Target task
-
-        Returns:
-            Selected imaging mode
-        """
-        from core.models import ImagingMode
-
-        modes = sat.capabilities.imaging_modes
-        if not modes:
-            return ImagingMode.PUSH_BROOM
-
-        # Select first available mode
-        mode = modes[0]
-        # Handle Mock objects in tests (Mock objects have special attributes)
-        if hasattr(mode, '_mock_name') or not isinstance(mode, (ImagingMode, str)):
-            return ImagingMode.PUSH_BROOM
-        return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+        from scheduler.constraints.precise_requirement_checker import select_imaging_mode_for_task
+        return select_imaging_mode_for_task(sat, task)
 
     def _check_resource_constraints(self, sat: Any, task: Any, imaging_mode: Any) -> bool:
         """
@@ -2366,7 +2356,6 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 - fov_config: FOV配置
         """
         from core.coverage.footprint_calculator import FootprintCalculator
-        from core.models import ImagingMode
 
         sat = self.mission.get_satellite_by_id(sat_id)
         if not sat:

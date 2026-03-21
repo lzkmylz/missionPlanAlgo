@@ -29,6 +29,9 @@ from scheduler.coverage_tracker import CoverageTracker
 from core.decomposer import MosaicPlanner
 
 # 批量约束检查器导入 - 与greedy调度器保持一致
+from scheduler.constraints.precise_requirement_checker import (
+    select_imaging_mode_for_task as _select_imaging_mode_fn,
+)
 from scheduler.constraints.unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker, UnifiedBatchCandidate
 )
@@ -633,6 +636,12 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         task = self.tasks[task_idx]
         sat = self.satellites[sat_idx]
 
+        # 检查精准观测需求约束（继承自 BaseScheduler）
+        if not self._check_precise_requirements(sat, task):
+            if self._profiler:
+                self._profiler.end("_evaluate_task_assignment")
+            return
+
         # Find feasible window
         if self._profiler:
             self._profiler.start("_find_feasible_window")
@@ -647,7 +656,7 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         # Calculate timing
         if self._profiler:
             self._profiler.start("_calculate_timing")
-        imaging_mode = self._select_imaging_mode(sat)
+        imaging_mode = self._select_imaging_mode(sat, task)
         imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
 
         actual_start, actual_end = self._calculate_task_timing(
@@ -989,12 +998,17 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
             task = self.tasks[task_idx]
             sat = self.satellites[sat_idx]
 
+            # 检查精准观测需求约束（继承自 BaseScheduler）
+            if not self._check_precise_requirements(sat, task):
+                unscheduled[getattr(task, 'id', str(task_idx))] = TaskFailureReason.SAT_CAPABILITY_MISMATCH
+                continue
+
             feasible_window = self._find_feasible_window(sat_idx, sat, task, state)
             if not feasible_window:
                 unscheduled[getattr(task, 'id', str(task_idx))] = TaskFailureReason.NO_VISIBLE_WINDOW
                 continue
 
-            imaging_mode = self._select_imaging_mode(sat)
+            imaging_mode = self._select_imaging_mode(sat, task)
             imaging_duration = self._imaging_calculator.calculate(task, imaging_mode)
 
             actual_start, actual_end = self._calculate_task_timing(
@@ -1135,14 +1149,13 @@ class MetaheuristicScheduler(BaseScheduler, ClusteringMixin, ABC):
         return max(recent) - min(recent) < self._config.convergence_threshold
 
     @staticmethod
-    def _select_imaging_mode(sat: Any) -> ImagingMode:
-        """Select imaging mode for satellite."""
+    def _select_imaging_mode(sat: Any, task: Any = None) -> ImagingMode:
+        """为卫星-任务对选择成像模式。
+
+        委托给 ``scheduler.constraints.precise_requirement_checker.select_imaging_mode_for_task``。
+        """
         try:
-            modes = sat.capabilities.imaging_modes if hasattr(sat.capabilities, 'imaging_modes') else []
-            if not modes or not hasattr(modes, '__getitem__'):
-                return ImagingMode.PUSH_BROOM
-            mode = modes[0]
-            return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+            return _select_imaging_mode_fn(sat, task)
         except (TypeError, AttributeError, IndexError):
             return ImagingMode.PUSH_BROOM
 

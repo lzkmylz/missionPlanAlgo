@@ -34,6 +34,10 @@ from .constraints import (
 from core.dynamics.attitude_mode import AttitudeMode
 from core.dynamics.sun_position_calculator import SunPositionCalculator
 from core.dynamics.power_generation_calculator import PowerGenerationCalculator, PowerConfig
+from scheduler.constraints.precise_requirement_checker import (
+    get_sat_type_category as _get_sat_type_category_fn,
+    check_precise_requirements as _check_precise_requirements_fn,
+)
 
 
 class TaskFailureReason(Enum):
@@ -971,6 +975,26 @@ class BaseScheduler(ABC):
             **kwargs
         )
         self._failure_log.append(failure)
+
+    # ========== 精准观测需求约束检查 ==========
+
+    def _get_sat_type_category(self, sat: Any) -> str:
+        """
+        获取卫星的大类标签（'optical' 或 'sar'）。
+
+        委托给 ``scheduler.constraints.precise_requirement_checker.get_sat_type_category``，
+        保留实例方法签名以向后兼容。
+        """
+        return _get_sat_type_category_fn(sat)
+
+    def _check_precise_requirements(self, sat: Any, task: Any) -> bool:
+        """
+        检查卫星是否满足任务的精准观测需求约束。
+
+        委托给 ``scheduler.constraints.precise_requirement_checker.check_precise_requirements``，
+        保留实例方法签名以向后兼容。详细文档见该模块。
+        """
+        return _check_precise_requirements_fn(sat, task)
 
     def _start_timer(self) -> None:
         self._start_time = time.time()

@@ -37,6 +37,7 @@ from scheduler.common.footprint_utils import (
     calculate_center_distance_score,
 )
 from scheduler.constraints.batch_slew_calculator import BatchSlewCandidate
+from core.models import ImagingMode
 
 logger = logging.getLogger(__name__)
 
@@ -755,20 +756,20 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             if not sat.capabilities.can_satisfy_resolution(required_resolution):
                 return False
 
+        # 检查精准观测需求约束
+        if not self._check_precise_requirements(sat, task):
+            return False
+
         return True
 
     def _select_imaging_mode(self, sat: Any, task: Any):
-        """选择成像模式"""
-        from core.models import ImagingMode
+        """为卫星-任务对选择成像模式。
 
-        modes = sat.capabilities.imaging_modes
-        if not modes:
-            return ImagingMode.PUSH_BROOM
-
-        mode = modes[0]
-        if hasattr(mode, '_mock_name') or not isinstance(mode, (ImagingMode, str)):
-            return ImagingMode.PUSH_BROOM
-        return mode if isinstance(mode, ImagingMode) else ImagingMode(mode)
+        委托给 ``scheduler.constraints.precise_requirement_checker.select_imaging_mode_for_task``，
+        优先选择满足精准约束（新字段列表 + 旧字段单值合并集合）的模式，回退到卫星默认第一个模式。
+        """
+        from scheduler.constraints.precise_requirement_checker import select_imaging_mode_for_task
+        return select_imaging_mode_for_task(sat, task)
 
     def _check_resource_constraints(self, sat: Any, task: Any, imaging_mode: Any = None) -> bool:
         """检查资源约束

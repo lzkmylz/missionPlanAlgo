@@ -91,12 +91,23 @@ class Target:
     # 状态（运行时被更新）
     completed_observations: int = 0
 
-    # ========== 成像模式与卫星类型要求（新增）==========
+    # ========== 成像模式与卫星类型要求 ==========
+    # 旧字段（单值，向后兼容保留）
     # 指定成像模式（如 'push_broom', 'forward_pushbroom_pmc', 'spotlight' 等）
     required_imaging_mode: Optional[str] = None
 
     # 指定卫星类型（如 'optical', 'sar'）
     required_satellite_type: Optional[str] = None
+
+    # 精准需求字段（新增，列表形式，全部可选，空列表表示不限制）
+    # 允许的卫星大类，如 ['sar'] 或 ['optical']
+    allowed_satellite_types: List[str] = field(default_factory=list)
+
+    # 允许的具体卫星 ID 列表，如 ['SAR-01', 'SAR-02']
+    allowed_satellite_ids: List[str] = field(default_factory=list)
+
+    # 允许的成像模式列表（满足其一即可），如 ['spotlight', 'sliding_spotlight']
+    required_imaging_modes: List[str] = field(default_factory=list)
 
     # PMC模式优先级（如果支持PMC模式）
     # 0 = 不使用PMC, 1 = 低优先级, 2 = 中优先级, 3 = 高优先级
@@ -204,16 +215,22 @@ class Target:
 
     def requires_pmc(self) -> bool:
         """检查是否需要PMC模式（前向或反向）"""
-        pmc_modes = ('forward_pushbroom_pmc', 'reverse_pushbroom_pmc')
-        return self.pmc_priority > 0 or self.required_imaging_mode in pmc_modes
+        pmc_modes = {'forward_pushbroom_pmc', 'reverse_pushbroom_pmc'}
+        return (
+            self.pmc_priority > 0
+            or self.required_imaging_mode in pmc_modes
+            or bool(set(self.required_imaging_modes) & pmc_modes)
+        )
 
     def requires_forward_pmc(self) -> bool:
         """检查是否需要前向PMC模式"""
-        return self.required_imaging_mode == 'forward_pushbroom_pmc'
+        return (self.required_imaging_mode == 'forward_pushbroom_pmc'
+                or 'forward_pushbroom_pmc' in self.required_imaging_modes)
 
     def requires_reverse_pmc(self) -> bool:
         """检查是否需要反向PMC模式"""
-        return self.required_imaging_mode == 'reverse_pushbroom_pmc'
+        return (self.required_imaging_mode == 'reverse_pushbroom_pmc'
+                or 'reverse_pushbroom_pmc' in self.required_imaging_modes)
 
     def get_preferred_speed_reduction(self) -> Optional[float]:
         """获取首选速度变化比（前向为降速比，反向为增速比）"""
@@ -223,32 +240,54 @@ class Target:
         return None
 
     def get_pmc_direction(self) -> Optional[str]:
-        """获取PMC方向（'forward' 或 'reverse'）"""
-        if self.required_imaging_mode == 'forward_pushbroom_pmc':
+        """获取PMC方向（'forward' 或 'reverse'）。
+
+        若 ``required_imaging_modes`` 同时包含 forward 和 reverse，forward 优先。
+        """
+        if (self.required_imaging_mode == 'forward_pushbroom_pmc'
+                or 'forward_pushbroom_pmc' in self.required_imaging_modes):
             return 'forward'
-        elif self.required_imaging_mode == 'reverse_pushbroom_pmc':
+        if (self.required_imaging_mode == 'reverse_pushbroom_pmc'
+                or 'reverse_pushbroom_pmc' in self.required_imaging_modes):
             return 'reverse'
         return None
 
-    def check_satellite_compatibility(self, payload_type: str, mode_name: str) -> bool:
+    def check_satellite_compatibility(self, payload_type: str, mode_name: str,
+                                       sat_id: Optional[str] = None) -> bool:
         """
         检查卫星是否与目标要求兼容
 
         Args:
             payload_type: 载荷类型（'optical' 或 'sar'）
             mode_name: 成像模式名称
+            sat_id: 卫星 ID（用于精准 ID 约束检查）
 
         Returns:
             是否兼容
         """
-        # 检查卫星类型要求
+        # 旧字段：单值卫星类型约束
         if self.required_satellite_type:
             if self.required_satellite_type.lower() != payload_type.lower():
                 return False
 
-        # 检查成像模式要求
+        # 精准需求：允许的卫星 ID 列表
+        # sat_id=None 视为不满足 ID 约束（不能因参数缺失而跳过过滤）
+        if self.allowed_satellite_ids:
+            if sat_id is None or sat_id not in self.allowed_satellite_ids:
+                return False
+
+        # 精准需求：允许的卫星类型列表
+        if self.allowed_satellite_types:
+            if payload_type.lower() not in {t.lower() for t in self.allowed_satellite_types}:
+                return False
+
+        # 成像模式约束：将旧字段（单值）与新字段（列表）合并为并集，满足其一即可
+        # 与 _check_precise_requirements 语义保持一致（OR/并集）
+        effective_modes = {m.lower() for m in self.required_imaging_modes}
         if self.required_imaging_mode:
-            if self.required_imaging_mode != mode_name:
+            effective_modes.add(self.required_imaging_mode.lower())
+        if effective_modes:
+            if mode_name.lower() not in effective_modes:
                 return False
 
         return True
@@ -270,6 +309,9 @@ class Target:
             'immediate_downlink': self.immediate_downlink,
             'required_imaging_mode': self.required_imaging_mode,
             'required_satellite_type': self.required_satellite_type,
+            'allowed_satellite_types': self.allowed_satellite_types,
+            'allowed_satellite_ids': self.allowed_satellite_ids,
+            'required_imaging_modes': self.required_imaging_modes,
             'pmc_priority': self.pmc_priority,
             'pmc_speed_reduction_range': self.pmc_speed_reduction_range,
         }
@@ -312,6 +354,9 @@ class Target:
             immediate_downlink=data.get('immediate_downlink', False),
             required_imaging_mode=data.get('required_imaging_mode'),
             required_satellite_type=data.get('required_satellite_type'),
+            allowed_satellite_types=data.get('allowed_satellite_types', []),
+            allowed_satellite_ids=data.get('allowed_satellite_ids', []),
+            required_imaging_modes=data.get('required_imaging_modes', []),
             pmc_priority=data.get('pmc_priority', 0),
             pmc_speed_reduction_range=pmc_speed_reduction_range,
         )

@@ -24,7 +24,7 @@ import sys
 import numpy as np
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -129,6 +129,10 @@ class TargetConfig:
     direction: str
     required_observations: int = 1
     min_revisit_interval: float = 0.0
+    # 精准需求（可选，空列表表示不限制）
+    allowed_satellite_types: List[str] = field(default_factory=list)
+    allowed_satellite_ids: List[str] = field(default_factory=list)
+    required_imaging_modes: List[str] = field(default_factory=list)
 
 
 # ============================================================================
@@ -271,8 +275,40 @@ class ScenarioGenerator:
             stations.append(station)
         return stations
 
-    def generate_targets(self, enable_frequency: bool = False) -> List[TargetConfig]:
-        """生成目标配置"""
+    # 精准需求预设方案（类型约束 / ID 约束 / 模式约束），用于随机分配。
+    # 注意：所有模式约束必须与 generate_satellites() 中配置的卫星实际成像模式一致：
+    #   光学卫星：['push_broom']
+    #   SAR 卫星：['spotlight', 'stripmap', 'sliding_spotlight']
+    # PMC 模式（forward_pushbroom_pmc）不在预设中，因生成的光学卫星不具备该能力。
+    # 如需测试 PMC 约束，请在 generate_satellites() 中为光学卫星添加 PMC 模式后再添加对应预设。
+    _PRECISE_PRESETS = [
+        # 仅限光学卫星（任意模式）
+        {'allowed_satellite_ids': [], 'allowed_satellite_types': ['optical'], 'required_imaging_modes': []},
+        # 仅限光学卫星推扫模式
+        {'allowed_satellite_ids': [], 'allowed_satellite_types': ['optical'], 'required_imaging_modes': ['push_broom']},
+        # 仅限 SAR 卫星（任意模式）
+        {'allowed_satellite_ids': [], 'allowed_satellite_types': ['sar'], 'required_imaging_modes': []},
+        # 仅限 SAR 聚束模式
+        {'allowed_satellite_ids': [], 'allowed_satellite_types': ['sar'], 'required_imaging_modes': ['spotlight']},
+        # 仅限 SAR 条带模式
+        {'allowed_satellite_ids': [], 'allowed_satellite_types': ['sar'], 'required_imaging_modes': ['stripmap']},
+        # 仅限 SAR 滑动聚束模式
+        {'allowed_satellite_ids': [], 'allowed_satellite_types': ['sar'], 'required_imaging_modes': ['sliding_spotlight']},
+        # 指定 SAR 卫星 ID 约束（测试 allowed_satellite_ids 路径；2颗卫星可覆盖性低，主要用于约束路径验证）
+        {'allowed_satellite_ids': ['SAR-01', 'SAR-02'], 'allowed_satellite_types': [], 'required_imaging_modes': []},
+        # 指定光学卫星 ID 约束（同上）
+        {'allowed_satellite_ids': ['OPT-01', 'OPT-02'], 'allowed_satellite_types': [], 'required_imaging_modes': []},
+    ]
+
+    def generate_targets(self, enable_frequency: bool = False,
+                         precise_ratio: float = 0.0) -> List[TargetConfig]:
+        """生成目标配置
+
+        Args:
+            enable_frequency: 是否启用频次约束
+            precise_ratio: 精准需求目标占比（0.0-1.0），0 表示全部使用模糊需求
+        """
+        precise_ratio = max(0.0, min(1.0, precise_ratio))  # 防御性钳位
         targets = []
         target_id = 0
 
@@ -304,22 +340,40 @@ class ScenarioGenerator:
                     target.required_observations = np.random.randint(freq_min, freq_max + 1)
                     target.min_revisit_interval = np.random.uniform(revisit_min, revisit_max) if target.required_observations > 1 else 0.0
 
+                # 按比例随机分配精准需求
+                if precise_ratio > 0.0 and np.random.random() < precise_ratio:
+                    preset = self._PRECISE_PRESETS[
+                        np.random.randint(len(self._PRECISE_PRESETS))
+                    ]
+                    target.allowed_satellite_ids = list(preset['allowed_satellite_ids'])
+                    target.allowed_satellite_types = list(preset['allowed_satellite_types'])
+                    target.required_imaging_modes = list(preset['required_imaging_modes'])
+
                 targets.append(target)
                 target_id += 1
 
         return targets
 
-    def generate_scenario(self, enable_frequency: bool = False) -> Dict[str, Any]:
-        """生成完整场景配置"""
+    def generate_scenario(self, enable_frequency: bool = False,
+                          precise_ratio: float = 0.0) -> Dict[str, Any]:
+        """生成完整场景配置
+
+        Args:
+            enable_frequency: 是否启用频次约束
+            precise_ratio: 精准需求目标占比（0.0-1.0）
+        """
         satellites = self.generate_satellites()
         ground_stations = self.generate_ground_stations()
-        targets = self.generate_targets(enable_frequency=enable_frequency)
+        targets = self.generate_targets(enable_frequency=enable_frequency,
+                                        precise_ratio=precise_ratio)
 
         total_obs_demand = sum(t.required_observations for t in targets) if enable_frequency else len(targets)
 
         name = '大规模星座任务规划实验场景'
         if enable_frequency:
             name += '（含频次约束）'
+        if precise_ratio > 0.0:
+            name += f'（含精准需求 {precise_ratio:.0%}）'
 
         description = f'60颗卫星(30光学+30SAR) vs {len(targets)}目标'
         if enable_frequency:
@@ -349,6 +403,15 @@ class ScenarioGenerator:
                 'targets_by_frequency': self._count_by_frequency(targets)
             }
 
+        if precise_ratio > 0.0:
+            precise_count = sum(
+                1 for t in targets if t.allowed_satellite_types or t.allowed_satellite_ids or t.required_imaging_modes
+            )
+            scenario.setdefault('statistics', {}).update({
+                'precise_requirement_targets': precise_count,
+                'precise_requirement_ratio': precise_count / len(targets) if targets else 0.0,
+            })
+
         return scenario
 
     def _count_by_frequency(self, targets: List[TargetConfig]) -> Dict[int, int]:
@@ -363,6 +426,17 @@ class ScenarioGenerator:
 # 辅助函数
 # ============================================================================
 
+def _precise_ratio_type(value: str) -> float:
+    """argparse 类型函数：将字符串转换为 [0.0, 1.0] 范围内的浮点数。"""
+    try:
+        v = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"precise-ratio 必须为浮点数，收到: {value!r}")
+    if not 0.0 <= v <= 1.0:
+        raise argparse.ArgumentTypeError(f"precise-ratio 必须在 [0.0, 1.0] 范围内，收到: {v}")
+    return v
+
+
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
@@ -376,8 +450,11 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
   # 生成带频次约束的场景
   python scripts/generate_scenario.py --frequency
 
-  # 指定随机种子
-  python scripts/generate_scenario.py --seed 123
+  # 生成 20% 目标带精准需求的场景（用于测试精准约束功能）
+  python scripts/generate_scenario.py --precise-ratio 0.2
+
+  # 组合使用
+  python scripts/generate_scenario.py --frequency --precise-ratio 0.1 --seed 123
 
   # 自定义输出路径
   python scripts/generate_scenario.py -o scenarios/my_scenario.json
@@ -404,6 +481,13 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         '--frequency',
         action='store_true',
         help='启用观测频次约束'
+    )
+    parser.add_argument(
+        '--precise-ratio',
+        type=_precise_ratio_type,
+        default=0.0,
+        metavar='RATIO',
+        help='精准需求目标占比（0.0-1.0），随机为该比例目标分配卫星类型/成像模式约束，默认 0（禁用）'
     )
 
     return parser.parse_args(args)
@@ -448,7 +532,8 @@ def generate_scenario(
     output_path: str,
     seed: int = 42,
     epoch: str = "2024-03-15T00:00:00Z",
-    enable_frequency: bool = False
+    enable_frequency: bool = False,
+    precise_ratio: float = 0.0
 ) -> Dict[str, Any]:
     """
     生成场景并保存
@@ -458,12 +543,14 @@ def generate_scenario(
         seed: 随机种子
         epoch: 场景起始时间
         enable_frequency: 是否启用频次约束
+        precise_ratio: 精准需求目标占比（0.0-1.0），0 表示全部使用模糊需求
 
     Returns:
         生成的场景配置
     """
     generator = ScenarioGenerator(seed=seed, epoch=epoch)
-    scenario = generator.generate_scenario(enable_frequency=enable_frequency)
+    scenario = generator.generate_scenario(enable_frequency=enable_frequency,
+                                           precise_ratio=precise_ratio)
 
     save_results(scenario, output_path)
 
@@ -484,6 +571,7 @@ def main(args: Optional[List[str]] = None) -> int:
     print(f"  随机种子: {parsed_args.seed}")
     print(f"  历元时间: {parsed_args.epoch}")
     print(f"  频次约束: {'启用' if parsed_args.frequency else '禁用'}")
+    print(f"  精准需求: {parsed_args.precise_ratio:.0%} 目标" if parsed_args.precise_ratio > 0 else "  精准需求: 禁用")
     print(f"  输出路径: {parsed_args.output}")
 
     try:
@@ -491,7 +579,8 @@ def main(args: Optional[List[str]] = None) -> int:
             output_path=parsed_args.output,
             seed=parsed_args.seed,
             epoch=parsed_args.epoch,
-            enable_frequency=parsed_args.frequency
+            enable_frequency=parsed_args.frequency,
+            precise_ratio=parsed_args.precise_ratio,
         )
 
         print_scenario_summary(scenario)

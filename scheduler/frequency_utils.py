@@ -4,7 +4,7 @@
 为调度算法提供观测频次约束的支持。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 
@@ -26,11 +26,63 @@ class ObservationTask:
     time_window_end: Optional[datetime] = None
     resolution_required: float = 10.0
     data_size_gb: float = 1.0
+    # 旧字段（单值，向后兼容）
+    required_imaging_mode: Optional[str] = None
+    required_satellite_type: Optional[str] = None
+    # 精准需求字段（从Target透传）
+    allowed_satellite_types: List[str] = field(default_factory=list)
+    allowed_satellite_ids: List[str] = field(default_factory=list)
+    required_imaging_modes: List[str] = field(default_factory=list)
+    # PMC 字段（从Target透传，驱动 requires_pmc() 逻辑）
+    pmc_priority: int = 0
+    pmc_speed_reduction_range: Optional[Tuple[float, float]] = None
 
     @property
     def id(self) -> str:
         """兼容原始Target的id属性"""
         return self.task_id
+
+    def requires_pmc(self) -> bool:
+        """检查是否需要PMC模式（与 Target.requires_pmc() 语义一致）"""
+        pmc_modes = {'forward_pushbroom_pmc', 'reverse_pushbroom_pmc'}
+        return (
+            self.pmc_priority > 0
+            or self.required_imaging_mode in pmc_modes
+            or bool(set(self.required_imaging_modes) & pmc_modes)
+        )
+
+    def requires_forward_pmc(self) -> bool:
+        """检查是否需要前向PMC模式（与 Target.requires_forward_pmc() 语义一致）"""
+        return (self.required_imaging_mode == 'forward_pushbroom_pmc'
+                or 'forward_pushbroom_pmc' in self.required_imaging_modes)
+
+    def requires_reverse_pmc(self) -> bool:
+        """检查是否需要反向PMC模式（与 Target.requires_reverse_pmc() 语义一致）"""
+        return (self.required_imaging_mode == 'reverse_pushbroom_pmc'
+                or 'reverse_pushbroom_pmc' in self.required_imaging_modes)
+
+    def get_pmc_direction(self) -> Optional[str]:
+        """获取PMC方向（'forward' 或 'reverse'）。
+
+        若 ``required_imaging_modes`` 同时包含 forward 和 reverse，forward 优先。
+        与 Target.get_pmc_direction() 语义一致。
+        """
+        if (self.required_imaging_mode == 'forward_pushbroom_pmc'
+                or 'forward_pushbroom_pmc' in self.required_imaging_modes):
+            return 'forward'
+        if (self.required_imaging_mode == 'reverse_pushbroom_pmc'
+                or 'reverse_pushbroom_pmc' in self.required_imaging_modes):
+            return 'reverse'
+        return None
+
+    def get_preferred_speed_reduction(self) -> Optional[float]:
+        """获取首选速度变化比（前向为降速比，反向为增速比）。
+
+        与 Target.get_preferred_speed_reduction() 语义一致。
+        """
+        if self.pmc_speed_reduction_range:
+            return (self.pmc_speed_reduction_range[0] + self.pmc_speed_reduction_range[1]) / 2
+        return None
 
 
 def create_observation_tasks(targets) -> List[ObservationTask]:
@@ -69,7 +121,18 @@ def create_observation_tasks(targets) -> List[ObservationTask]:
                 time_window_start=getattr(target, 'time_window_start', None),
                 time_window_end=getattr(target, 'time_window_end', None),
                 resolution_required=getattr(target, 'resolution_required', 10.0),
-                data_size_gb=getattr(target, 'data_size_gb', 1.0)
+                data_size_gb=getattr(target, 'data_size_gb', 1.0),
+                required_imaging_mode=getattr(target, 'required_imaging_mode', None),
+                required_satellite_type=getattr(target, 'required_satellite_type', None),
+                allowed_satellite_types=list(getattr(target, 'allowed_satellite_types', [])),
+                allowed_satellite_ids=list(getattr(target, 'allowed_satellite_ids', [])),
+                required_imaging_modes=list(getattr(target, 'required_imaging_modes', [])),
+                pmc_priority=getattr(target, 'pmc_priority', 0),
+                pmc_speed_reduction_range=(
+                    tuple(r)  # 保证类型为 Tuple[float, float]，无论来源是 list 还是 tuple
+                    if (r := getattr(target, 'pmc_speed_reduction_range', None)) is not None
+                    else None
+                ),
             ))
 
     return tasks

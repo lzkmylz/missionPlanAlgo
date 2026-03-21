@@ -218,6 +218,25 @@ class FingerprintCalculator:
                     'priority': reqs.get('priority')
                 }
 
+            # 精准需求字段纳入哈希（排序保证顺序无关）
+            # 注意：key 名称与 Target.from_dict() 和场景 JSON 顶层字段保持一致，
+            # 若将来修改字段名，此处和 Target.from_dict() 必须同步更新。
+            # 旧字段 required_satellite_type / required_imaging_mode 也必须纳入，
+            # 否则只改旧字段的两个场景会命中同一缓存条目。
+            allowed_types = sorted(tgt.get('allowed_satellite_types', []))
+            allowed_ids = sorted(tgt.get('allowed_satellite_ids', []))
+            req_modes = sorted(tgt.get('required_imaging_modes', []))
+            legacy_sat_type = tgt.get('required_satellite_type')
+            legacy_mode = tgt.get('required_imaging_mode')
+            if allowed_types or allowed_ids or req_modes or legacy_sat_type or legacy_mode:
+                norm_tgt['precise_requirements'] = {
+                    'allowed_satellite_types': allowed_types,
+                    'allowed_satellite_ids': allowed_ids,
+                    'required_imaging_modes': req_modes,
+                    'required_satellite_type': legacy_sat_type,
+                    'required_imaging_mode': legacy_mode,
+                }
+
             normalized.append(norm_tgt)
             tgt_id = tgt.get('id')
             if tgt_id:
