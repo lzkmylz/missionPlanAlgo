@@ -13,6 +13,11 @@
   },
   "capabilities": {
     "_comment": "卫星载荷能力配置 - 比optical_1更强的性能",
+    "imaging_modes": [
+      "frame",
+      "single_pass_mosaic"
+    ],
+    "imaging_modes_comment": "支持的成像模式列表",
     "max_roll_angle": 35.0,
     "max_roll_angle_comment": "最大滚转角 ±35度 - 绕X轴侧摆（原侧摆角）",
     "max_pitch_angle": 20.0,
@@ -50,6 +55,41 @@
       "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
     },
     "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+    "isl": {
+      "_comment": "星间链路配置模板 - 默认禁用，按需启用",
+      "enabled": false,
+      "laser": {
+        "wavelength_nm": 1550,
+        "transmit_power_w": 2.0,
+        "transmit_aperture_m": 0.1,
+        "receive_aperture_m": 0.1,
+        "beam_divergence_urad": 5.0,
+        "max_range_km": 7000,
+        "acquisition_time_s": 30,
+        "coarse_tracking_time_s": 5,
+        "fine_tracking_time_s": 2,
+        "tracking_accuracy_urad": 2.0,
+        "point_ahead_urad": 30.0,
+        "min_link_margin_db": 3.0,
+        "snr_required_db": 20.0,
+        "receiver_sensitivity_dBm": -31.0
+      },
+      "microwave": {
+        "frequency_ghz": 26.0,
+        "transmit_power_w": 10.0,
+        "antenna_gain_dbi": 30.0,
+        "max_beam_count": 4,
+        "scan_angle_deg": 60.0,
+        "max_range_km": 3500,
+        "tdma_slots": 8,
+        "gain_rolloff_db_per_deg": 0.067,
+        "system_noise_temp_k": 1000.0,
+        "snr_required_db": 15.0
+      },
+      "peer_links": [],
+      "max_simultaneous_laser": 2,
+      "link_selection": "laser_preferred"
+    },
     "imager": {
       "_comment": "光学成像器详细配置 - FOV配置被payload_config引用",
       "imager_type": "optical",
@@ -58,7 +98,7 @@
       "focal_length_comment": "光学焦距 8.5米 - 长焦距实现高分辨率",
       "aperture": 0.8,
       "aperture_comment": "光学孔径 0.8米 - 大孔径提高集光能力",
-      "pixel_size": 0.0000065,
+      "pixel_size": 6.5e-06,
       "pixel_size_comment": "探测器像元尺寸 6.5微米 - 更小的像元实现高分辨率",
       "quantization": 12,
       "quantization_comment": "量化位数 12bit - 更高的动态范围",
@@ -102,7 +142,11 @@
             "along_track_fov_deg_comment": "沿轨迹视场半角 0.62度"
           },
           "characteristics": {
-            "spectral_bands": ["PAN", "RGB", "NIR"],
+            "spectral_bands": [
+              "PAN",
+              "RGB",
+              "NIR"
+            ],
             "spectral_bands_comment": "光谱波段: 全色、RGB、近红外",
             "integration_time_ms": 1.0,
             "integration_time_ms_comment": "积分时间 1毫秒",
@@ -111,6 +155,40 @@
             "frame_rate_fps": 1.0,
             "frame_rate_fps_comment": "帧率 1fps - 每秒拍摄帧数",
             "description": "框幅式成像，单帧高分辨率拍摄，适合点目标精细成像"
+          }
+        },
+        "single_pass_mosaic": {
+          "_comment": "单次多条带拼幅成像模式 - 一次过境内快速侧摆覆盖多个相邻条带",
+          "resolution_m": 0.5,
+          "resolution_m_comment": "分辨率 0.5米 - 亚米级高分辨率成像",
+          "swath_width_m": 42000,
+          "swath_width_m_comment": "总幅宽42km：15000×(1+2×0.9)=42000m，即3条带首尾总覆盖宽度",
+          "power_consumption_w": 207.0,
+          "power_consumption_w_comment": "功耗 207瓦特（180W框幅基础 × 1.15倍机动开销）",
+          "data_rate_mbps": 250.0,
+          "min_duration_s": 60.0,
+          "max_duration_s": 120.0,
+          "mode_type": "optical",
+          "fov_config": {
+            "cross_track_fov_deg": 2.5,
+            "along_track_fov_deg": 0.5
+          },
+          "characteristics": {
+            "spectral_bands": [
+              "PAN",
+              "RGB",
+              "NIR"
+            ],
+            "description": "单次多条带拼幅成像，3条带×15km，总幅宽约42km",
+            "mosaic": true,
+            "num_strips": 3,
+            "strip_swath_width_m": 15000.0,
+            "overlap_ratio": 0.1,
+            "inter_strip_slew_time_s": 12.0,
+            "strip_imaging_duration_s": 8.0,
+            "max_roll_step_deg": 20.0,
+            "max_total_roll_span_deg": 50.0,
+            "power_overhead_factor": 1.15
           }
         }
       },

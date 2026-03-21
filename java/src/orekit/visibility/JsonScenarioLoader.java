@@ -1,6 +1,7 @@
 package orekit.visibility;
 
 import orekit.visibility.model.GroundStationConfig;
+import orekit.visibility.model.ISLSatellitePairConfig;
 import orekit.visibility.model.RelaySatelliteConfig;
 import orekit.visibility.model.SatelliteConfig;
 import orekit.visibility.model.TargetConfig;
@@ -14,7 +15,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * JSON场景文件加载器
@@ -238,6 +241,72 @@ public class JsonScenarioLoader {
         }
 
         return relays;
+    }
+
+    /**
+     * 加载ISL卫星对配置
+     *
+     * 读取每颗卫星capabilities.isl字段，构建ISLSatellitePairConfig列表。
+     * 通过去重集合确保(A,B)和(B,A)只生成一个对。
+     */
+    public List<ISLSatellitePairConfig> loadISLPairs() {
+        List<ISLSatellitePairConfig> pairs = new ArrayList<>();
+        Set<String> seenPairs = new HashSet<>();  // 去重：避免(A,B)和(B,A)重复
+
+        JSONArray satArray = scenarioData.getJSONArray("satellites");
+        for (int i = 0; i < satArray.length(); i++) {
+            JSONObject satJson = satArray.getJSONObject(i);
+            String satId = satJson.getString("id");
+            JSONObject capabilities = satJson.getJSONObject("capabilities");
+
+            if (!capabilities.has("isl")) continue;
+            JSONObject islConfig = capabilities.getJSONObject("isl");
+            if (!islConfig.optBoolean("enabled", false)) continue;
+
+            // 解析激光配置
+            double laserMaxRange = 7000.0, laserAcqTime = 30.0, laserTrackAcc = 2.0;
+            if (islConfig.has("laser")) {
+                JSONObject laser = islConfig.getJSONObject("laser");
+                laserMaxRange = laser.optDouble("max_range_km", 7000.0);
+                laserAcqTime = laser.optDouble("acquisition_time_s", 30.0);
+                laserTrackAcc = laser.optDouble("tracking_accuracy_urad", 2.0);
+            }
+
+            // 解析微波配置
+            double mwMaxRange = 3500.0, mwScanAngle = 60.0;
+            if (islConfig.has("microwave")) {
+                JSONObject mw = islConfig.getJSONObject("microwave");
+                mwMaxRange = mw.optDouble("max_range_km", 3500.0);
+                mwScanAngle = mw.optDouble("scan_angle_deg", 60.0);
+            }
+
+            // 解析peer_links
+            if (!islConfig.has("peer_links")) continue;
+            JSONArray peerLinks = islConfig.getJSONArray("peer_links");
+            for (int j = 0; j < peerLinks.length(); j++) {
+                JSONObject peer = peerLinks.getJSONObject(j);
+                String peerId = peer.getString("peer_satellite_id");
+                String linkType = peer.optString("link_type", "laser");
+                if (!peer.optBoolean("enabled", true)) continue;
+
+                // 去重：只保留(A,B)，不再保留(B,A)
+                String pairKey = satId.compareTo(peerId) < 0
+                    ? satId + "_" + peerId
+                    : peerId + "_" + satId;
+                if (seenPairs.contains(pairKey)) continue;
+                seenPairs.add(pairKey);
+
+                double maxRange = "laser".equalsIgnoreCase(linkType) ? laserMaxRange : mwMaxRange;
+                double scanAngle = "microwave".equalsIgnoreCase(linkType) ? mwScanAngle : 90.0;
+
+                pairs.add(new ISLSatellitePairConfig(
+                    satId, peerId, linkType, maxRange,
+                    laserAcqTime, laserTrackAcc, scanAngle
+                ));
+            }
+        }
+
+        return pairs;
     }
 
     /**

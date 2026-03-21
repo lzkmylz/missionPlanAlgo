@@ -50,6 +50,41 @@
       "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
     },
     "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+    "isl": {
+      "_comment": "星间链路配置模板 - 默认禁用，按需启用",
+      "enabled": false,
+      "laser": {
+        "wavelength_nm": 1550,
+        "transmit_power_w": 2.0,
+        "transmit_aperture_m": 0.1,
+        "receive_aperture_m": 0.1,
+        "beam_divergence_urad": 5.0,
+        "max_range_km": 7000,
+        "acquisition_time_s": 30,
+        "coarse_tracking_time_s": 5,
+        "fine_tracking_time_s": 2,
+        "tracking_accuracy_urad": 2.0,
+        "point_ahead_urad": 30.0,
+        "min_link_margin_db": 3.0,
+        "snr_required_db": 20.0,
+        "receiver_sensitivity_dBm": -31.0
+      },
+      "microwave": {
+        "frequency_ghz": 26.0,
+        "transmit_power_w": 10.0,
+        "antenna_gain_dbi": 30.0,
+        "max_beam_count": 4,
+        "scan_angle_deg": 60.0,
+        "max_range_km": 3500,
+        "tdma_slots": 8,
+        "gain_rolloff_db_per_deg": 0.067,
+        "system_noise_temp_k": 1000.0,
+        "snr_required_db": 15.0
+      },
+      "peer_links": [],
+      "max_simultaneous_laser": 2,
+      "link_selection": "laser_preferred"
+    },
     "imager": {
       "_comment": "SAR成像器详细配置 - FOV配置被payload_config引用",
       "imager_type": "sar",
@@ -112,7 +147,10 @@
           "characteristics": {
             "polarization": "HH+HV",
             "polarization_comment": "极化方式: 水平发射，水平/垂直接收",
-            "incidence_angle_range": [20, 45],
+            "incidence_angle_range": [
+              20,
+              45
+            ],
             "incidence_angle_range_comment": "入射角范围 20-45度",
             "description": "条带模式，标准SAR成像，中等分辨率大范围"
           }
@@ -139,7 +177,10 @@
           "characteristics": {
             "polarization": "HH+HV+VV+VH",
             "polarization_comment": "极化方式: 全极化",
-            "incidence_angle_range": [25, 50],
+            "incidence_angle_range": [
+              25,
+              50
+            ],
             "incidence_angle_range_comment": "入射角范围 25-50度",
             "description": "聚束模式，高分辨率成像，适合精细目标"
           },
@@ -179,7 +220,10 @@
           "characteristics": {
             "polarization": "HH+HV",
             "polarization_comment": "极化方式: 水平发射，水平/垂直接收",
-            "incidence_angle_range": [15, 55],
+            "incidence_angle_range": [
+              15,
+              55
+            ],
             "incidence_angle_range_comment": "入射角范围 15-55度",
             "burst_duration_s": 0.5,
             "burst_duration_s_comment": "Burst持续时间 0.5秒 - 每个子条带照射时间",
@@ -208,9 +252,73 @@
           "characteristics": {
             "polarization": "HH+HV+VV",
             "polarization_comment": "极化方式: 三极化",
-            "incidence_angle_range": [22, 48],
+            "incidence_angle_range": [
+              22,
+              48
+            ],
             "incidence_angle_range_comment": "入射角范围 22-48度",
             "description": "滑动聚束模式，平衡分辨率和幅宽"
+          }
+        },
+        "scansar": {
+          "resolution_m": 15.0,
+          "resolution_m_comment": "分辨率 15米 - burst-limited方位分辨率（比TOPSAR粗，换取更宽幅宽）",
+          "swath_width_m": 300000,
+          "swath_width_m_comment": "幅宽 300公里 - 5子条带合计幅宽（每子条带约60km）",
+          "power_consumption_w": 400.0,
+          "power_consumption_w_comment": "功耗 400瓦特",
+          "data_rate_mbps": 300.0,
+          "data_rate_mbps_comment": "数据率 300Mbps - 分辨率粗，数据量较少",
+          "min_duration_s": 5.0,
+          "min_duration_s_comment": "最短成像时长 5秒（至少完成一个完整循环：5×0.05+4×0.002=0.258s）",
+          "max_duration_s": 30.0,
+          "max_duration_s_comment": "最长成像时长 30秒",
+          "mode_type": "sar",
+          "fov_config": {
+            "range_half_angle_deg": 20.0,
+            "azimuth_half_angle_deg": 1.5
+          },
+          "characteristics": {
+            "polarization": "HH+HV",
+            "incidence_angle_range": [
+              15,
+              60
+            ],
+            "num_subswaths": 5,
+            "burst_duration_s": 0.05,
+            "scalloping_effect": true,
+            "scalloping_effect_comment": "存在扇贝效应（rectangular窗峰值约3.92dB）—ScanSAR与TOPSAR的核心区别",
+            "snr_nonuniform": true,
+            "description": "ScanSAR传统扫描模式：5子条带burst照射，幅宽300km，方位分辨率15m，存在扇贝效应"
+          },
+          "scansar_config": {
+            "_comment": "物理引擎配置 - 方案A（continuous）：连续角度范围+统一Burst参数",
+            "beam_model": "continuous",
+            "wavelength_m": 0.031,
+            "wavelength_m_comment": "X波段雷达波长 0.031m",
+            "antenna_length_m": 6.0,
+            "antenna_length_m_comment": "方位向天线长度 6m（与 imager.antenna_length 一致）",
+            "antenna_width_m": 2.0,
+            "antenna_width_m_comment": "距离向天线宽度 2m",
+            "range_resolution_m": 15.0,
+            "num_subswaths": 5,
+            "burst_duration_s": 0.05,
+            "burst_duration_s_comment": "每子条带照射时长 0.05s（典型ScanSAR值，RADARSAT-2 SWB模式约0.05s）",
+            "burst_switch_time_s": 0.002,
+            "burst_switch_time_s_comment": "子条带间波束切换时间 2ms",
+            "duty_cycle": 0.1,
+            "duty_cycle_comment": "发射占空比 10%，峰值功率因子 = 1/0.10 = 10",
+            "prf_hz": 3000.0,
+            "prf_hz_comment": "标称PRF 3000Hz（满足6m天线物理下限 PRF_min=2V/L_a=2×7500/6=2500Hz）",
+            "center_look_angle_deg": 35.0,
+            "center_look_angle_deg_comment": "中间子条带中心侧视角 35度",
+            "subswath_spacing_deg": 1.5,
+            "subswath_spacing_deg_comment": "子条带间角间距 1.5度",
+            "min_look_angle_deg": 15.0,
+            "max_look_angle_deg": 60.0,
+            "enable_scalloping_model": true,
+            "scalloping_window": "rectangular",
+            "scalloping_window_comment": "方位向加权窗：rectangular（无补偿，峰值扇贝效应约3.92dB）"
           }
         }
       },

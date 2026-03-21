@@ -9,6 +9,8 @@ import orekit.visibility.model.VisibilityWindow;
 import orekit.visibility.JsonScenarioLoader.ObservationRequirement;
 import java.util.Map;
 import orekit.visibility.RelayVisibilityCalculator;
+import orekit.visibility.ISLVisibilityCalculator;
+import orekit.visibility.model.ISLSatellitePairConfig;
 
 import org.orekit.data.DataContext;
 import org.orekit.data.DirectoryCrawler;
@@ -283,6 +285,39 @@ public class LargeScaleFrequencyTest {
                 System.out.println("  发现中继窗口: " + totalRelayWindows);
             }
 
+            // 计算ISL可见性窗口（如果有配置ISL的卫星对）
+            List<ISLSatellitePairConfig> islPairs = loader.loadISLPairs();
+            if (!islPairs.isEmpty()) {
+                System.out.println("\n[2.7/4] 计算ISL星间链路可见窗口...");
+                System.out.println("  ISL卫星对数量: " + islPairs.size());
+                long islStart = System.nanoTime();
+
+                ISLVisibilityCalculator islCalculator = new ISLVisibilityCalculator(calculator.getOrbitCache());
+                double islCoarseStep = 5.0;
+                double islFineStep = 1.0;
+                Map<String, List<VisibilityWindow>> islWindows = islCalculator.computeISLVisibilityWindows(
+                    islPairs, startTime, endTime, islCoarseStep, islFineStep
+                );
+
+                // 将ISL窗口添加到结果中
+                int totalISLWindows = 0;
+                for (Map.Entry<String, List<VisibilityWindow>> entry : islWindows.entrySet()) {
+                    String key = entry.getKey();  // 格式: "satAId_ISL:satBId"
+                    List<VisibilityWindow> windows = entry.getValue();
+                    totalISLWindows += windows.size();
+
+                    // 解析key获取satelliteId和"ISL:satBId"
+                    String[] parts = key.split("_", 2);
+                    if (parts.length == 2) {
+                        result.addWindows(parts[0], parts[1], windows);
+                    }
+                }
+
+                long islTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - islStart);
+                System.out.println("  ISL窗口计算完成: " + String.format("%.2f", islTime/1000.0) + "秒");
+                System.out.println("  发现ISL窗口: " + totalISLWindows);
+            }
+
             // 频次需求分析
             System.out.println("\n[3/4] 频次需求分析...");
             analyzeFrequencyRequirements(result, requirements, startTime);
@@ -376,6 +411,17 @@ public class LargeScaleFrequencyTest {
                 visJson.append("\"end\":\"").append(window.getEndTime().toString()).append("\",");
                 visJson.append("\"dur\":").append(window.getDurationSeconds()).append(",");
                 visJson.append("\"el\":").append(String.format("%.1f", window.getMaxElevation())).append(",");
+
+                // ISL元数据（仅ISL窗口输出）
+                if (window.isISLWindow()) {
+                    visJson.append("\"isl_link_type\":\"").append(window.getIslLinkType()).append("\",");
+                    visJson.append("\"isl_data_rate_mbps\":").append(String.format("%.1f", window.getIslDataRateMbps())).append(",");
+                    visJson.append("\"isl_link_margin_db\":").append(String.format("%.2f", window.getIslLinkMarginDb())).append(",");
+                    visJson.append("\"isl_distance_km\":").append(String.format("%.1f", window.getIslDistanceKm())).append(",");
+                    visJson.append("\"isl_relative_velocity_km_s\":").append(String.format("%.3f", window.getIslRelativeVelocityKmS())).append(",");
+                    visJson.append("\"isl_atp_setup_time_s\":").append(String.format("%.1f", window.getIslAtpSetupTimeS())).append(",");
+                }
+
                 visJson.append("\"attitude_feasible\":").append(window.isAttitudeFeasible()).append(",");
 
                 // 添加姿态采样数据
@@ -419,17 +465,27 @@ public class LargeScaleFrequencyTest {
         gsJson.append("  ]\n}\n");
         Files.write(Paths.get(outputDir + "/ground_stations.json"), gsJson.toString().getBytes());
 
-        // 统计目标窗口和地面站窗口数量
+        // 统计各类窗口数量
         int totalWindows = result.getStatistics().getTotalWindows();
         int gsWindowCount = 0;
+        int relayWindowCount = 0;
+        int islWindowCount = 0;
         for (Map.Entry<String, List<VisibilityWindow>> entry : result.getAllWindows().entrySet()) {
-            if (entry.getKey().contains("_GS:")) {
-                gsWindowCount += entry.getValue().size();
+            String key = entry.getKey();
+            int count = entry.getValue().size();
+            // BatchResult.makeKey() 使用 "-" 分隔符，即 "satId-GS:xxx" 或 "satId-ISL:xxx"
+            if (key.contains("-GS:")) {
+                gsWindowCount += count;
+            } else if (key.contains("-RELAY:")) {
+                relayWindowCount += count;
+            } else if (key.contains("-ISL:")) {
+                islWindowCount += count;
             }
         }
-        int targetWindowCount = totalWindows - gsWindowCount;
+        int targetWindowCount = totalWindows - gsWindowCount - relayWindowCount - islWindowCount;
 
-        System.out.println("  已保存: visibility_windows.json (" + totalWindows + "窗口, 目标:" + targetWindowCount + ", 地面站:" + gsWindowCount + ")");
+        System.out.println("  已保存: visibility_windows.json (" + totalWindows + "窗口, 目标:" + targetWindowCount
+            + ", 地面站:" + gsWindowCount + ", 中继:" + relayWindowCount + ", ISL:" + islWindowCount + ")");
         System.out.println("  已保存: satellites.json (" + satellites.size() + "卫星)");
         System.out.println("  已保存: ground_stations.json (" + groundStations.size() + "地面站)");
     }

@@ -45,6 +45,14 @@ public class VisibilityWindow {
     private final List<AttitudeSample> attitudeSamples;  // 姿态采样数据
     private final boolean attitudeFeasible;               // 是否通过姿态约束检查
 
+    // ISL元数据（非ISL窗口时均为null/0）
+    private String islLinkType = null;
+    private double islDataRateMbps = 0.0;
+    private double islLinkMarginDb = 0.0;
+    private double islDistanceKm = 0.0;
+    private double islRelativeVelocityKmS = 0.0;
+    private double islAtpSetupTimeS = 0.0;
+
     /**
      * 创建可见窗口（带姿态数据）
      */
@@ -107,6 +115,30 @@ public class VisibilityWindow {
     public String getConfidence() { return confidence; }
     public List<AttitudeSample> getAttitudeSamples() { return attitudeSamples; }
     public boolean isAttitudeFeasible() { return attitudeFeasible; }
+
+    // ===== ISL元数据 =====
+
+    /**
+     * 设置ISL链路元数据（仅ISL窗口调用）。
+     */
+    public void setISLMetadata(String linkType, double dataRateMbps, double linkMarginDb,
+                               double distanceKm, double relVelKmS, double atpSetupTimeS) {
+        this.islLinkType = linkType;
+        this.islDataRateMbps = dataRateMbps;
+        this.islLinkMarginDb = linkMarginDb;
+        this.islDistanceKm = distanceKm;
+        this.islRelativeVelocityKmS = relVelKmS;
+        this.islAtpSetupTimeS = atpSetupTimeS;
+    }
+
+    /** 是否为ISL窗口 */
+    public boolean isISLWindow() { return islLinkType != null; }
+    public String getIslLinkType() { return islLinkType; }
+    public double getIslDataRateMbps() { return islDataRateMbps; }
+    public double getIslLinkMarginDb() { return islLinkMarginDb; }
+    public double getIslDistanceKm() { return islDistanceKm; }
+    public double getIslRelativeVelocityKmS() { return islRelativeVelocityKmS; }
+    public double getIslAtpSetupTimeS() { return islAtpSetupTimeS; }
 
     @Override
     public String toString() {

@@ -142,6 +142,19 @@ class Target:
     # 区域目标参考分辨率（米），用于动态瓦片计算
     target_resolution_m: float = 10.0
 
+    # ========== 单次多条带拼幅成像（Single-Pass Mosaic）相关字段 ==========
+    # 期望条带数量（None表示使用卫星默认配置）
+    mosaic_strip_count: Optional[int] = None
+
+    # 期望总幅宽（米，None表示使用条带数量×条带幅宽计算）
+    mosaic_total_width_m: Optional[float] = None
+
+    # 拼幅中心滚转偏置（度，0.0表示星下点对称）
+    mosaic_center_roll_deg: float = 0.0
+
+    # 条带间重叠比例要求（覆盖单次多条带拼幅模式的全局overlap_ratio）
+    required_swath_overlap_ratio: float = 0.10
+
     def __post_init__(self):
         """验证数据一致性"""
         if self.target_type == TargetType.POINT:
@@ -212,6 +225,24 @@ class Target:
         z = EARTH_RADIUS_M * math.sin(lat_rad)
 
         return (x, y, z)
+
+    def requires_mosaic(self) -> bool:
+        """检查是否需要单次多条带拼幅成像模式。
+
+        mosaic_strip_count 只在未显式指定其他模式时才触发 mosaic。
+        若 required_imaging_mode 明确指定了非 mosaic 模式（如 'push_broom'），
+        则以 required_imaging_mode 为准，忽略 mosaic_strip_count。
+        """
+        if self.required_imaging_mode == 'single_pass_mosaic':
+            return True
+        if 'single_pass_mosaic' in self.required_imaging_modes:
+            return True
+        # 仅当 required_imaging_mode 未指定其他模式时，才以 mosaic_strip_count 作为触发条件
+        if (self.mosaic_strip_count is not None
+                and self.mosaic_strip_count > 1
+                and self.required_imaging_mode is None):
+            return True
+        return False
 
     def requires_pmc(self) -> bool:
         """检查是否需要PMC模式（前向或反向）"""
@@ -314,6 +345,11 @@ class Target:
             'required_imaging_modes': self.required_imaging_modes,
             'pmc_priority': self.pmc_priority,
             'pmc_speed_reduction_range': self.pmc_speed_reduction_range,
+            # 单次多条带拼幅字段
+            'mosaic_strip_count': self.mosaic_strip_count,
+            'mosaic_total_width_m': self.mosaic_total_width_m,
+            'mosaic_center_roll_deg': self.mosaic_center_roll_deg,
+            'required_swath_overlap_ratio': self.required_swath_overlap_ratio,
         }
 
     @classmethod
@@ -359,4 +395,9 @@ class Target:
             required_imaging_modes=data.get('required_imaging_modes', []),
             pmc_priority=data.get('pmc_priority', 0),
             pmc_speed_reduction_range=pmc_speed_reduction_range,
+            # 单次多条带拼幅字段
+            mosaic_strip_count=data.get('mosaic_strip_count'),
+            mosaic_total_width_m=data.get('mosaic_total_width_m'),
+            mosaic_center_roll_deg=float(data.get('mosaic_center_roll_deg', 0.0)),
+            required_swath_overlap_ratio=float(data.get('required_swath_overlap_ratio', 0.10)),
         )

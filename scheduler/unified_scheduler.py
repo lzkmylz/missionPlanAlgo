@@ -43,6 +43,7 @@ from scheduler.relay.scheduler import (
 )
 from scheduler.relay.downlink_task import RelayDownlinkTask
 from core.network.relay_satellite import RelayNetwork
+from scheduler.isl import ISLDownlinkScheduler, ISLDownlinkTask
 from scheduler.frequency_utils import (
     ObservationTask, create_observation_tasks, calculate_frequency_fitness
 )
@@ -168,6 +169,10 @@ class UnifiedScheduler:
         # 频次需求配置
         self.consider_frequency = self.config.get('consider_frequency', True)
 
+        # ISL router and scheduler (optional, initialised lazily)
+        self._isl_router = None            # TimeVaryingISLRouter | None
+        self._isl_downlink_scheduler: Optional[ISLDownlinkScheduler] = None
+
         # 内部状态
         self._imaging_scheduler: Optional[BaseScheduler] = None
         self._ground_station_scheduler: Optional[GroundStationScheduler] = None
@@ -179,6 +184,12 @@ class UnifiedScheduler:
 
         # 加载预计算轨道数据（如果配置启用）
         self._load_precomputed_orbits()
+
+        # ISL网络构建（如果配置启用且场景中有ISL卫星）
+        if self.config.get('enable_isl', False):
+            self._isl_router = self._build_isl_network_from_config()
+            if self._isl_router is not None:
+                logger.info("ISL多跳路由已启用")
 
     def _initialize_constraint_checkers(self) -> None:
         """初始化精确姿态机动约束检查器
@@ -313,6 +324,80 @@ class UnifiedScheduler:
 
         return result
 
+    def _build_isl_network_from_config(self) -> Optional[Any]:
+        """构建 ISL 网络路由器，使用 UnifiedScheduler 持有的窗口缓存。
+
+        在 UnifiedScheduler 中，窗口缓存（``self.window_cache``）包含所有
+        卫星-目标、卫星-地面站以及卫星-ISL 对等星的可见性窗口。本方法从中
+        提取 ISL 相关窗口并构建 ``TimeVaryingISLRouter``。
+
+        Returns:
+            ``TimeVaryingISLRouter`` 实例，若不可用则返回 ``None``。
+        """
+        try:
+            from core.network.isl_router import ISLRouterWindowCache, TimeVaryingISLRouter
+            from scheduler.base_scheduler import _DuckISLLink
+
+            satellite_isl_configs: Dict[str, Any] = {}
+            for sat in self.mission.satellites:
+                isl_cfg = getattr(getattr(sat, 'capabilities', None), 'isl', None)
+                if isl_cfg is None:
+                    isl_cfg = getattr(sat, 'isl_config', None)
+                if isl_cfg is not None and getattr(isl_cfg, 'enabled', False):
+                    satellite_isl_configs[sat.id] = isl_cfg
+
+            if not satellite_isl_configs:
+                logger.debug("没有卫星启用了ISL，跳过ISL网络构建")
+                return None
+
+            isl_cache = ISLRouterWindowCache()
+            gs_windows: Dict[Tuple[str, str], List[Any]] = {}
+
+            if self.window_cache is not None and hasattr(self.window_cache, '_windows'):
+                for key, windows in self.window_cache._windows.items():
+                    sat_id, target_id = key
+                    if not isinstance(target_id, str):
+                        continue
+
+                    if target_id.startswith('ISL:'):
+                        peer_sat_id = target_id[4:]
+                        for win in windows:
+                            lnk = _DuckISLLink(
+                                satellite_a_id=sat_id,
+                                satellite_b_id=peer_sat_id,
+                                start_time=win.start_time,
+                                end_time=win.end_time,
+                                link_type=getattr(win, 'link_type', 'laser'),
+                                max_data_rate=getattr(win, 'max_data_rate', 10000.0),
+                                atp_setup_time_s=getattr(win, 'atp_setup_time_s', 37.0),
+                                link_quality=getattr(win, 'link_quality', 1.0),
+                                is_viable=getattr(win, 'is_viable', True),
+                            )
+                            isl_cache.add_window(lnk)
+                    elif target_id.startswith('GS:'):
+                        gs_id = target_id[3:]
+                        gs_windows[(sat_id, gs_id)] = list(windows)
+
+            if not gs_windows:
+                logger.debug("ISL网络构建：无GS可见窗口，无法路由到地面站")
+                return None
+
+            router = TimeVaryingISLRouter(
+                isl_window_cache=isl_cache,
+                satellite_isl_configs=satellite_isl_configs,
+                gs_visibility_windows=gs_windows,
+            )
+            logger.info(
+                "ISL网络构建完成：%d 颗卫星启用ISL，%d 条GS可见窗口对",
+                len(satellite_isl_configs),
+                len(gs_windows),
+            )
+            return router
+
+        except Exception as exc:
+            logger.warning("ISL网络构建失败: %s", exc, exc_info=True)
+            return None
+
     def _schedule_relay_downlinks(
         self,
         scheduled_tasks: List[ScheduledTask]
@@ -444,18 +529,29 @@ class UnifiedScheduler:
             failed_tasks = scheduled_tasks
 
         # 对于地面站失败的，尝试中继
+        relay_failed_tasks = failed_tasks
         if failed_tasks and self.relay_network:
             relay_result = self._schedule_relay_downlinks(failed_tasks)
             relay_tasks = relay_result.downlink_tasks
+            relay_succeeded_ids = {t.related_imaging_task_id for t in relay_tasks}
+            relay_failed_tasks = [t for t in failed_tasks if t.task_id not in relay_succeeded_ids]
 
             logger.info(f"  地面站成功: {len(gs_tasks)} 个")
             logger.info(f"  中继成功: {len(relay_tasks)} 个")
 
+        # 对于中继也失败的，尝试ISL多跳路由
+        isl_tasks: List = []
+        if relay_failed_tasks and self._isl_router is not None:
+            isl_tasks_created, isl_failed = self._schedule_isl_downlinks(relay_failed_tasks)
+            isl_tasks = isl_tasks_created
+            logger.info(f"  ISL多跳路由成功: {len(isl_tasks)} 个")
+            logger.info(f"  ISL路由失败: {len(isl_failed)} 个")
+
         # 合并结果
         combined_result = GroundStationScheduleResult()
-        combined_result.downlink_tasks = gs_tasks + [
-            self._convert_relay_to_gs_task(t) for t in relay_tasks
-        ]
+        converted_relay = [self._convert_relay_to_gs_task(t) for t in relay_tasks]
+        converted_isl = [self._convert_isl_to_gs_task(t) for t in isl_tasks]
+        combined_result.downlink_tasks = gs_tasks + converted_relay + converted_isl
         combined_result.failed_tasks = [
             t.task_id for t in scheduled_tasks
             if t.task_id not in {dt.related_imaging_task_id for dt in combined_result.downlink_tasks}
@@ -476,6 +572,75 @@ class UnifiedScheduler:
             effective_data_rate=relay_task.effective_data_rate,
             acquisition_time_seconds=relay_task.acquisition_time_seconds
         )
+
+    def _convert_isl_to_gs_task(self, isl_task: ISLDownlinkTask) -> DownlinkTask:
+        """将ISL多跳任务转换为地面站任务格式（用于结果合并）。
+
+        路由路径编码在 ground_station_id 字段中，格式为
+        ``ISL:<source>->...-><gs_id>``，便于后续统计和日志。
+        """
+        path_str = "->".join(isl_task.route_path_nodes) if isl_task.route_path_nodes else isl_task.destination_gs_id
+        return DownlinkTask(
+            task_id=isl_task.task_id,
+            satellite_id=isl_task.source_satellite_id,
+            ground_station_id=f"ISL:{path_str}",
+            start_time=isl_task.start_time,
+            end_time=isl_task.end_time,
+            data_size_gb=isl_task.data_size_gb,
+            related_imaging_task_id=isl_task.related_imaging_task_id,
+            effective_data_rate=isl_task.effective_bandwidth_mbps,
+            acquisition_time_seconds=isl_task.atp_setup_time_s,
+        )
+
+    def _schedule_isl_downlinks(
+        self,
+        imaging_tasks: List[ScheduledTask],
+    ) -> Tuple[List[ISLDownlinkTask], List[str]]:
+        """执行ISL多跳数传规划（第三层兜底策略）。
+
+        本方法在地面站直传和GEO中继都无法满足的情况下，通过ISL星间链路网络为
+        成像任务找到多跳数传路径。
+
+        Args:
+            imaging_tasks: 地面站直传和GEO中继均失败的成像任务列表。
+
+        Returns:
+            (isl_tasks_created, failed_task_ids):
+                isl_tasks_created — 成功规划的 ISLDownlinkTask 列表。
+                failed_task_ids — 无法通过ISL路由完成数传的任务ID列表。
+        """
+        if self._isl_router is None:
+            logger.debug("ISL路由器未初始化，跳过ISL数传规划")
+            return [], [t.task_id for t in imaging_tasks]
+
+        # 懒加载 ISLDownlinkScheduler
+        if self._isl_downlink_scheduler is None:
+            isl_configs = self.config.get('satellite_isl_configs', {})
+            self._isl_downlink_scheduler = ISLDownlinkScheduler(
+                isl_router=self._isl_router,
+                satellite_isl_configs=isl_configs,
+                max_relay_hops=self.config.get('isl_max_relay_hops', 3),
+                deadline_buffer_s=self.config.get('isl_deadline_buffer_s', 3600.0),
+            )
+
+        isl_tasks, failed_ids = self._isl_downlink_scheduler.schedule_isl_downlinks_for_tasks(
+            imaging_tasks=imaging_tasks,
+            satellite_states={},
+            existing_tasks=[],
+        )
+
+        if isl_tasks:
+            stats = self._isl_downlink_scheduler.get_statistics(isl_tasks)
+            logger.info(
+                "ISL数传统计: 成功=%d, 平均跳数=%.1f, 平均带宽=%.0f Mbps, "
+                "总数据量=%.2f GB",
+                stats['total_isl_tasks'],
+                stats.get('avg_hop_count', 0),
+                stats.get('avg_bandwidth_mbps', 0),
+                stats.get('total_data_relayed_gb', 0),
+            )
+
+        return isl_tasks, failed_ids
 
     def _schedule_imaging(self) -> ScheduleResult:
         """

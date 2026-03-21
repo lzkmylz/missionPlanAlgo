@@ -50,6 +50,41 @@
       "data_rate_comment": "数传速率 300Mbps - X波段相控阵对地数传"
     },
     "_comment_resolution_swath": "注意: resolution和swath_width已移至payload_config中",
+    "isl": {
+      "_comment": "星间链路配置模板 - 默认禁用，按需启用",
+      "enabled": false,
+      "laser": {
+        "wavelength_nm": 1550,
+        "transmit_power_w": 2.0,
+        "transmit_aperture_m": 0.1,
+        "receive_aperture_m": 0.1,
+        "beam_divergence_urad": 5.0,
+        "max_range_km": 7000,
+        "acquisition_time_s": 30,
+        "coarse_tracking_time_s": 5,
+        "fine_tracking_time_s": 2,
+        "tracking_accuracy_urad": 2.0,
+        "point_ahead_urad": 30.0,
+        "min_link_margin_db": 3.0,
+        "snr_required_db": 20.0,
+        "receiver_sensitivity_dBm": -31.0
+      },
+      "microwave": {
+        "frequency_ghz": 26.0,
+        "transmit_power_w": 10.0,
+        "antenna_gain_dbi": 30.0,
+        "max_beam_count": 4,
+        "scan_angle_deg": 60.0,
+        "max_range_km": 3500,
+        "tdma_slots": 8,
+        "gain_rolloff_db_per_deg": 0.067,
+        "system_noise_temp_k": 1000.0,
+        "snr_required_db": 15.0
+      },
+      "peer_links": [],
+      "max_simultaneous_laser": 2,
+      "link_selection": "laser_preferred"
+    },
     "imager": {
       "_comment": "SAR成像器详细配置 - FOV配置被payload_config引用",
       "imager_type": "sar",
@@ -112,7 +147,10 @@
           "characteristics": {
             "polarization": "HH+HV+VV+VH",
             "polarization_comment": "极化方式: 全极化",
-            "incidence_angle_range": [20, 55],
+            "incidence_angle_range": [
+              20,
+              55
+            ],
             "incidence_angle_range_comment": "入射角范围 20-55度",
             "integration_factor": 3.0,
             "integration_factor_comment": "积分因子 3.0 - 3倍标准合成孔径时间",
@@ -175,7 +213,10 @@
           "characteristics": {
             "polarization": "HH+HV+VV",
             "polarization_comment": "极化方式: 三极化",
-            "incidence_angle_range": [18, 52],
+            "incidence_angle_range": [
+              18,
+              52
+            ],
             "incidence_angle_range_comment": "入射角范围 18-52度",
             "integration_factor": 2.0,
             "integration_factor_comment": "积分因子 2.0 - 2倍标准合成孔径时间",
@@ -198,9 +239,18 @@
             "max_range_steering_deg": 3.0,
             "prf_safety_factor": 1.25,
             "beam_positions": [
-              {"beam_id": "SSL-01", "center_incidence_angle_deg": 25.0},
-              {"beam_id": "SSL-02", "center_incidence_angle_deg": 35.0},
-              {"beam_id": "SSL-03", "center_incidence_angle_deg": 45.0}
+              {
+                "beam_id": "SSL-01",
+                "center_incidence_angle_deg": 25.0
+              },
+              {
+                "beam_id": "SSL-02",
+                "center_incidence_angle_deg": 35.0
+              },
+              {
+                "beam_id": "SSL-03",
+                "center_incidence_angle_deg": 45.0
+              }
             ]
           }
         },
@@ -226,7 +276,10 @@
           "characteristics": {
             "polarization": "HH+HV",
             "polarization_comment": "极化方式: 双极化",
-            "incidence_angle_range": [15, 50],
+            "incidence_angle_range": [
+              15,
+              50
+            ],
             "incidence_angle_range_comment": "入射角范围 15-50度",
             "integration_factor": 1.0,
             "integration_factor_comment": "积分因子 1.0 - 标准合成孔径时间",
@@ -239,15 +292,24 @@
             "antenna_length_m": 10.0,
             "antenna_width_m": 2.0,
             "range_resolution_m": 3.0,
-            "duty_cycle": 0.10,
+            "duty_cycle": 0.1,
             "duty_cycle_comment": "发射占空比 10%",
             "nominal_integration_time_s": 0.5,
             "nominal_integration_time_comment": "名义合成孔径时间 0.5s",
             "prf_safety_factor": 1.25,
             "beam_positions": [
-              {"beam_id": "ST-01", "center_incidence_angle_deg": 25.0},
-              {"beam_id": "ST-02", "center_incidence_angle_deg": 35.0},
-              {"beam_id": "ST-03", "center_incidence_angle_deg": 45.0}
+              {
+                "beam_id": "ST-01",
+                "center_incidence_angle_deg": 25.0
+              },
+              {
+                "beam_id": "ST-02",
+                "center_incidence_angle_deg": 35.0
+              },
+              {
+                "beam_id": "ST-03",
+                "center_incidence_angle_deg": 45.0
+              }
             ]
           }
         },
@@ -272,7 +334,10 @@
           },
           "characteristics": {
             "polarization": "VV+VH",
-            "incidence_angle_range": [28, 34],
+            "incidence_angle_range": [
+              28,
+              34
+            ],
             "incidence_angle_range_comment": "实际覆盖入射角范围 28-34度（3条带连续覆盖，间距2°≤波束宽度2.28°，相邻重叠0.28°）",
             "num_subswaths": 3,
             "description": "TOPSAR宽幅扫描模式，3子条带电子扫描，约97km总幅宽"
@@ -291,7 +356,7 @@
             "burst_duration_comment": "突发持续时间 0.25秒（< T_dwell_max≈0.32s，方位向分辨率由公式决定而非物理下限）",
             "burst_switch_time_s": 0.002,
             "burst_switch_time_comment": "子条带切换时间 2ms",
-            "duty_cycle": 0.10,
+            "duty_cycle": 0.1,
             "duty_cycle_comment": "发射占空比 10%",
             "prf_safety_factor": 1.25,
             "subswath_positions": [
@@ -309,6 +374,83 @@
                 "subswath_id": "IW3",
                 "center_incidence_angle_deg": 33.0,
                 "_coverage": "入射角覆盖[31.86°, 34.14°]，幅宽约33km，与IW2重叠0.28°"
+              }
+            ]
+          }
+        },
+        "scansar": {
+          "resolution_m": 10.0,
+          "resolution_m_comment": "分辨率 10米 - burst-limited方位分辨率（6子条带，更宽覆盖）",
+          "swath_width_m": 400000,
+          "swath_width_m_comment": "幅宽 400公里 - 6子条带合计（每子条带约40-50km，L_w=0.78m）",
+          "power_consumption_w": 380.0,
+          "power_consumption_w_comment": "功耗 380瓦特",
+          "data_rate_mbps": 280.0,
+          "data_rate_mbps_comment": "数据率 280Mbps",
+          "min_duration_s": 5.0,
+          "max_duration_s": 30.0,
+          "mode_type": "sar",
+          "fov_config": {
+            "range_half_angle_deg": 22.0,
+            "azimuth_half_angle_deg": 1.5
+          },
+          "characteristics": {
+            "polarization": "HH+HV+VV+VH",
+            "incidence_angle_range": [
+              15,
+              60
+            ],
+            "num_subswaths": 6,
+            "burst_duration_s": 0.06,
+            "burst_duration_comment": "突发时长 0.06s（比SAR-1略长，天线更窄→波束更宽→照射时间可适当延长）",
+            "scalloping_effect": true,
+            "scalloping_effect_comment": "存在扇贝效应（rectangular窗峰值约3.92dB）",
+            "snr_nonuniform": true,
+            "description": "ScanSAR传统扫描模式（SAR-2型）：6子条带burst照射，幅宽400km，方位分辨率10m，存在扇贝效应"
+          },
+          "scansar_config": {
+            "_comment": "物理引擎配置 - 方案C（derived_beam）：仅中心入射角，其余参数由物理公式推导",
+            "_design": "L_w=0.78m → θ_beam=2.28° → half_beam=1.14° → 间距7° → 6条带覆盖约20°~55°",
+            "beam_model": "derived_beam",
+            "wavelength_m": 0.031,
+            "antenna_length_m": 10.0,
+            "antenna_width_m": 0.78,
+            "antenna_width_comment": "距离向天线宽度 0.78m（与spotlight/topsar共用）",
+            "range_resolution_m": 10.0,
+            "num_subswaths": 6,
+            "burst_duration_s": 0.06,
+            "burst_switch_time_s": 0.002,
+            "duty_cycle": 0.09,
+            "duty_cycle_comment": "发射占空比 9%（6子条带分时，每子条带约1/11循环时间）",
+            "prf_safety_factor": 1.25,
+            "enable_scalloping_model": true,
+            "scalloping_window": "rectangular",
+            "scalloping_window_comment": "矩形窗（无补偿），保留真实扇贝效应特性（峰值约3.92dB）",
+            "subswath_positions": [
+              {
+                "subswath_id": "SW1",
+                "center_incidence_angle_deg": 20.0,
+                "_coverage": "仅中心入射角，其余由推导函数填充（入射角范围、PRF、分辨率、扇贝效应均自动计算）"
+              },
+              {
+                "subswath_id": "SW2",
+                "center_incidence_angle_deg": 27.0
+              },
+              {
+                "subswath_id": "SW3",
+                "center_incidence_angle_deg": 34.0
+              },
+              {
+                "subswath_id": "SW4",
+                "center_incidence_angle_deg": 41.0
+              },
+              {
+                "subswath_id": "SW5",
+                "center_incidence_angle_deg": 48.0
+              },
+              {
+                "subswath_id": "SW6",
+                "center_incidence_angle_deg": 55.0
               }
             ]
           }

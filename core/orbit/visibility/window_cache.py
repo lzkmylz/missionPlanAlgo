@@ -119,6 +119,16 @@ class VisibilityWindowCache:
             for _ in compute_sat_gs_windows():
                 pass
 
+    def get_all_windows(self) -> Dict[Tuple[str, str], List[VisibilityWindow]]:
+        """
+        获取所有缓存的可见性窗口 - 公共访问接口
+
+        Returns:
+            Dict[(sat_id, target_id), List[VisibilityWindow]]: 所有窗口字典的浅拷贝，
+            每个键对应的列表也是副本，不会影响内部状态。
+        """
+        return {key: list(v) for key, v in self._windows.items()}
+
     def get_windows(self, satellite_id: str, target_id: str) -> List[VisibilityWindow]:
         """
         获取指定卫星-目标对的所有可见窗口 - O(1)复杂度

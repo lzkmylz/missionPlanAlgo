@@ -32,9 +32,13 @@ class TestISLLink:
             satellite_b_id='SAT-02',
             start_time=start,
             end_time=end,
-            link_quality=0.95,
+            link_type='laser',
             max_data_rate=10000.0,
-            distance=2000.0
+            link_margin_db=3.0,
+            distance_km=2000.0,
+            relative_velocity_km_s=0.0,
+            atp_setup_time_s=5.0,
+            link_quality=0.95
         )
 
         assert link.satellite_a_id == 'SAT-01'
@@ -64,62 +68,46 @@ class TestISLVisibilityCalculator:
 
     @pytest.fixture
     def calculator(self):
-        """Create ISL calculator"""
-        return ISLVisibilityCalculator(
-            link_type='laser',
-            max_link_distance=5000.0,
-            min_elevation_angle=0.0
-        )
+        """Create ISL calculator (legacy)"""
+        import warnings
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            return ISLVisibilityCalculator(
+                link_type='laser',
+                max_link_distance=5000.0,
+                min_elevation_angle=0.0
+            )
 
     def test_initialization(self):
-        """Test calculator initialization"""
-        calc = ISLVisibilityCalculator(link_type='laser')
+        """Test calculator initialization (legacy alias)"""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            calc = ISLVisibilityCalculator(link_type='laser')
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
         assert calc.link_type == 'laser'
-        assert calc.max_data_rate == 10000.0  # 10 Gbps for laser
-
-        calc = ISLVisibilityCalculator(link_type='microwave')
-        assert calc.max_data_rate == 1000.0  # 1 Gbps for microwave
 
     def test_compute_isl_windows(self, calculator, mock_satellites):
-        """Test ISL window computation"""
+        """Test ISL window computation is disabled (legacy)"""
         start = datetime.now()
         end = start + timedelta(hours=1)
 
-        windows = calculator.compute_isl_windows(
-            satellites=mock_satellites,
-            start_time=start,
-            end_time=end,
-            time_step=60
-        )
-
-        # Should return dict keyed by satellite pair
-        assert isinstance(windows, dict)
+        with pytest.raises(NotImplementedError):
+            calculator.compute_isl_windows(
+                satellites=mock_satellites,
+                start_time=start,
+                end_time=end,
+                time_step=60
+            )
 
     def test_compute_pair_windows(self, calculator, mock_satellites):
-        """Test pair-wise ISL window computation"""
-        start = datetime.now()
-        end = start + timedelta(minutes=30)
-
-        windows = calculator._compute_pair_windows(
-            sat_a=mock_satellites[0],
-            sat_b=mock_satellites[1],
-            start_time=start,
-            end_time=end,
-            time_step=60
-        )
-
-        # Should return list of ISLLink objects
-        assert isinstance(windows, list)
+        """Test pair-wise method is no longer available (legacy)"""
+        assert not hasattr(calculator, '_compute_pair_windows')
 
     def test_link_distance_calculation(self, calculator, mock_satellites):
-        """Test link distance calculation"""
-        pos_a = mock_satellites[0].get_position()
-        pos_b = mock_satellites[1].get_position()
-
-        distance = calculator._calculate_distance(pos_a, pos_b)
-
-        assert distance > 0
-        assert isinstance(distance, float)
+        """Test distance calculation method is no longer available (legacy)"""
+        assert not hasattr(calculator, '_calculate_distance')
 
 
 class TestNetworkRouter:
@@ -167,9 +155,13 @@ class TestNetworkRouter:
                     satellite_b_id='SAT-02',
                     start_time=start_time - timedelta(minutes=5),
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.95,
+                    link_type='laser',
                     max_data_rate=10000.0,
-                    distance=2000.0
+                    link_margin_db=3.0,
+                    distance_km=2000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.95
                 )
             ]
         }

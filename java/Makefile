@@ -101,8 +101,18 @@ compile-calculator: compile-cache
 	@echo "$(YELLOW)编译 OptimizedVisibilityCalculator.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/OptimizedVisibilityCalculator.java
 
-# 编译LargeScaleFrequencyTest（依赖OrbitDataExporter）
-compile-main: compile-exporter compile-calculator
+# 编译中继卫星可见性计算器（依赖OrbitStateCache和模型类）
+compile-relay: compile-cache
+	@echo "$(YELLOW)编译 RelayVisibilityCalculator.java...$(NC)"
+	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/RelayVisibilityCalculator.java
+
+# 编译ISL可见性计算器（依赖OrbitStateCache和模型类）
+compile-isl: compile-cache
+	@echo "$(YELLOW)编译 ISLVisibilityCalculator.java...$(NC)"
+	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/ISLVisibilityCalculator.java
+
+# 编译LargeScaleFrequencyTest（依赖OrbitDataExporter、OptimizedVisibilityCalculator、中继计算器和ISL计算器）
+compile-main: compile-exporter compile-calculator compile-relay compile-isl
 	@echo "$(YELLOW)编译 LargeScaleFrequencyTest.java...$(NC)"
 	$(JAVAC) -cp "$(CP)" -d classes $(SRC_DIR)/LargeScaleFrequencyTest.java
 

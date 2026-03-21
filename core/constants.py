@@ -200,6 +200,17 @@ SAR_2_SLIDING_SPOTLIGHT_MAX_DURATION_S = 30.0
 SAR_2_STRIPMAP_MIN_DURATION_S = 15.0
 SAR_2_STRIPMAP_MAX_DURATION_S = 56.0
 
+# SAR TOPSAR模式时长约束 (秒) — SAR-1/SAR-2通用
+SAR_TOPSAR_MIN_DURATION_S = 5.0
+SAR_TOPSAR_MAX_DURATION_S = 60.0
+
+# SAR ScanSAR模式时长约束 (秒) — SAR-1/SAR-2通用
+SAR_SCANSAR_MIN_DURATION_S = 5.0
+SAR_SCANSAR_MAX_DURATION_S = 30.0
+
+# 典型LEO卫星轨道速度 (m/s)，用于SAR物理计算的默认值
+SAR_DEFAULT_V_SAT_MS = 7500.0
+
 # =============================================================================
 # 成像模式特定功耗和数据率默认值
 # =============================================================================

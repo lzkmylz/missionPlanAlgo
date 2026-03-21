@@ -35,7 +35,7 @@ from scheduler.constraints.saa_constraint_checker import SAAConstraintChecker
 from scheduler.constraints import UnifiedSpatiotemporalChecker, SpatiotemporalCheckResult
 from scheduler.constraints import UnifiedManeuverChecker, ManeuverCheckResult
 from core.dynamics.attitude_manager import AttitudeManagementConfig
-from scheduler.common.footprint_utils import fill_footprint_to_task
+from scheduler.common.footprint_utils import fill_footprint_to_task, imaging_mode_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -377,6 +377,7 @@ class MetaheuristicConstraintChecker:
         sat_velocity = (0.0, 7000.0, 0.0)  # 默认速度约7km/s
 
         # 构建批量检查候选
+        _im_str = imaging_mode_to_str(imaging_mode) if imaging_mode else None
         candidate = UnifiedBatchCandidate(
             sat_id=sat_id,
             satellite=sat,
@@ -389,7 +390,8 @@ class MetaheuristicConstraintChecker:
             power_needed=power_needed,
             storage_produced=storage_produced,
             sat_position=sat_position,
-            sat_velocity=sat_velocity
+            sat_velocity=sat_velocity,
+            imaging_mode=_im_str,
         )
 
         # 构建卫星状态字典
@@ -454,7 +456,8 @@ class MetaheuristicConstraintChecker:
         window_start: datetime,
         window_end: datetime,
         imaging_duration: float,
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        imaging_mode: Any = None,   # 新增：传入预选模式，避免重复调用 _select_imaging_mode
     ) -> SpatiotemporalCheckResult:
         """
         使用批量约束检查器检查任务放置（与greedy调度器一致）
@@ -510,6 +513,11 @@ class MetaheuristicConstraintChecker:
             sat_velocity = (0.0, 7000.0, 0.0)  # 默认速度约7km/s
 
             # 构建批量检查候选
+            _im2 = imaging_mode if imaging_mode is not None else self._select_imaging_mode(sat, target)
+            _im2_str = (
+                _im2.value if hasattr(_im2, 'value')
+                else str(_im2) if _im2 else None
+            )
             candidate = UnifiedBatchCandidate(
                 sat_id=sat_id,
                 satellite=sat,
@@ -522,7 +530,8 @@ class MetaheuristicConstraintChecker:
                 power_needed=power_needed,
                 storage_produced=storage_produced,
                 sat_position=sat_position,
-                sat_velocity=sat_velocity
+                sat_velocity=sat_velocity,
+                imaging_mode=_im2_str,
             )
 
             # 构建卫星状态字典
@@ -776,7 +785,7 @@ class MetaheuristicConstraintChecker:
             target_id=getattr(target, 'id', task_id),
             imaging_start=actual_start,
             imaging_end=actual_end,
-            imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
+            imaging_mode=imaging_mode_to_str(imaging_mode),
             slew_angle=slew_result.slew_angle,
             slew_time=slew_result.slew_time,
             storage_before=storage_before,

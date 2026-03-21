@@ -33,12 +33,16 @@ class ImagingMode(Enum):
     # 主动反向推扫模式（Reverse Pitch Motion Compensation）
     REVERSE_PUSHBROOM_PMC = "reverse_pushbroom_pmc"
 
+    # 单次多条带拼幅成像模式
+    SINGLE_PASS_MOSAIC = "single_pass_mosaic"
+
     # SAR模式
     STRIPMAP = "stripmap"
     SPOTLIGHT = "spotlight"
     SCAN = "scan"
     SLIDING_SPOTLIGHT = "sliding_spotlight"
     TOPSAR = "topsar"
+    SCANSAR = "scansar"    # 传统ScanSAR：多子条带burst照射，存在扇贝效应
 
 
 @dataclass
@@ -181,6 +185,21 @@ class ImagingModeConfig:
         # W * s / 3600 = Wh
         return (self.power_consumption_w * duration_s) / 3600.0
 
+    def get_uplink_duration_s(self) -> Optional[float]:
+        """返回该成像模式的指令上注时长覆盖值。
+
+        若未配置则返回 None，调用方应回退到卫星默认值
+        （SatelliteCapabilities.min_uplink_duration_per_task）。
+
+        在 characteristics 字典中配置示例::
+
+            "characteristics": {
+                "uplink_duration_s": 15.0
+            }
+        """
+        val = self.characteristics.get('uplink_duration_s')
+        return float(val) if val is not None else None
+
     def is_pmc_mode(self) -> bool:
         """检查是否为PMC模式"""
         return self.characteristics.get('motion_compensation', False)
@@ -201,6 +220,25 @@ class ImagingModeConfig:
             'min_altitude_m': self.characteristics.get('min_altitude_m', 400000),
             'max_roll_angle_deg': self.characteristics.get('max_roll_angle_deg', 30.0),
             'integration_time_gain': self.characteristics.get('integration_time_gain', 1.33),
+        }
+
+    def is_mosaic_mode(self) -> bool:
+        """检查是否为单次多条带拼幅成像模式"""
+        return self.characteristics.get('mosaic', False)
+
+    def get_mosaic_params(self) -> Dict[str, Any]:
+        """获取多条带拼幅模式参数，非拼幅模式返回空字典"""
+        if not self.is_mosaic_mode():
+            return {}
+        return {
+            'num_strips': self.characteristics.get('num_strips', 3),
+            'strip_swath_width_m': self.characteristics.get('strip_swath_width_m', 15000.0),
+            'overlap_ratio': self.characteristics.get('overlap_ratio', 0.10),
+            'inter_strip_slew_time_s': self.characteristics.get('inter_strip_slew_time_s', 12.0),
+            'strip_imaging_duration_s': self.characteristics.get('strip_imaging_duration_s', 8.0),
+            'max_roll_step_deg': self.characteristics.get('max_roll_step_deg', 20.0),
+            'max_total_roll_span_deg': self.characteristics.get('max_total_roll_span_deg', 50.0),
+            'power_overhead_factor': self.characteristics.get('power_overhead_factor', 1.15),
         }
 
     def get_effective_integration_time(self, duration_s: float) -> float:
@@ -367,6 +405,31 @@ SAR_TOPSAR_MODE = ImagingModeConfig(
     }
 )
 
+# SAR - ScanSAR模式（传统宽幅扫描，存在扇贝效应）
+SAR_SCANSAR_MODE = ImagingModeConfig(
+    resolution_m=15.0,          # burst-limited方位分辨率（比TOPSAR粗）
+    swath_width_m=300000,       # 总幅宽300km（5子条带×约60km），比TOPSAR宽
+    power_consumption_w=400.0,
+    data_rate_mbps=300.0,       # 数据率低（分辨率粗，数据量少）
+    min_duration_s=5.0,
+    max_duration_s=30.0,
+    mode_type="sar",
+    fov_config={
+        'range_half_angle_deg': 20.0,    # 大扫描角以覆盖宽幅
+        'azimuth_half_angle_deg': 1.5,
+    },
+    characteristics={
+        'polarization': 'HH+HV',
+        'incidence_angle_range': [15, 60],
+        'num_subswaths': 5,
+        'burst_duration_s': 0.05,        # 典型ScanSAR burst时长（0.04-0.06s）
+        'scalloping_effect': True,        # 标识存在扇贝效应（与TOPSAR的核心区别）
+        'snr_nonuniform': True,           # SNR随方位位置非均匀变化
+        'description': 'ScanSAR传统扫描模式：5子条带burst照射，幅宽300km，'
+                       '方位分辨率15m，存在扇贝效应（约3.92dB@rectangular窗）',
+    }
+)
+
 # 光学 - 主动前向推扫模式（PMC 25%降速）
 OPTICAL_PMC_25PERCENT = ImagingModeConfig(
     resolution_m=0.5,
@@ -498,6 +561,64 @@ SAR_PMC_25PERCENT = ImagingModeConfig(
     }
 )
 
+# 光学 - 单次多条带拼幅成像（3条带，总幅宽约42km）
+# 正确公式: W × (1 + (N-1)×(1-overlap)) = 15000 × (1 + 2×0.9) = 42000m
+OPTICAL_MOSAIC_3STRIP = ImagingModeConfig(
+    resolution_m=0.5,
+    swath_width_m=42000,   # 15000 × (1 + 2×0.9) = 42km
+    power_consumption_w=172.5,  # 150W × 1.15
+    data_rate_mbps=200.0,
+    min_duration_s=60.0,   # 3×8s成像 + 2×12s机动 = 48s，最短60s保留余量
+    max_duration_s=120.0,
+    mode_type="optical",
+    fov_config={
+        'cross_track_fov_deg': 2.5,
+        'along_track_fov_deg': 0.5,
+    },
+    characteristics={
+        'spectral_bands': ['PAN', 'RGB', 'NIR'],
+        'description': '单次多条带拼幅成像，3条带×15km，总幅宽约42km',
+        'mosaic': True,
+        'num_strips': 3,
+        'strip_swath_width_m': 15000.0,
+        'overlap_ratio': 0.10,
+        'inter_strip_slew_time_s': 12.0,
+        'strip_imaging_duration_s': 8.0,
+        'max_roll_step_deg': 20.0,   # ≤ 3°/s × (12-5)s = 21° 物理上限
+        'max_total_roll_span_deg': 50.0,
+        'power_overhead_factor': 1.15,
+    }
+)
+
+# 光学 - 单次多条带拼幅成像（5条带，总幅宽约69km）
+# 正确公式: W × (1 + (N-1)×(1-overlap)) = 15000 × (1 + 4×0.9) = 69000m
+OPTICAL_MOSAIC_5STRIP = ImagingModeConfig(
+    resolution_m=0.5,
+    swath_width_m=69000,   # 15000 × (1 + 4×0.9) = 69km
+    power_consumption_w=172.5,
+    data_rate_mbps=200.0,
+    min_duration_s=100.0,  # 5×8s成像 + 4×12s机动 = 88s，最短100s保留余量
+    max_duration_s=180.0,
+    mode_type="optical",
+    fov_config={
+        'cross_track_fov_deg': 2.5,
+        'along_track_fov_deg': 0.5,
+    },
+    characteristics={
+        'spectral_bands': ['PAN', 'RGB', 'NIR'],
+        'description': '单次多条带拼幅成像，5条带×15km，总幅宽约69km',
+        'mosaic': True,
+        'num_strips': 5,
+        'strip_swath_width_m': 15000.0,
+        'overlap_ratio': 0.10,
+        'inter_strip_slew_time_s': 12.0,
+        'strip_imaging_duration_s': 8.0,
+        'max_roll_step_deg': 20.0,   # ≤ 3°/s × (12-5)s = 21° 物理上限
+        'max_total_roll_span_deg': 60.0,
+        'power_overhead_factor': 1.15,
+    }
+)
+
 # 模式模板映射（用于快速查找）
 MODE_TEMPLATES = {
     'optical_push_broom_high': OPTICAL_PUSH_BROOM_HIGH_RES,
@@ -511,7 +632,10 @@ MODE_TEMPLATES = {
     'sar_scan': SAR_SCAN_MODE,
     'sar_sliding_spotlight': SAR_SLIDING_SPOTLIGHT_MODE,
     'sar_topsar': SAR_TOPSAR_MODE,
+    'sar_scansar': SAR_SCANSAR_MODE,
     'sar_pmc_25percent': SAR_PMC_25PERCENT,
+    'optical_mosaic_3strip': OPTICAL_MOSAIC_3STRIP,
+    'optical_mosaic_5strip': OPTICAL_MOSAIC_5STRIP,
 }
 
 

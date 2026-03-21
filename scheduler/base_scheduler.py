@@ -40,6 +40,42 @@ from scheduler.constraints.precise_requirement_checker import (
 )
 
 
+class _DuckISLLink:
+    """Minimal duck-type implementation of an ISL link window.
+
+    Used internally by ``_build_isl_network()`` to wrap window objects from
+    the visibility cache into a form expected by ``ISLRouterWindowCache``.
+    """
+
+    __slots__ = (
+        'satellite_a_id', 'satellite_b_id', 'start_time', 'end_time',
+        'link_type', 'max_data_rate', 'atp_setup_time_s', 'link_quality',
+        'is_viable',
+    )
+
+    def __init__(
+        self,
+        satellite_a_id: str,
+        satellite_b_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        link_type: str = 'laser',
+        max_data_rate: float = 10000.0,
+        atp_setup_time_s: float = 37.0,
+        link_quality: float = 1.0,
+        is_viable: bool = True,
+    ) -> None:
+        self.satellite_a_id = satellite_a_id
+        self.satellite_b_id = satellite_b_id
+        self.start_time = start_time
+        self.end_time = end_time
+        self.link_type = link_type
+        self.max_data_rate = max_data_rate
+        self.atp_setup_time_s = atp_setup_time_s
+        self.link_quality = link_quality
+        self.is_viable = is_viable
+
+
 class TaskFailureReason(Enum):
     """任务失败原因枚举 - Chapter 12.4完整实现"""
     # 资源约束
@@ -249,6 +285,14 @@ class ScheduledTask:
     sar_topsar_cycle_time_s: Optional[float] = None          # 完整循环时间（s）
     sar_topsar_matched_subswath_id: Optional[str] = None     # 匹配的中心子条带ID
 
+    # 单次多条带拼幅成像特有字段
+    mosaic_num_strips: Optional[int] = None                    # 实际规划的条带数量
+    mosaic_strip_plans: List[Dict[str, Any]] = field(default_factory=list)  # 各条带详情
+    mosaic_total_swath_width_km: Optional[float] = None        # 总幅宽（km）
+    mosaic_roll_sequence_deg: List[float] = field(default_factory=list)  # 各条带滚转角序列
+    mosaic_total_duration_s: Optional[float] = None            # 全部条带成像总时长（s）
+    mosaic_degraded_geometry: bool = False                      # True 表示条带中心坐标为近似值（星下点回退）
+
     def to_dict(self) -> Dict[str, Any]:
         # Calculate imaging_duration if not explicitly set
         imaging_duration = 0.0
@@ -320,6 +364,13 @@ class ScheduledTask:
             'sar_topsar_burst_duration_s': self.sar_topsar_burst_duration_s,
             'sar_topsar_cycle_time_s': self.sar_topsar_cycle_time_s,
             'sar_topsar_matched_subswath_id': self.sar_topsar_matched_subswath_id,
+            # 单次多条带拼幅成像特有字段
+            'mosaic_num_strips': self.mosaic_num_strips,
+            'mosaic_strip_plans': self.mosaic_strip_plans,
+            'mosaic_total_swath_width_km': self.mosaic_total_swath_width_km,
+            'mosaic_roll_sequence_deg': self.mosaic_roll_sequence_deg,
+            'mosaic_total_duration_s': self.mosaic_total_duration_s,
+            'mosaic_degraded_geometry': self.mosaic_degraded_geometry,
         }
 
 
@@ -812,6 +863,36 @@ class BaseScheduler(ABC):
         """设置窗口缓存"""
         self.window_cache = cache
 
+    def build_uplink_registry(self):
+        """从当前 window_cache 构建指令上注窗口注册表。
+
+        复用已预计算的 GS: / RELAY: / ISL: 前缀窗口，无额外计算开销。
+        返回 UplinkWindowRegistry 实例（或 None 若 window_cache 不可用）。
+
+        调用时机: 在 window_cache 已通过 set_window_cache() 设置之后。
+
+        典型用法::
+
+            scheduler.set_window_cache(cache)
+            registry = scheduler.build_uplink_registry()
+            checker = UnifiedBatchConstraintChecker(mission, uplink_registry=registry)
+        """
+        try:
+            from scheduler.constraints import UplinkWindowRegistry
+        except ImportError as e:
+            logger.warning(
+                "build_uplink_registry: 无法导入 UplinkWindowRegistry，上注约束已禁用: %s", e
+            )
+            return None
+
+        registry = UplinkWindowRegistry()
+        if self.mission is not None:
+            sat_ids = {s.id for s in self.mission.satellites}
+        else:
+            sat_ids = None
+        registry.load_from_window_cache(self.window_cache, satellite_ids=sat_ids)
+        return registry
+
     def set_position_cache(self, cache) -> None:
         """设置卫星位置缓存（用于预计算位置）"""
         self._position_cache = cache
@@ -858,6 +939,104 @@ class BaseScheduler(ABC):
         except Exception as e:
             logger.debug(f"加载Java预计算轨道数据失败: {e}")
             return False
+
+    def _build_isl_network(self) -> Optional[Any]:
+        """构建ISL网络路由器（如果场景中有卫星配置了ISL能力）。
+
+        读取每颗卫星的 ISL 能力配置（``ISLCapabilityConfig``），收集预计算的
+        ISL 可见性窗口，然后创建 ``TimeVaryingISLRouter``。
+
+        本方法在初始化阶段被调用，若场景中没有卫星启用 ISL，则直接返回
+        ``None``。
+
+        Returns:
+            ``TimeVaryingISLRouter`` 实例，若无可用 ISL 配置或窗口则返回
+            ``None``。
+        """
+        if self.mission is None:
+            return None
+
+        # 收集所有卫星的 ISL 能力配置
+        satellite_isl_configs: Dict[str, Any] = {}
+        for sat in self.mission.satellites:
+            isl_cfg = getattr(getattr(sat, 'capabilities', None), 'isl_capability', None)
+            if isl_cfg is None:
+                # 尝试直接从 satellite.isl_config 获取
+                isl_cfg = getattr(sat, 'isl_config', None)
+            if isl_cfg is not None and getattr(isl_cfg, 'enabled', False):
+                satellite_isl_configs[sat.id] = isl_cfg
+
+        if not satellite_isl_configs:
+            logger.debug("没有卫星启用了ISL，跳过ISL网络构建")
+            return None
+
+        # 从窗口缓存中提取 ISL 可见性窗口
+        # 约定：ISL 窗口的 target_id 以 "ISL:" 前缀开头
+        try:
+            from core.network.isl_router import ISLRouterWindowCache, TimeVaryingISLRouter
+            isl_cache = ISLRouterWindowCache()
+
+            # 单次获取所有窗口，分别处理 ISL 和 GS
+            if self.window_cache is not None:
+                if hasattr(self.window_cache, 'get_all_windows'):
+                    _all_windows = self.window_cache.get_all_windows()
+                else:
+                    _all_windows = getattr(self.window_cache, '_windows', {})
+            else:
+                _all_windows = {}
+
+            isl_windows: Dict[tuple, list] = {}  # 用于 ISL 路由器
+            gs_windows: Dict[tuple, list] = {}   # 用于地面站数传
+
+            for key, windows in _all_windows.items():
+                sat_id, target_id = key
+                if not isinstance(target_id, str):
+                    continue
+                if target_id.startswith('ISL:'):
+                    peer_sat_id = target_id[4:]  # strip 'ISL:'
+                    isl_windows[key] = list(windows)
+                    for win in windows:
+                        # 构造符合 ISLLink duck-type 的对象
+                        _link = _DuckISLLink(
+                            satellite_a_id=sat_id,
+                            satellite_b_id=peer_sat_id,
+                            start_time=win.start_time,
+                            end_time=win.end_time,
+                            link_type=getattr(win, 'link_type', 'laser'),
+                            max_data_rate=getattr(win, 'max_data_rate', 10000.0),
+                            atp_setup_time_s=getattr(win, 'atp_setup_time_s', 37.0),
+                            link_quality=getattr(win, 'link_quality', 1.0),
+                            is_viable=getattr(win, 'is_viable', True),
+                        )
+                        isl_cache.add_window(_link)
+                elif target_id.startswith('GS:'):
+                    gs_id = target_id[3:]
+                    gs_windows[(sat_id, gs_id)] = list(windows)
+
+            if not gs_windows:
+                logger.warning(
+                    "ISL网络构建：无GS可见窗口，ISL路由将无法完成到地面的数据传输。"
+                    "继续构建ISL路由器（星间链路仍可用）"
+                )
+                # 继续构建路由器，不 return None
+
+            router = TimeVaryingISLRouter(
+                isl_window_cache=isl_cache,
+                satellite_isl_configs=satellite_isl_configs,
+                gs_visibility_windows=gs_windows,
+            )
+            logger.info(
+                "ISL网络构建完成：%d 颗卫星启用ISL，%d 条GS可见窗口对",
+                len(satellite_isl_configs),
+                len(gs_windows),
+            )
+            return router
+
+        except ImportError:
+            raise   # 导入失败是结构性错误，不应静默吞掉
+        except Exception as e:
+            logger.warning("ISL网络构建失败: %s", e, exc_info=True)
+            return None
 
     def _sync_orbit_data_to_position_cache(self, time_step_seconds: float = 60.0) -> None:
         """将Java预计算轨道数据同步填充到_position_cache

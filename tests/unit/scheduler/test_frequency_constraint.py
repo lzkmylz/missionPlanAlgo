@@ -15,18 +15,34 @@ from scheduler.frequency_utils import (
 )
 
 
+def _mock_target(target_id: str, **kwargs) -> Mock:
+    """创建含所有必需字段的 Mock 目标，避免 Mock 自动属性导致 TypeError。"""
+    t = Mock()
+    t.id = target_id
+    t.name = kwargs.pop('name', target_id)
+    t.priority = kwargs.pop('priority', 5)
+    t.longitude = kwargs.pop('longitude', 116.4)
+    t.latitude = kwargs.pop('latitude', 39.9)
+    t.required_observations = kwargs.pop('required_observations', 1)
+    # 精准需求字段（list 类型，防止 Mock 自动属性导致 list() 失败）
+    t.allowed_satellite_types = []
+    t.allowed_satellite_ids = []
+    t.required_imaging_modes = []
+    t.required_imaging_mode = None
+    t.required_satellite_type = None
+    t.pmc_priority = 0
+    t.pmc_speed_reduction_range = None
+    for k, v in kwargs.items():
+        setattr(t, k, v)
+    return t
+
+
 class TestCreateObservationTasks:
     """测试创建观测任务"""
 
     def test_single_observation_target(self):
         """测试只需要1次观测的目标"""
-        target = Mock()
-        target.id = "TARGET-001"
-        target.name = "测试目标"
-        target.priority = 5
-        target.longitude = 116.4
-        target.latitude = 39.9
-        target.required_observations = 1
+        target = _mock_target("TARGET-001", name="测试目标", required_observations=1)
 
         tasks = create_observation_tasks([target])
 
@@ -36,13 +52,7 @@ class TestCreateObservationTasks:
 
     def test_multiple_observations_target(self):
         """测试需要多次观测的目标"""
-        target = Mock()
-        target.id = "TARGET-002"
-        target.name = "测试目标"
-        target.priority = 5
-        target.longitude = 116.4
-        target.latitude = 39.9
-        target.required_observations = 5
+        target = _mock_target("TARGET-002", name="测试目标", required_observations=5)
 
         tasks = create_observation_tasks([target])
 
@@ -52,13 +62,7 @@ class TestCreateObservationTasks:
 
     def test_unlimited_observations_target(self):
         """测试不限频次的目标"""
-        target = Mock()
-        target.id = "TARGET-003"
-        target.name = "测试目标"
-        target.priority = 5
-        target.longitude = 116.4
-        target.latitude = 39.9
-        target.required_observations = -1
+        target = _mock_target("TARGET-003", name="测试目标", required_observations=-1)
 
         tasks = create_observation_tasks([target])
 
@@ -68,16 +72,16 @@ class TestCreateObservationTasks:
 
     def test_multiple_targets(self):
         """测试多个目标"""
-        targets = []
-        for i in range(3):
-            target = Mock()
-            target.id = f"TARGET-00{i+1}"
-            target.name = f"目标{i+1}"
-            target.priority = 5
-            target.longitude = 116.0 + i
-            target.latitude = 39.0 + i
-            target.required_observations = i + 1
-            targets.append(target)
+        targets = [
+            _mock_target(
+                f"TARGET-00{i+1}",
+                name=f"目标{i+1}",
+                longitude=116.0 + i,
+                latitude=39.0 + i,
+                required_observations=i + 1,
+            )
+            for i in range(3)
+        ]
 
         tasks = create_observation_tasks(targets)
 

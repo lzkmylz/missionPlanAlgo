@@ -13,6 +13,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def imaging_mode_to_str(imaging_mode: Any) -> str:
+    """将 ImagingMode 枚举或字符串统一转换为字符串（用于 ScheduledTask.imaging_mode 字段）。
+
+    Args:
+        imaging_mode: ImagingMode 枚举成员或任意可转字符串的对象。
+
+    Returns:
+        枚举的 .value 字符串，或 str(imaging_mode)。
+    """
+    from core.models.imaging_mode import ImagingMode
+    if isinstance(imaging_mode, ImagingMode):
+        return imaging_mode.value
+    return str(imaging_mode)
+
+
 def calculate_task_footprint(
     mission,
     attitude_calculator,
@@ -246,31 +261,26 @@ def calculate_footprint_center_from_attitude(
         nadir_lat = math.degrees(math.asin(z / r))
         nadir_lon = math.degrees(math.atan2(y, x))
 
-        # 计算观测角度和方向
-        look_angle = math.sqrt(roll_angle**2 + pitch_angle**2)
-
-        # 如果观测角度接近0，成像中心就是星下点
-        if abs(look_angle) < 0.001:
-            return (nadir_lon, nadir_lat)
-
-        # 观测方向：从姿态角计算（0=北，90=东）
-        look_direction = math.degrees(math.atan2(roll_angle, pitch_angle))
-
-        # 计算地面位移距离
-        # 简化模型：displacement = altitude * tan(look_angle)
-        displacement_km = altitude_km * math.tan(math.radians(look_angle))
-
-        # 将距离转换为经纬度偏移
-        # 考虑纬度影响：1度经度 = 111km * cos(lat)
+        # 将距离转换为经纬度偏移的比例因子
+        # 考虑纬度影响：1度经度 = 111.32km * cos(lat)
         lat_rad = math.radians(nadir_lat)
         km_per_deg_lon = 111.32 * math.cos(lat_rad)
-        if km_per_deg_lon < 0.001:
+        # 0.001 km/deg = 1.0 m/deg，与 multi_strip_calculator.py 使用的极点保护阈值等价
+        if km_per_deg_lon < 0.001:  # 极点附近保护（|lat| ≥ ~89.999°）
             km_per_deg_lon = 0.001
 
-        # 根据观测方向计算偏移
-        direction_rad = math.radians(look_direction)
-        dlon = (displacement_km * math.sin(direction_rad)) / km_per_deg_lon
-        dlat = (displacement_km * math.cos(direction_rad)) / 111.32
+        # 如果姿态角均接近0，成像中心就是星下点
+        if abs(roll_angle) < 0.001 and abs(pitch_angle) < 0.001:
+            return (nadir_lon, nadir_lat)
+
+        # 滚转角（绕飞行方向轴/X轴）产生左右（东西）位移
+        # 俯仰角（绕垂直飞行方向轴/Y轴）产生前后（南北）位移
+        # 各轴独立计算，避免合成角度引入的方向误差
+        ew_displacement_km = altitude_km * math.tan(math.radians(roll_angle))
+        ns_displacement_km = altitude_km * math.tan(math.radians(pitch_angle))
+
+        dlon = ew_displacement_km / km_per_deg_lon
+        dlat = ns_displacement_km / 111.32
 
         center_lon = nadir_lon + dlon
         center_lat = nadir_lat + dlat
@@ -356,3 +366,60 @@ def calculate_center_distance_score(
     except Exception as e:
         logger.debug(f"Failed to calculate center distance score: {e}")
         return 0.5  # 默认中等评分
+
+
+def extract_mosaic_result_fields(unified_result: Any) -> Dict[str, Any]:
+    """从统一约束检查结果中提取单次多条带拼幅字段。
+
+    Args:
+        unified_result: UnifiedBatchResult 或任意含 mosaic_result 属性的对象，
+                        也可为 None。
+
+    Returns:
+        包含以下键的字典：
+            mosaic_num_strips         (Optional[int])
+            mosaic_strip_plans        (List[Dict])
+            mosaic_total_swath_width_km (Optional[float])
+            mosaic_roll_sequence_deg  (List[float])
+            mosaic_total_duration_s   (Optional[float])
+            mosaic_degraded_geometry  (bool)
+    """
+    result: Dict[str, Any] = {
+        'mosaic_num_strips': None,
+        'mosaic_strip_plans': [],
+        'mosaic_total_swath_width_km': None,
+        'mosaic_roll_sequence_deg': [],
+        'mosaic_total_duration_s': None,
+        'mosaic_degraded_geometry': False,
+    }
+
+    mosaic_result = getattr(unified_result, 'mosaic_result', None)
+    if (mosaic_result is not None
+            and mosaic_result.feasible
+            and mosaic_result.strip_plan is not None):
+        strip_plan = mosaic_result.strip_plan
+        if not strip_plan.strips:
+            logger.error(
+                "Feasible StripPlan has no strips — this indicates a bug in "
+                "MultiStripCalculator.plan_strips. Returning empty mosaic fields."
+            )
+            return result
+        result['mosaic_num_strips'] = len(strip_plan.strips)
+        result['mosaic_strip_plans'] = [
+            {
+                'strip_index': s.strip_index,
+                'roll_angle_deg': s.roll_angle_deg,
+                'imaging_start_offset_s': s.imaging_start_offset_s,
+                'imaging_end_offset_s': s.imaging_end_offset_s,
+                'swath_width_m': s.swath_width_m,
+                'swath_center_lon': s.swath_center_lon,
+                'swath_center_lat': s.swath_center_lat,
+            }
+            for s in strip_plan.strips
+        ]
+        result['mosaic_total_swath_width_km'] = strip_plan.total_swath_width_m / 1000.0
+        result['mosaic_roll_sequence_deg'] = list(strip_plan.roll_sequence_deg)
+        result['mosaic_total_duration_s'] = strip_plan.total_duration_s
+        result['mosaic_degraded_geometry'] = getattr(mosaic_result, 'degraded_geometry', False)
+
+    return result

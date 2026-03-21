@@ -14,10 +14,11 @@ from .sar_spotlight_config import SARSpotlightConfig
 from .sar_sliding_spotlight_config import SARSlidingSpotlightConfig
 from .sar_stripmap_config import SARStripmapConfig
 from .sar_topsar_config import SARTOPSARConfig
+from .sar_scansar_config import SARScanSARConfig
 
 
 # SAR配置类型默认解析优先级
-_DEFAULT_SAR_CONFIG_PRIORITY = ('stripmap_config', 'sliding_spotlight_config', 'spotlight_config', 'topsar_config')
+_DEFAULT_SAR_CONFIG_PRIORITY = ('stripmap_config', 'sliding_spotlight_config', 'spotlight_config', 'topsar_config', 'scansar_config')
 
 
 @dataclass
@@ -39,6 +40,7 @@ class PayloadConfiguration:
         sar_sliding_spotlight_configs: SAR滑动聚束模式物理参数，key 为模式名
         sar_stripmap_configs: SAR条带模式物理参数，key 为模式名
         sar_topsar_configs: SAR TOPSAR模式物理参数，key 为模式名
+        sar_scansar_configs: SAR ScanSAR模式物理参数，key 为模式名
 
     SAR配置解析优先级:
     -------------------
@@ -47,6 +49,7 @@ class PayloadConfiguration:
     2. sliding_spotlight_config (滑动聚束配置)
     3. spotlight_config (聚束模式配置)
     4. topsar_config (TOPSAR模式配置)
+    5. scansar_config (ScanSAR模式配置)
 
     可通过类属性或 from_dict 的 config_priority 参数自定义优先级。
     """
@@ -60,6 +63,7 @@ class PayloadConfiguration:
     sar_sliding_spotlight_configs: Dict[str, SARSlidingSpotlightConfig] = field(default_factory=dict)
     sar_stripmap_configs: Dict[str, SARStripmapConfig] = field(default_factory=dict)
     sar_topsar_configs: Dict[str, SARTOPSARConfig] = field(default_factory=dict)
+    sar_scansar_configs: Dict[str, SARScanSARConfig] = field(default_factory=dict)
 
     # SAR计算器实例缓存（非持久化，实例级别）
     _sar_calc_cache: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
@@ -253,6 +257,8 @@ class PayloadConfiguration:
         sar_stripmap_configs: Dict[str, SARStripmapConfig] = {}
         # 解析TOPSAR模式的物理参数配置（topsar_config）
         sar_topsar_configs: Dict[str, SARTOPSARConfig] = {}
+        # 解析ScanSAR模式的物理参数配置（scansar_config）
+        sar_scansar_configs: Dict[str, SARScanSARConfig] = {}
 
         # 配置类型到配置字典和解析函数的映射
         config_mapping = {
@@ -260,6 +266,7 @@ class PayloadConfiguration:
             'sliding_spotlight_config': (sar_sliding_spotlight_configs, SARSlidingSpotlightConfig),
             'stripmap_config': (sar_stripmap_configs, SARStripmapConfig),
             'topsar_config': (sar_topsar_configs, SARTOPSARConfig),
+            'scansar_config': (sar_scansar_configs, SARScanSARConfig),
         }
 
         # 使用提供的优先级或默认优先级
@@ -291,6 +298,7 @@ class PayloadConfiguration:
             sar_sliding_spotlight_configs=sar_sliding_spotlight_configs,
             sar_stripmap_configs=sar_stripmap_configs,
             sar_topsar_configs=sar_topsar_configs,
+            sar_scansar_configs=sar_scansar_configs,
         )
 
     def validate(self) -> bool:
@@ -448,6 +456,33 @@ class PayloadConfiguration:
     def has_topsar_config(self, mode: str = 'topsar') -> bool:
         """检查指定模式是否配置了TOPSAR物理参数"""
         return mode in self.sar_topsar_configs
+
+    def get_scansar_calculator(self, mode: str = 'scansar', use_cache: bool = True):
+        """
+        获取指定ScanSAR模式的物理计算器实例。
+
+        Args:
+            mode: 模式名称（如 "scansar"）
+            use_cache: 是否使用缓存（默认True）
+
+        Returns:
+            SARScanSARCalculator，若该模式无 scansar_config 则返回 None
+        """
+        cfg = self.sar_scansar_configs.get(mode)
+        if cfg is None:
+            return None
+
+        from core.dynamics.sar_scansar_calculator import SARScanSARCalculator
+
+        if not use_cache:
+            return SARScanSARCalculator(cfg)
+
+        cache_key = f"scansar:{mode}"
+        return self._get_cached_calculator(cache_key, lambda: SARScanSARCalculator(cfg))
+
+    def has_scansar_config(self, mode: str = 'scansar') -> bool:
+        """检查指定模式是否配置了ScanSAR物理参数"""
+        return mode in self.sar_scansar_configs
 
     def get_pmc_modes(self) -> List[str]:
         """

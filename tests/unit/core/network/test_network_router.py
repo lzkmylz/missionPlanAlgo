@@ -122,9 +122,13 @@ class TestNetworkRouterInitialization:
                     satellite_b_id='SAT-02',
                     start_time=start_time,
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.95,
+                    link_type='laser',
                     max_data_rate=10000.0,
-                    distance=2000.0
+                    link_margin_db=3.0,
+                    distance_km=2000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.95
                 )
             ]
         }
@@ -158,9 +162,13 @@ class TestNetworkRouterTopology:
                     satellite_b_id='SAT-02',
                     start_time=start_time - timedelta(minutes=5),
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.95,
+                    link_type='laser',
                     max_data_rate=10000.0,
-                    distance=2000.0
+                    link_margin_db=3.0,
+                    distance_km=2000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.95
                 )
             ],
             ('SAT-02', 'SAT-03'): [
@@ -169,9 +177,13 @@ class TestNetworkRouterTopology:
                     satellite_b_id='SAT-03',
                     start_time=start_time - timedelta(minutes=5),
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.90,
+                    link_type='laser',
                     max_data_rate=8000.0,
-                    distance=3000.0
+                    link_margin_db=3.0,
+                    distance_km=3000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.90
                 )
             ]
         }
@@ -381,9 +393,13 @@ class TestNetworkRouterPathCalculations:
                     satellite_b_id='SAT-02',
                     start_time=start_time - timedelta(minutes=5),
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.95,
+                    link_type='laser',
                     max_data_rate=10000.0,
-                    distance=2000.0
+                    link_margin_db=3.0,
+                    distance_km=2000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.95
                 )
             ],
             ('SAT-02', 'SAT-03'): [
@@ -392,9 +408,13 @@ class TestNetworkRouterPathCalculations:
                     satellite_b_id='SAT-03',
                     start_time=start_time - timedelta(minutes=5),
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.90,
+                    link_type='laser',
                     max_data_rate=8000.0,
-                    distance=3000.0
+                    link_margin_db=3.0,
+                    distance_km=3000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.90
                 )
             ]
         }
@@ -526,9 +546,13 @@ class TestNetworkRouterFindBestRoute:
                     satellite_b_id='SAT-02',
                     start_time=start_time - timedelta(minutes=5),
                     end_time=start_time + timedelta(minutes=10),
-                    link_quality=0.95,
+                    link_type='laser',
                     max_data_rate=10000.0,
-                    distance=2000.0
+                    link_margin_db=3.0,
+                    distance_km=2000.0,
+                    relative_velocity_km_s=0.0,
+                    atp_setup_time_s=5.0,
+                    link_quality=0.95
                 )
             ]
         })

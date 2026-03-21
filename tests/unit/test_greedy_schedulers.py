@@ -665,7 +665,7 @@ class TestSPTWithWindows:
         result = scheduler._find_best_assignment(self.target)
 
         assert result is not None
-        sat_id, window, imaging_mode, slew_result = result
+        sat_id, window, imaging_mode, slew_result, unified_result = result
         assert sat_id == "SAT-01"
 
     def test_spt_find_best_assignment_no_windows(self):
@@ -1216,7 +1216,7 @@ class TestSchedulerWithWindows:
 
         # 应该找到分配
         assert result is not None
-        sat_id, window, imaging_mode, slew_result = result
+        sat_id, window, imaging_mode, slew_result, unified_result = result
         assert sat_id == "SAT-01"
 
     def test_find_best_assignment_no_windows(self):

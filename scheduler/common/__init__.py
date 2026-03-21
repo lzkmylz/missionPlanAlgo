@@ -17,6 +17,8 @@ from .footprint_utils import (
     calculate_haversine_distance,
     calculate_footprint_center_from_attitude,
     calculate_center_distance_score,
+    extract_mosaic_result_fields,
+    imaging_mode_to_str,
 )
 
 __all__ = [
@@ -44,4 +46,6 @@ __all__ = [
     'calculate_haversine_distance',
     'calculate_footprint_center_from_attitude',
     'calculate_center_distance_score',
+    'extract_mosaic_result_fields',
+    'imaging_mode_to_str',
 ]

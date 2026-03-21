@@ -57,6 +57,10 @@ from core.constants import (
     SAR_2_SLIDING_SPOTLIGHT_MAX_DURATION_S,
     SAR_2_STRIPMAP_MIN_DURATION_S,
     SAR_2_STRIPMAP_MAX_DURATION_S,
+    SAR_TOPSAR_MIN_DURATION_S,
+    SAR_TOPSAR_MAX_DURATION_S,
+    SAR_SCANSAR_MIN_DURATION_S,
+    SAR_SCANSAR_MAX_DURATION_S,
     REFERENCE_EPOCH,
     J2000_JULIAN_DATE,
     GMST_CONSTANT_1,
@@ -90,6 +94,9 @@ from core.constants import (
 )
 
 
+_MOSAIC_CONFIG_UNSET = object()  # 哨兵：表示 get_mosaic_config 尚未被调用过
+
+
 class SatelliteType(Enum):
     """卫星类型枚举"""
     OPTICAL_1 = "optical_1"
@@ -100,6 +107,16 @@ class SatelliteType(Enum):
 
 # 从imaging_mode模块导入ImagingMode，确保全局使用统一的枚举定义
 from .imaging_mode import ImagingMode
+
+# 注意：此集合假设所有多条带拼幅（SINGLE_PASS_MOSAIC）均为光学模式。
+# 若未来引入 SAR 拼幅模式，需将其单独处理而非加入此集合，否则会被误判为光学载荷。
+_OPTICAL_IMAGING_MODES: frozenset = frozenset({
+    ImagingMode.PUSH_BROOM,
+    ImagingMode.FRAME,
+    ImagingMode.FORWARD_PUSHBROOM_PMC,
+    ImagingMode.REVERSE_PUSHBROOM_PMC,
+    ImagingMode.SINGLE_PASS_MOSAIC,
+})
 
 
 class OrbitType(Enum):
@@ -336,6 +353,21 @@ class SatelliteCapabilities:
     # 载荷配置（新增）- 支持多成像模式
     payload_config: Optional[Any] = None  # PayloadConfiguration 类型（避免循环导入）
 
+    # 单次多条带拼幅配置（可选，None表示使用payload_config中的mode配置）
+    multi_strip_mosaic_config: Optional[Any] = None  # MultiStripMosaicConfig 类型（避免循环导入）
+
+    # ISL（星间链路）能力配置（可选，None表示不支持ISL）
+    isl_capability: Optional[Any] = None  # ISLCapabilityConfig 类型（避免循环导入）
+
+    # 指令上注配置
+    # 每任务默认上注时长（秒）。可在具体成像模式的 characteristics['uplink_duration_s'] 中覆盖。
+    min_uplink_duration_per_task: float = 5.0
+    # 渠道优先级（字符串列表，避免循环导入 UplinkChannelType 枚举）
+    # 可选值: 'ground_station' | 'relay_satellite' | 'isl'
+    uplink_channel_priority: List[str] = field(
+        default_factory=lambda: ["ground_station", "relay_satellite", "isl"]
+    )
+
     def __post_init__(self):
         """初始化后确保分轴限制存在（向后兼容）并初始化payload_config"""
         # 如果agility中缺少分轴限制字段，从标量限制派生
@@ -422,10 +454,10 @@ class SatelliteCapabilities:
         from .imaging_mode import ImagingModeConfig
         from .payload_config import PayloadConfiguration
 
-        # 根据成像模式确定payload_type
+        # 根据成像模式确定payload_type（使用模块级常量，避免重复分配）
         if self.imaging_modes:
             first_mode = self.imaging_modes[0]
-            if first_mode in [ImagingMode.PUSH_BROOM, ImagingMode.FRAME]:
+            if first_mode in _OPTICAL_IMAGING_MODES:
                 payload_type = 'optical'
             else:
                 payload_type = 'sar'
@@ -448,6 +480,22 @@ class SatelliteCapabilities:
                     characteristics={'spectral_bands': ['PAN', 'RGB', 'NIR']}
                 )
             }
+            # 若包含 SINGLE_PASS_MOSAIC 模式，添加默认3条带配置
+            # 注意：此处使用通用模板 OPTICAL_MOSAIC_3STRIP 作为 fallback，
+            # 生产卫星应在 JSON 配置中显式指定 single_pass_mosaic characteristics，
+            # 以覆盖此默认值并匹配卫星实际机动能力。
+            if ImagingMode.SINGLE_PASS_MOSAIC in self.imaging_modes:
+                from .imaging_mode import OPTICAL_MOSAIC_3STRIP
+                warnings.warn(
+                    f"Satellite '{getattr(self, 'sat_id', '?')}' uses the generic "
+                    "OPTICAL_MOSAIC_3STRIP template for single_pass_mosaic mode because "
+                    "no explicit mosaic characteristics were provided in its configuration. "
+                    "Specify 'characteristics.num_strips', 'max_roll_step_deg', etc. in the "
+                    "satellite JSON to avoid relying on this fallback.",
+                    UserWarning,
+                    stacklevel=4,  # 调用链：用户代码 → dataclass __init__ → __post_init__ → _initialize_default_payload_config → warn
+                )
+                modes['single_pass_mosaic'] = OPTICAL_MOSAIC_3STRIP
         else:  # sar
             default_mode = 'stripmap'
             modes = {}
@@ -500,6 +548,12 @@ class SatelliteCapabilities:
                         fov_config={},
                         characteristics={}
                     )
+                elif mode == ImagingMode.TOPSAR:
+                    from .imaging_mode import SAR_TOPSAR_MODE
+                    modes['topsar'] = SAR_TOPSAR_MODE
+                elif mode == ImagingMode.SCANSAR:
+                    from .imaging_mode import SAR_SCANSAR_MODE
+                    modes['scansar'] = SAR_SCANSAR_MODE
 
             if not modes:
                 # 如果没有匹配的模式，创建默认条带模式
@@ -542,18 +596,24 @@ class SatelliteCapabilities:
             raise RuntimeError("payload_config is not initialized")
         return self.payload_config.get_mode_config(mode)
 
-    def get_mode_resolution(self, mode: Optional[str] = None) -> float:
+    def get_mode_resolution(self, mode: Optional[Any] = None) -> float:
         """
         获取指定成像模式的分辨率
 
         Args:
-            mode: 成像模式名称
+            mode: 成像模式（ImagingMode 枚举或字符串）
 
         Returns:
             分辨率（米）
         """
+        # 统一将 ImagingMode 枚举转为字符串，确保 payload_config 查询正常工作
+        mode_str: Optional[str] = None
+        if isinstance(mode, ImagingMode):
+            mode_str = mode.value
+        elif isinstance(mode, str):
+            mode_str = mode
         if self.payload_config:
-            return self.payload_config.get_resolution(mode)
+            return self.payload_config.get_resolution(mode_str)
         # Fallback to legacy method
         return self._get_legacy_mode_resolution(mode)
 
@@ -616,7 +676,7 @@ class SatelliteCapabilities:
         # Fallback to legacy constraints
         return self._get_legacy_mode_constraints(mode)
 
-    def _get_legacy_mode_resolution(self, mode: Optional[Any] = None) -> Optional[float]:
+    def _get_legacy_mode_resolution(self, mode: Optional[Any] = None) -> float:
         """遗留方法：从imaging_mode_details获取分辨率"""
         mode_value = None
         if isinstance(mode, ImagingMode):
@@ -654,6 +714,47 @@ class SatelliteCapabilities:
     def supports_mode(self, mode: ImagingMode) -> bool:
         """检查是否支持指定成像模式"""
         return mode in self.imaging_modes
+
+    def supports_single_pass_mosaic(self) -> bool:
+        """检查是否支持单次多条带拼幅成像模式"""
+        return ImagingMode.SINGLE_PASS_MOSAIC in self.imaging_modes
+
+    def get_mosaic_config(self) -> Optional[Any]:
+        """获取单次多条带拼幅配置（优先使用字段，其次从payload_config读取）。
+
+        结果在首次调用后缓存，避免在大规模调度中重复分配对象。
+
+        注意：此缓存仅对直接构造的对象有效。通过 dataclasses.replace() 创建的副本
+        不会继承缓存，会在首次调用时重新计算。
+
+        Returns:
+            MultiStripMosaicConfig 或 None
+        """
+        # 检查实例缓存（非 dataclass 字段，通过 __dict__ 直接访问避免影响 dataclass 结构）
+        # 使用哨兵对象区分"未计算"（_MOSAIC_CONFIG_UNSET）和"确实为 None"
+        cached = self.__dict__.get('_mosaic_config_cache', _MOSAIC_CONFIG_UNSET)
+        if cached is not _MOSAIC_CONFIG_UNSET:
+            return cached
+
+        result: Optional[Any] = None
+
+        if self.multi_strip_mosaic_config is not None:
+            result = self.multi_strip_mosaic_config
+        elif self.payload_config is not None:
+            # 尝试从payload_config中读取
+            try:
+                mode_cfg = self.payload_config.get_mode_config('single_pass_mosaic')
+                if mode_cfg is not None and mode_cfg.is_mosaic_mode():
+                    from core.models.multi_strip_mosaic_config import MultiStripMosaicConfig
+                    params = mode_cfg.get_mosaic_params()
+                    result = MultiStripMosaicConfig.from_dict(params)
+            except (ValueError, AttributeError):
+                pass
+
+        # 缓存结果（包括 None，避免重复计算）
+        self.__dict__['_mosaic_config_cache'] = result
+
+        return result
 
     def get_imaging_constraints(self, mode: ImagingMode) -> Optional[Dict[str, float]]:
         """
@@ -702,33 +803,6 @@ class SatelliteCapabilities:
                 )
 
         return True
-
-    def get_mode_resolution(self, mode: Any) -> Optional[float]:
-        """
-        获取指定成像模式的分辨率
-
-        Args:
-            mode: 成像模式（ImagingMode枚举或字符串）
-
-        Returns:
-            分辨率（米），如果模式不存在则返回None
-        """
-        # 将mode转换为字符串进行比较
-        mode_value = None
-        if isinstance(mode, ImagingMode):
-            mode_value = mode.value
-        elif isinstance(mode, str):
-            mode_value = mode
-        else:
-            return None
-
-        # 在imaging_mode_details中查找对应模式的分辨率
-        for detail in self.imaging_mode_details:
-            detail_mode_id = detail.get('mode_id')
-            if detail_mode_id == mode_value:
-                return float(detail.get('resolution', self.resolution))
-
-        return None
 
     def get_best_resolution(self) -> float:
         """
@@ -848,7 +922,9 @@ class Satellite:
             self.capabilities.imaging_modes = [
                 ImagingMode.SPOTLIGHT,
                 ImagingMode.SLIDING_SPOTLIGHT,
-                ImagingMode.STRIPMAP
+                ImagingMode.STRIPMAP,
+                ImagingMode.TOPSAR,
+                ImagingMode.SCANSAR,
             ]
             self.capabilities.max_roll_angle = SAR_MAX_ROLL_ANGLE_DEG
             self.capabilities.max_pitch_angle = SAR_MAX_PITCH_ANGLE_DEG
@@ -868,13 +944,23 @@ class Satellite:
                 ImagingMode.STRIPMAP: {
                     'min_duration': SAR_1_STRIPMAP_MIN_DURATION_S,
                     'max_duration': SAR_1_STRIPMAP_MAX_DURATION_S
-                }
+                },
+                ImagingMode.TOPSAR: {
+                    'min_duration': SAR_TOPSAR_MIN_DURATION_S,
+                    'max_duration': SAR_TOPSAR_MAX_DURATION_S
+                },
+                ImagingMode.SCANSAR: {
+                    'min_duration': SAR_SCANSAR_MIN_DURATION_S,
+                    'max_duration': SAR_SCANSAR_MAX_DURATION_S
+                },
             }
         elif self.sat_type == SatelliteType.SAR_2:
             self.capabilities.imaging_modes = [
                 ImagingMode.SPOTLIGHT,
                 ImagingMode.SLIDING_SPOTLIGHT,
-                ImagingMode.STRIPMAP
+                ImagingMode.STRIPMAP,
+                ImagingMode.TOPSAR,
+                ImagingMode.SCANSAR,
             ]
             self.capabilities.max_roll_angle = SAR_MAX_ROLL_ANGLE_DEG
             self.capabilities.max_pitch_angle = SAR_MAX_PITCH_ANGLE_DEG
@@ -894,7 +980,15 @@ class Satellite:
                 ImagingMode.STRIPMAP: {
                     'min_duration': SAR_2_STRIPMAP_MIN_DURATION_S,
                     'max_duration': SAR_2_STRIPMAP_MAX_DURATION_S
-                }
+                },
+                ImagingMode.TOPSAR: {
+                    'min_duration': SAR_TOPSAR_MIN_DURATION_S,
+                    'max_duration': SAR_TOPSAR_MAX_DURATION_S
+                },
+                ImagingMode.SCANSAR: {
+                    'min_duration': SAR_SCANSAR_MIN_DURATION_S,
+                    'max_duration': SAR_SCANSAR_MAX_DURATION_S
+                },
             }
 
     def get_position_sgp4(self, dt: datetime) -> tuple:
@@ -1052,6 +1146,14 @@ class Satellite:
         # 添加payload_config（如果存在）
         if self.capabilities.payload_config is not None:
             capabilities_dict['payload_config'] = self.capabilities.payload_config.to_dict()
+
+        # 上注配置
+        capabilities_dict['min_uplink_duration_per_task'] = (
+            self.capabilities.min_uplink_duration_per_task
+        )
+        capabilities_dict['uplink_channel_priority'] = list(
+            self.capabilities.uplink_channel_priority
+        )
 
         return {
             'id': self.id,
@@ -1219,6 +1321,22 @@ class Satellite:
             'data_rate_mbps': _pa.get('data_rate_mbps', 300.0),
         }
 
+        # 解析ISL能力配置（可选字段，缺失时为None表示不支持ISL）
+        isl_capability = None
+        isl_data = cap_data.get('isl') or cap_data.get('isl_capability')
+        if isl_data is None:
+            # 也尝试顶层字段（部分场景配置可能将其放在顶层）
+            isl_data = data.get('isl') or data.get('isl_capability')
+        if isl_data is not None and isinstance(isl_data, dict):
+            from .isl_config import ISLCapabilityConfig as _ISLCapabilityConfig
+            try:
+                isl_capability = _ISLCapabilityConfig.from_dict(isl_data)
+            except (ValueError, KeyError) as e:
+                warnings.warn(
+                    f"Failed to parse isl_capability for satellite '{data.get('id', 'unknown')}': {e}",
+                    UserWarning,
+                )
+
         capabilities = SatelliteCapabilities(
             imaging_modes=imaging_modes,
             max_roll_angle=cap_data.get('max_roll_angle', DEFAULT_MAX_ROLL_ANGLE_DEG),
@@ -1236,6 +1354,14 @@ class Satellite:
             agility=agility_dict,
             payload_config=payload_config,
             phased_array=phased_array_dict,
+            isl_capability=isl_capability,
+            min_uplink_duration_per_task=float(
+                cap_data.get('min_uplink_duration_per_task', 5.0)
+            ),
+            uplink_channel_priority=cap_data.get(
+                'uplink_channel_priority',
+                ["ground_station", "relay_satellite", "isl"]
+            ),
         )
 
         # 读取TLE（支持多种格式）

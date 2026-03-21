@@ -38,7 +38,11 @@ from scheduler.constraints.batch_slew_constraint_checker import BatchSlewConstra
 from scheduler.constraints.unified_batch_constraint_checker import (
     UnifiedBatchConstraintChecker, UnifiedBatchCandidate
 )
-from scheduler.common.footprint_utils import calculate_center_distance_score
+from scheduler.common.footprint_utils import (
+    calculate_center_distance_score,
+    extract_mosaic_result_fields,
+    imaging_mode_to_str,
+)
 from core.dynamics.attitude_precache import get_attitude_precache_manager
 from core.decomposer import MosaicPlanner
 try:
@@ -736,12 +740,12 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             self._perf_end('find_best_assignment_per_task', task_t)
 
             if best_assignment:
-                sat_id, window, imaging_mode, slew_result = best_assignment
+                sat_id, window, imaging_mode, slew_result, unified_result = best_assignment
 
                 # Create scheduled task with slew information
                 t = self._perf_start()
                 scheduled_task = self._create_scheduled_task(
-                    task, sat_id, window, imaging_mode, slew_result
+                    task, sat_id, window, imaging_mode, slew_result, unified_result
                 )
                 self._perf_end('create_scheduled_task', t)
 
@@ -1000,7 +1004,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
         return sorted(tasks, key=deadline_key)
 
-    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
+    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult, Any]]:
         """
         Find the best satellite-window assignment for a task using unified constraint checker.
 
@@ -1334,6 +1338,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 # 获取卫星位置
                 sat_position, sat_velocity = self._get_satellite_position(sat, actual_start)
 
+                # 将 ImagingMode 枚举转换为字符串以便 __post_init__ 识别
+                _im_str = imaging_mode_to_str(imaging_mode) if imaging_mode else None
                 unified_candidate = UnifiedBatchCandidate(
                     sat_id=sat.id,
                     satellite=sat,
@@ -1346,7 +1352,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                     sat_position=sat_position,
                     sat_velocity=sat_velocity,
                     power_needed=power_needed,
-                    storage_produced=storage_produced
+                    storage_produced=storage_produced,
+                    imaging_mode=_im_str,
                 )
 
                 unified_candidates.append(unified_candidate)
@@ -1423,7 +1430,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                 # Update best assignment if this is better
                 if best_score is None or score > best_score:
                     best_score = score
-                    best_assignment = (sat.id, window, imaging_mode, slew_result)
+                    best_assignment = (sat.id, window, imaging_mode, slew_result, unified_result)
 
             # 记录阶段4的拒绝统计
             self._rejection_stats['phase3_slew_infeasible'] += phase3_slew_infeasible
@@ -1941,7 +1948,8 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
     def _create_scheduled_task(
         self, task: Any, sat_id: str, window: Any, imaging_mode: Any,
-        slew_result: Optional[SlewFeasibilityResult] = None
+        slew_result: Optional[SlewFeasibilityResult] = None,
+        unified_result: Optional[Any] = None
     ) -> ScheduledTask:
         """
         Create a ScheduledTask object
@@ -2145,7 +2153,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         sar_topsar_matched_subswath_id = None
 
         _DEFAULT_ALT_M = 631_000  # 默认LEO轨道高度（m），orbit.altitude缺失时使用
-        _imaging_mode_str = imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode)
+        _imaging_mode_str = imaging_mode_to_str(imaging_mode)
         _orbit = getattr(sat, 'orbit', None) if sat is not None else None
         _alt_m = (getattr(_orbit, 'altitude', None) or _DEFAULT_ALT_M) if _orbit else _DEFAULT_ALT_M
         # look_angle 近似取 roll_angle 绝对值（平地小角度近似，大侧视角存在轻微偏差）
@@ -2224,6 +2232,15 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             except Exception as _e:
                 logger.debug(f"SAR TOPSAR physics calc failed for {task.id}: {_e}")
 
+        # 单次多条带拼幅模式物理计算结果
+        _mosaic = extract_mosaic_result_fields(unified_result)
+        mosaic_num_strips = _mosaic['mosaic_num_strips']
+        mosaic_strip_plans = _mosaic['mosaic_strip_plans']
+        mosaic_total_swath_width_km = _mosaic['mosaic_total_swath_width_km']
+        mosaic_roll_sequence_deg = _mosaic['mosaic_roll_sequence_deg']
+        mosaic_total_duration_s = _mosaic['mosaic_total_duration_s']
+        mosaic_degraded_geometry = _mosaic['mosaic_degraded_geometry']
+
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
             task_id=task.id,
@@ -2267,6 +2284,13 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             sar_topsar_burst_duration_s=sar_topsar_burst_duration_s,
             sar_topsar_cycle_time_s=sar_topsar_cycle_time_s,
             sar_topsar_matched_subswath_id=sar_topsar_matched_subswath_id,
+            # 单次多条带拼幅物理计算结果
+            mosaic_num_strips=mosaic_num_strips,
+            mosaic_strip_plans=mosaic_strip_plans,
+            mosaic_total_swath_width_km=mosaic_total_swath_width_km,
+            mosaic_roll_sequence_deg=mosaic_roll_sequence_deg,
+            mosaic_total_duration_s=mosaic_total_duration_s,
+            mosaic_degraded_geometry=mosaic_degraded_geometry,
         )
 
         # 如果是聚类任务，记录聚类调度信息

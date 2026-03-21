@@ -35,6 +35,8 @@ from scheduler.common.clustering_mixin import ClusteringMixin, ClusterTask
 from scheduler.common.footprint_utils import (
     fill_footprint_to_task,
     calculate_center_distance_score,
+    extract_mosaic_result_fields,
+    imaging_mode_to_str,
 )
 from scheduler.constraints.batch_slew_calculator import BatchSlewCandidate
 from core.models import ImagingMode
@@ -164,10 +166,10 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             best_assignment = self._find_best_assignment(task)
 
             if best_assignment:
-                sat_id, window, imaging_mode, slew_result = best_assignment
+                sat_id, window, imaging_mode, slew_result, unified_result = best_assignment
 
                 scheduled_task = self._create_scheduled_task(
-                    task, sat_id, window, imaging_mode, slew_result
+                    task, sat_id, window, imaging_mode, slew_result, unified_result
                 )
                 scheduled_tasks.append(scheduled_task)
 
@@ -336,7 +338,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
         return windows
 
-    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
+    def _find_best_assignment(self, task: Any) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult, Any]]:
         """
         为任务找到最佳卫星-窗口组合 - 高性能版本
 
@@ -428,7 +430,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         self,
         candidates: List[Tuple],
         task: Any
-    ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
+    ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult, Any]]:
         """Phase 4: 批量约束检查（向量化优化）"""
         if not candidates:
             return None
@@ -519,6 +521,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
                 sat_position, sat_velocity = self._get_satellite_position(sat, actual_start)
 
+                _im_str = imaging_mode_to_str(imaging_mode) if imaging_mode else None
                 unified_candidate = UnifiedBatchCandidate(
                     sat_id=sat.id,
                     satellite=sat,
@@ -531,7 +534,8 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                     sat_position=sat_position,
                     sat_velocity=sat_velocity,
                     power_needed=power_needed,
-                    storage_produced=storage_produced
+                    storage_produced=storage_produced,
+                    imaging_mode=_im_str,
                 )
                 unified_candidates.append(unified_candidate)
 
@@ -568,7 +572,14 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         # 回退：简单选择第一个可行的
         for candidate_data, slew_result in slew_feasible:
             sat, window, imaging_mode, _, _, _ = candidate_data
-            return (sat.id, window, imaging_mode, slew_result)
+            if imaging_mode in ('single_pass_mosaic',) or getattr(imaging_mode, 'value', None) == 'single_pass_mosaic':
+                logger.warning(
+                    "mosaic任务 [sat=%s, target=%s] 走了 fallback 路径（unified_result=None），"
+                    "调度任务将缺少完整的 mosaic 字段（条带规划、总幅宽等）",
+                    sat.id if hasattr(sat, 'id') else '?',
+                    getattr(task, 'target_id', '?'),
+                )
+            return (sat.id, window, imaging_mode, slew_result, None)
 
         return None
 
@@ -606,7 +617,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         candidates: List[Tuple],
         results: List[UnifiedBatchResult],
         task: Any = None
-    ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult]]:
+    ) -> Optional[Tuple[str, Any, Any, SlewFeasibilityResult, Any]]:
         """
         选择最佳任务分配 - 子类可覆盖
 
@@ -629,7 +640,7 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
             if best_score is None or score > best_score:
                 best_score = score
-                best = (sat.id, window, imaging_mode, slew_result)
+                best = (sat.id, window, imaging_mode, slew_result, unified_result)
 
         return best
 
@@ -813,7 +824,8 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
 
     def _create_scheduled_task(
         self, task: Any, sat_id: str, window: Any, imaging_mode: Any,
-        slew_result: Optional[SlewFeasibilityResult] = None
+        slew_result: Optional[SlewFeasibilityResult] = None,
+        unified_result: Optional[Any] = None,
     ) -> ScheduledTask:
         """创建ScheduledTask对象"""
         window_start, window_end = self._extract_window_times(window)
@@ -878,13 +890,22 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
                 pitch_angle=pitch_angle
             )
 
+        # 提取单次多条带拼幅物理计算结果
+        _mosaic = extract_mosaic_result_fields(unified_result)
+        mosaic_num_strips = _mosaic['mosaic_num_strips']
+        mosaic_strip_plans = _mosaic['mosaic_strip_plans']
+        mosaic_total_swath_width_km = _mosaic['mosaic_total_swath_width_km']
+        mosaic_roll_sequence_deg = _mosaic['mosaic_roll_sequence_deg']
+        mosaic_total_duration_s = _mosaic['mosaic_total_duration_s']
+        mosaic_degraded_geometry = _mosaic['mosaic_degraded_geometry']
+
         scheduled_task = ScheduledTask(
             task_id=task_id,
             satellite_id=sat_id,
             target_id=target_id,
             imaging_start=actual_start,
             imaging_end=actual_end,
-            imaging_mode=imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode),
+            imaging_mode=imaging_mode_to_str(imaging_mode),
             slew_angle=slew_angle,
             slew_time=slew_time_seconds,
             storage_before=storage_before,
@@ -901,6 +922,13 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             roll_angle=roll_angle,
             pitch_angle=pitch_angle,
             yaw_angle=0.0,
+            # 单次多条带拼幅物理计算结果
+            mosaic_num_strips=mosaic_num_strips,
+            mosaic_strip_plans=mosaic_strip_plans,
+            mosaic_total_swath_width_km=mosaic_total_swath_width_km,
+            mosaic_roll_sequence_deg=mosaic_roll_sequence_deg,
+            mosaic_total_duration_s=mosaic_total_duration_s,
+            mosaic_degraded_geometry=mosaic_degraded_geometry,
         )
 
         # 计算成像足迹（使用实际姿态角）

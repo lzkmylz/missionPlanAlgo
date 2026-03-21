@@ -69,6 +69,19 @@ from .pmc_constraint_checker import (
     PMCConstraintResult,
     check_pmc_mode_for_task
 )
+from .multi_strip_constraint_checker import (
+    MultiStripConstraintChecker,
+    MultiStripCandidate,
+    MultiStripConstraintResult,
+)
+from .uplink_channel_type import UplinkChannelType, UplinkPass
+from .uplink_window_registry import UplinkWindowRegistry
+from .batch_uplink_calculator import (
+    BatchUplinkCalculator,
+    BatchUplinkCandidate,
+    BatchUplinkResult,
+)
+from .batch_uplink_constraint_checker import BatchUplinkConstraintChecker
 
 __all__ = [
     'SlewConstraintChecker',  # 基类，保留供继承
@@ -106,6 +119,9 @@ __all__ = [
     'PMCCandidate',
     'PMCConstraintResult',
     'check_pmc_mode_for_task',
+    'MultiStripConstraintChecker',  # 多条带拼幅约束检查器
+    'MultiStripCandidate',
+    'MultiStripConstraintResult',
     'AttitudeConstraintChecker',
     'AttitudeFeasibilityResult',
     'UnifiedSpatiotemporalChecker',
@@ -114,4 +130,12 @@ __all__ = [
     'ManeuverCheckResult',
     'ScheduledTaskInfo',
     'SatelliteTaskState',
+    # 指令上注约束
+    'UplinkChannelType',
+    'UplinkPass',
+    'UplinkWindowRegistry',
+    'BatchUplinkCalculator',
+    'BatchUplinkCandidate',
+    'BatchUplinkResult',
+    'BatchUplinkConstraintChecker',
 ]

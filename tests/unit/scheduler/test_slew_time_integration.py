@@ -308,7 +308,7 @@ class TestGreedySchedulerSlewTime:
                 slew_time=10.0,
                 actual_start=ws
             )
-            return (sat.id, window, imaging_mode, slew_result)
+            return (sat.id, window, imaging_mode, slew_result, None)
 
         scheduler._find_best_assignment = mock_find_best
 
