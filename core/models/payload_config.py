@@ -11,6 +11,13 @@ import copy
 from .imaging_mode import ImagingModeConfig, create_pmc_mode_config
 from .pmc_config import PitchMotionCompensationConfig
 from .sar_spotlight_config import SARSpotlightConfig
+from .sar_sliding_spotlight_config import SARSlidingSpotlightConfig
+from .sar_stripmap_config import SARStripmapConfig
+from .sar_topsar_config import SARTOPSARConfig
+
+
+# SAR配置类型默认解析优先级
+_DEFAULT_SAR_CONFIG_PRIORITY = ('stripmap_config', 'sliding_spotlight_config', 'spotlight_config', 'topsar_config')
 
 
 @dataclass
@@ -28,8 +35,20 @@ class PayloadConfiguration:
         common_fov: 共享的FOV配置（可选）
         payload_id: 载荷标识符（可选）
         description: 载荷描述（可选）
-        sar_spotlight_configs: SAR聚束/滑动聚束模式物理参数，
-                               key 为模式名（如 "spotlight", "sliding_spotlight"）
+        sar_spotlight_configs: SAR聚束模式物理参数，key 为模式名
+        sar_sliding_spotlight_configs: SAR滑动聚束模式物理参数，key 为模式名
+        sar_stripmap_configs: SAR条带模式物理参数，key 为模式名
+        sar_topsar_configs: SAR TOPSAR模式物理参数，key 为模式名
+
+    SAR配置解析优先级:
+    -------------------
+    当from_dict解析模式配置时，按以下优先级识别SAR物理参数类型：
+    1. stripmap_config (条带模式配置)
+    2. sliding_spotlight_config (滑动聚束配置)
+    3. spotlight_config (聚束模式配置)
+    4. topsar_config (TOPSAR模式配置)
+
+    可通过类属性或 from_dict 的 config_priority 参数自定义优先级。
     """
     payload_type: str  # "optical" 或 "sar"
     default_mode: str
@@ -38,6 +57,12 @@ class PayloadConfiguration:
     payload_id: Optional[str] = None
     description: Optional[str] = None
     sar_spotlight_configs: Dict[str, SARSpotlightConfig] = field(default_factory=dict)
+    sar_sliding_spotlight_configs: Dict[str, SARSlidingSpotlightConfig] = field(default_factory=dict)
+    sar_stripmap_configs: Dict[str, SARStripmapConfig] = field(default_factory=dict)
+    sar_topsar_configs: Dict[str, SARTOPSARConfig] = field(default_factory=dict)
+
+    # SAR计算器实例缓存（非持久化，实例级别）
+    _sar_calc_cache: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
         """验证配置有效性"""
@@ -197,27 +222,63 @@ class PayloadConfiguration:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PayloadConfiguration':
-        """从字典创建"""
+    def from_dict(
+        cls,
+        data: Dict[str, Any],
+        config_priority: Optional[List[str]] = None
+    ) -> 'PayloadConfiguration':
+        """
+        从字典创建
+
+        Args:
+            data: 配置数据字典
+            config_priority: SAR配置类型解析优先级列表，覆盖默认值。
+                例如: ['spotlight_config', 'sliding_spotlight_config', 'stripmap_config']
+                默认优先级: ['stripmap_config', 'sliding_spotlight_config', 'spotlight_config']
+
+        Returns:
+            PayloadConfiguration 实例
+        """
         modes_data = data.get('modes', {})
         modes = {
             name: ImagingModeConfig.from_dict(config)
             for name, config in modes_data.items()
         }
 
-        # 解析各聚束/滑动聚束模式的物理参数配置
+        # 解析各聚束模式的物理参数配置（spotlight_config）
         sar_spotlight_configs: Dict[str, SARSpotlightConfig] = {}
+        # 解析滑动聚束模式的物理参数配置（sliding_spotlight_config）
+        sar_sliding_spotlight_configs: Dict[str, SARSlidingSpotlightConfig] = {}
+        # 解析条带模式的物理参数配置（stripmap_config）
+        sar_stripmap_configs: Dict[str, SARStripmapConfig] = {}
+        # 解析TOPSAR模式的物理参数配置（topsar_config）
+        sar_topsar_configs: Dict[str, SARTOPSARConfig] = {}
+
+        # 配置类型到配置字典和解析函数的映射
+        config_mapping = {
+            'spotlight_config': (sar_spotlight_configs, SARSpotlightConfig),
+            'sliding_spotlight_config': (sar_sliding_spotlight_configs, SARSlidingSpotlightConfig),
+            'stripmap_config': (sar_stripmap_configs, SARStripmapConfig),
+            'topsar_config': (sar_topsar_configs, SARTOPSARConfig),
+        }
+
+        # 使用提供的优先级或默认优先级
+        priority = config_priority or list(_DEFAULT_SAR_CONFIG_PRIORITY)
+
         for mode_name, mode_raw in modes_data.items():
-            if 'spotlight_config' in mode_raw:
-                try:
-                    sar_spotlight_configs[mode_name] = SARSpotlightConfig.from_dict(
-                        mode_raw['spotlight_config']
-                    )
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        f"Failed to parse spotlight_config for mode '{mode_name}': {e}"
-                    )
+            # 按优先级顺序检查配置类型
+            for config_key in priority:
+                if config_key in mode_raw and config_key in config_mapping:
+                    config_dict, config_class = config_mapping[config_key]
+                    try:
+                        config_dict[mode_name] = config_class.from_dict(mode_raw[config_key])
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"Failed to parse {config_key} for mode '{mode_name}': {e}"
+                        )
+                    # 找到第一个匹配的配置类型后即停止（优先级顺序）
+                    break
 
         return cls(
             payload_type=data['payload_type'],
@@ -227,6 +288,9 @@ class PayloadConfiguration:
             payload_id=data.get('payload_id'),
             description=data.get('description'),
             sar_spotlight_configs=sar_spotlight_configs,
+            sar_sliding_spotlight_configs=sar_sliding_spotlight_configs,
+            sar_stripmap_configs=sar_stripmap_configs,
+            sar_topsar_configs=sar_topsar_configs,
         )
 
     def validate(self) -> bool:
@@ -258,12 +322,32 @@ class PayloadConfiguration:
         """创建深度拷贝"""
         return copy.deepcopy(self)
 
-    def get_spotlight_calculator(self, mode: str = 'spotlight'):
+    def _get_cached_calculator(self, cache_key: str, factory_fn) -> Any:
+        """
+        获取缓存的计算器实例，如果不存在则创建并缓存。
+
+        Args:
+            cache_key: 缓存键
+            factory_fn: 创建计算器实例的工厂函数
+
+        Returns:
+            缓存的或新创建的计算器实例
+        """
+        if cache_key not in self._sar_calc_cache:
+            self._sar_calc_cache[cache_key] = factory_fn()
+        return self._sar_calc_cache[cache_key]
+
+    def clear_calculator_cache(self) -> None:
+        """清除SAR计算器实例缓存"""
+        self._sar_calc_cache.clear()
+
+    def get_spotlight_calculator(self, mode: str = 'spotlight', use_cache: bool = True):
         """
         获取指定聚束模式的物理计算器实例。
 
         Args:
-            mode: 模式名称（如 "spotlight"、"sliding_spotlight"）
+            mode: 模式名称（如 "spotlight"）
+            use_cache: 是否使用缓存（默认True）
 
         Returns:
             SARSpotlightCalculator，若该模式无 spotlight_config 则返回 None
@@ -271,12 +355,99 @@ class PayloadConfiguration:
         cfg = self.sar_spotlight_configs.get(mode)
         if cfg is None:
             return None
+
         from core.dynamics.sar_spotlight_calculator import SARSpotlightCalculator
-        return SARSpotlightCalculator(cfg)
+
+        if not use_cache:
+            return SARSpotlightCalculator(cfg)
+
+        cache_key = f"spotlight:{mode}"
+        return self._get_cached_calculator(cache_key, lambda: SARSpotlightCalculator(cfg))
 
     def has_spotlight_config(self, mode: str = 'spotlight') -> bool:
         """检查指定模式是否配置了聚束物理参数"""
         return mode in self.sar_spotlight_configs
+
+    def get_sliding_spotlight_calculator(self, mode: str = 'sliding_spotlight', use_cache: bool = True):
+        """
+        获取指定滑动聚束模式的物理计算器实例。
+
+        Args:
+            mode: 模式名称（如 "sliding_spotlight"）
+            use_cache: 是否使用缓存（默认True）
+
+        Returns:
+            SARSlidingSpotlightCalculator，若该模式无 sliding_spotlight_config 则返回 None
+        """
+        cfg = self.sar_sliding_spotlight_configs.get(mode)
+        if cfg is None:
+            return None
+
+        from core.dynamics.sar_sliding_spotlight_calculator import SARSlidingSpotlightCalculator
+
+        if not use_cache:
+            return SARSlidingSpotlightCalculator(cfg)
+
+        cache_key = f"sliding_spotlight:{mode}"
+        return self._get_cached_calculator(cache_key, lambda: SARSlidingSpotlightCalculator(cfg))
+
+    def has_sliding_spotlight_config(self, mode: str = 'sliding_spotlight') -> bool:
+        """检查指定模式是否配置了滑动聚束物理参数"""
+        return mode in self.sar_sliding_spotlight_configs
+
+    def get_stripmap_calculator(self, mode: str = 'stripmap', use_cache: bool = True):
+        """
+        获取指定条带模式的物理计算器实例。
+
+        Args:
+            mode: 模式名称（如 "stripmap"）
+            use_cache: 是否使用缓存（默认True）
+
+        Returns:
+            SARStripmapCalculator，若该模式无 stripmap_config 则返回 None
+        """
+        cfg = self.sar_stripmap_configs.get(mode)
+        if cfg is None:
+            return None
+
+        from core.dynamics.sar_stripmap_calculator import SARStripmapCalculator
+
+        if not use_cache:
+            return SARStripmapCalculator(cfg)
+
+        cache_key = f"stripmap:{mode}"
+        return self._get_cached_calculator(cache_key, lambda: SARStripmapCalculator(cfg))
+
+    def has_stripmap_config(self, mode: str = 'stripmap') -> bool:
+        """检查指定模式是否配置了条带模式物理参数"""
+        return mode in self.sar_stripmap_configs
+
+    def get_topsar_calculator(self, mode: str = 'topsar', use_cache: bool = True):
+        """
+        获取指定TOPSAR模式的物理计算器实例。
+
+        Args:
+            mode: 模式名称（如 \"topsar\"）
+            use_cache: 是否使用缓存（默认True）
+
+        Returns:
+            SARTOPSARCalculator，若该模式无 topsar_config 则返回 None
+        """
+        cfg = self.sar_topsar_configs.get(mode)
+        if cfg is None:
+            return None
+
+        from core.dynamics.sar_topsar_calculator import SARTOPSARCalculator
+
+        if not use_cache:
+            return SARTOPSARCalculator(cfg)
+
+        cache_key = f"topsar:{mode}"
+        return self._get_cached_calculator(cache_key, lambda: SARTOPSARCalculator(cfg))
+
+    def has_topsar_config(self, mode: str = 'topsar') -> bool:
+        """检查指定模式是否配置了TOPSAR物理参数"""
+        return mode in self.sar_topsar_configs
 
     def get_pmc_modes(self) -> List[str]:
         """

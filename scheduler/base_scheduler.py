@@ -89,7 +89,95 @@ class TaskFailure:
 
 @dataclass
 class ScheduledTask:
-    """已调度的任务"""
+    """
+    已调度的任务
+
+    SAR成像模式字段说明:
+    ===================
+
+    通用字段（聚束/滑动聚束/条带模式共有）:
+    ----------
+    sar_beam_id : Optional[str]
+        匹配的波位ID（方案B/C使用离散波位表时填充）
+        例如: "SL-01", "SSL-02", "ST-03"
+    sar_prf_hz_used : Optional[float]
+        实际使用的脉冲重复频率（Hz）
+        聚束/滑动聚束: 由波位配置或推导得出
+        条带模式: 由安全因子和方位向分辨率推导
+    sar_scene_az_km : Optional[float]
+        方位向场景长度（km），沿卫星飞行方向
+        聚束模式: V_sat × T_dwell
+        滑动聚束: V_eff × T_dwell
+        条带模式: 用户指定的场景长度
+    sar_scene_rg_km : Optional[float]
+        距离向场景长度（km），垂直于飞行方向
+        由波束电扫范围和斜距决定
+    sar_scene_area_km2 : Optional[float]
+        场景覆盖面积（km²）= scene_az × scene_rg
+    sar_limiting_constraint : Optional[str]
+        驻留时间限制因素，标识哪种约束主导:
+        - "azimuth_steering": 方位向电扫范围限制
+        - "prf_ambiguity": PRF模糊度限制
+        - "infeasible": 几何条件不可行
+
+    滑动聚束模式特有字段:
+    -------------------
+    sar_vrc_distance_m : Optional[float]
+        虚拟旋转中心距离（m），必须大于斜距 R
+        典型值: 1,800,000 - 2,500,000 m（1.8-2.5倍斜距）
+    sar_effective_scene_velocity_m_s : Optional[float]
+        有效场景速度（m/s）= V_sat × (1 - R/D_vrc)
+        决定方位向分辨率的关键因素
+    sar_vrc_ratio : Optional[float]
+        斜距与VRC距离比值 = R / D_vrc
+        有效速度比例: V_eff/V_sat = 1 - ratio
+    sar_peak_power_factor : Optional[float]
+        峰值功率因子 = 1 / duty_cycle
+        反映发射占空比对峰值功率的需求
+
+    条带模式特有字段:
+    ----------------
+    sar_swath_width_km : Optional[float]
+        距离向幅宽（km），由波束宽度和入射角决定
+        公式: W_g = (λ/L_w) × R / cos(θ_inc)
+    sar_imaging_time_s : Optional[float]
+        成像时间（秒）= 场景长度 / V_sat
+        区别于聚束模式的"驻留时间"概念
+    sar_nominal_integration_time_s : Optional[float]
+        名义合成孔径时间（s）
+        条带模式固定为配置值（如0.5s）
+    sar_beam_ground_speed_m_s : Optional[float]
+        波束地面移动速度（m/s）
+        条带模式等于卫星速度 V_sat
+
+    TOPSAR模式特有字段:
+    ------------------
+    sar_topsar_num_subswaths : Optional[int]
+        实际使用的子条带数量（通常3-5个）
+    sar_topsar_total_swath_km : Optional[float]
+        所有子条带合计的距离向总幅宽（km）
+    sar_topsar_burst_duration_s : Optional[float]
+        突发持续时间（s），决定TOPSAR方位向分辨率
+    sar_topsar_cycle_time_s : Optional[float]
+        完整子条带循环时间（s）= N×T_burst + (N-1)×T_switch
+    sar_topsar_matched_subswath_id : Optional[str]
+        匹配的中心子条带ID（方案B/C使用）
+
+    使用说明:
+    --------
+    1. 聚束模式(spotlight)任务应填充通用字段
+    2. 滑动聚束模式(sliding_spotlight)应填充通用字段+滑动聚束特有字段
+    3. 条带模式(stripmap)应填充通用字段+条带模式特有字段
+    4. TOPSAR模式(topsar)应填充通用字段+TOPSAR特有字段
+    5. 非SAR任务或SAR任务未启用物理参数时，所有字段为None
+
+    物理引擎对应关系:
+    ----------------
+    - 聚束模式: SARSpotlightCalculator.compute_dwell_time()
+    - 滑动聚束: SARSlidingSpotlightCalculator.compute_dwell_time()
+    - 条带模式: SARStripmapCalculator.compute_imaging_params()
+    - TOPSAR模式: SARTOPSARCalculator.compute_burst_params()
+    """
     task_id: str
     satellite_id: str
     target_id: str
@@ -140,6 +228,22 @@ class ScheduledTask:
     sar_scene_rg_km: Optional[float] = None     # 物理计算的距离向场景长度（km）
     sar_scene_area_km2: Optional[float] = None  # 物理计算的覆盖面积（km²）
     sar_limiting_constraint: Optional[str] = None  # 驻留时间限制因素
+    # SAR滑动聚束模式特有字段
+    sar_vrc_distance_m: Optional[float] = None           # VRC距离（m）
+    sar_effective_scene_velocity_m_s: Optional[float] = None  # 有效场景速度（m/s）
+    sar_vrc_ratio: Optional[float] = None                # R/D_vrc 比值
+    sar_peak_power_factor: Optional[float] = None        # 峰值功率因子 = 1/duty_cycle
+    # SAR条带模式特有字段
+    sar_swath_width_km: Optional[float] = None           # 距离向幅宽（km）
+    sar_imaging_time_s: Optional[float] = None           # 成像时间（秒）
+    sar_nominal_integration_time_s: Optional[float] = None  # 名义合成孔径时间（s）
+    sar_beam_ground_speed_m_s: Optional[float] = None    # 波束地面移动速度（m/s）
+    # SAR TOPSAR模式特有字段
+    sar_topsar_num_subswaths: Optional[int] = None           # 实际使用子条带数量
+    sar_topsar_total_swath_km: Optional[float] = None        # 距离向总幅宽（km）
+    sar_topsar_burst_duration_s: Optional[float] = None      # 突发持续时间（s）
+    sar_topsar_cycle_time_s: Optional[float] = None          # 完整循环时间（s）
+    sar_topsar_matched_subswath_id: Optional[str] = None     # 匹配的中心子条带ID
 
     def to_dict(self) -> Dict[str, Any]:
         # Calculate imaging_duration if not explicitly set
@@ -196,6 +300,22 @@ class ScheduledTask:
             'sar_scene_rg_km': self.sar_scene_rg_km,
             'sar_scene_area_km2': self.sar_scene_area_km2,
             'sar_limiting_constraint': self.sar_limiting_constraint,
+            # SAR滑动聚束模式特有字段
+            'sar_vrc_distance_m': self.sar_vrc_distance_m,
+            'sar_effective_scene_velocity_m_s': self.sar_effective_scene_velocity_m_s,
+            'sar_vrc_ratio': self.sar_vrc_ratio,
+            'sar_peak_power_factor': self.sar_peak_power_factor,
+            # SAR条带模式特有字段
+            'sar_swath_width_km': self.sar_swath_width_km,
+            'sar_imaging_time_s': self.sar_imaging_time_s,
+            'sar_nominal_integration_time_s': self.sar_nominal_integration_time_s,
+            'sar_beam_ground_speed_m_s': self.sar_beam_ground_speed_m_s,
+            # TOPSAR模式特有字段
+            'sar_topsar_num_subswaths': self.sar_topsar_num_subswaths,
+            'sar_topsar_total_swath_km': self.sar_topsar_total_swath_km,
+            'sar_topsar_burst_duration_s': self.sar_topsar_burst_duration_s,
+            'sar_topsar_cycle_time_s': self.sar_topsar_cycle_time_s,
+            'sar_topsar_matched_subswath_id': self.sar_topsar_matched_subswath_id,
         }
 
 
@@ -590,7 +710,7 @@ class BaseScheduler(ABC):
 
         # 首先尝试加载Java端预计算的轨道数据
         if self._load_precomputed_orbits_from_java():
-            print("    已加载Java预计算轨道数据，跳过Python端预计算")
+            logger.info("已加载Java预计算轨道数据，跳过Python端预计算")
             # 确保位置缓存被初始化（用于姿态角计算）
             if self._position_cache is None:
                 from core.orbit.visibility.position_cache import SatellitePositionCache
@@ -667,7 +787,7 @@ class BaseScheduler(ABC):
 
         elapsed = time.time() - start_time
         if total_positions > 0:
-            print(f"    预计算完成: {total_positions} 个位置 ({elapsed:.2f}s)")
+            logger.info(f"预计算完成: {total_positions} 个位置 ({elapsed:.2f}s)")
 
     def _initialize_saa_checker(self) -> None:
         """初始化 SAA 约束检查器 - 强制使用向量化批量优化"""

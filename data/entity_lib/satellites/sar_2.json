@@ -183,13 +183,17 @@
             "antenna_slew_rate_comment": "天线转动速率 0.2度/秒",
             "description": "滑动聚束模式，高分辨率与大幅宽的折中"
           },
-          "spotlight_config": {
+          "sliding_spotlight_config": {
             "_comment": "滑动聚束模式物理参数 - 方案C（推导波位，仅中心入射角，其余参数由公式推导）",
             "beam_model": "derived_beam",
             "wavelength_m": 0.031,
             "antenna_length_m": 10.0,
             "antenna_width_m": 2.0,
             "range_resolution_m": 2.0,
+            "vrc_distance_m": 2000000.0,
+            "vrc_distance_comment": "虚拟旋转中心距离 2000km（D_vrc > 斜距 770km）",
+            "duty_cycle": 0.15,
+            "duty_cycle_comment": "发射占空比 15%",
             "max_azimuth_steering_deg": 3.0,
             "max_range_steering_deg": 3.0,
             "prf_safety_factor": 1.25,
@@ -227,6 +231,86 @@
             "integration_factor": 1.0,
             "integration_factor_comment": "积分因子 1.0 - 标准合成孔径时间",
             "description": "条带模式，标准SAR成像，中等分辨率大范围"
+          },
+          "stripmap_config": {
+            "_comment": "条带模式物理参数 - 方案C（推导波位，仅中心入射角，其余参数由公式推导）",
+            "beam_model": "derived_beam",
+            "wavelength_m": 0.031,
+            "antenna_length_m": 10.0,
+            "antenna_width_m": 2.0,
+            "range_resolution_m": 3.0,
+            "duty_cycle": 0.10,
+            "duty_cycle_comment": "发射占空比 10%",
+            "nominal_integration_time_s": 0.5,
+            "nominal_integration_time_comment": "名义合成孔径时间 0.5s",
+            "prf_safety_factor": 1.25,
+            "beam_positions": [
+              {"beam_id": "ST-01", "center_incidence_angle_deg": 25.0},
+              {"beam_id": "ST-02", "center_incidence_angle_deg": 35.0},
+              {"beam_id": "ST-03", "center_incidence_angle_deg": 45.0}
+            ]
+          }
+        },
+        "topsar": {
+          "resolution_m": 5.0,
+          "resolution_m_comment": "分辨率 5米 - TOPSAR模式",
+          "swath_width_m": 100000,
+          "swath_width_m_comment": "幅宽 100公里 - 3个子条带合计",
+          "power_consumption_w": 500.0,
+          "power_consumption_w_comment": "功耗 500瓦特",
+          "data_rate_mbps": 600.0,
+          "data_rate_mbps_comment": "数据率 600Mbps",
+          "min_duration_s": 5.0,
+          "min_duration_s_comment": "最短成像时长 5秒（完成一个突发循环）",
+          "max_duration_s": 60.0,
+          "max_duration_s_comment": "最长成像时长 60秒",
+          "mode_type": "sar",
+          "mode_type_comment": "模式类型: sar",
+          "fov_config": {
+            "range_half_angle_deg": 7.27,
+            "azimuth_half_angle_deg": 0.5
+          },
+          "characteristics": {
+            "polarization": "VV+VH",
+            "incidence_angle_range": [28, 34],
+            "incidence_angle_range_comment": "实际覆盖入射角范围 28-34度（3条带连续覆盖，间距2°≤波束宽度2.28°，相邻重叠0.28°）",
+            "num_subswaths": 3,
+            "description": "TOPSAR宽幅扫描模式，3子条带电子扫描，约97km总幅宽"
+          },
+          "topsar_config": {
+            "_comment": "TOPSAR模式物理参数 - 方案C（推导子条带，仅中心入射角，其余由公式推导）",
+            "_design": "L_w=0.78m → θ_beam=2.28° → half_beam=1.14° → 间距=2°(≤2.28°) → 相邻条带重叠0.28°，无间隙",
+            "beam_model": "derived_beam",
+            "wavelength_m": 0.031,
+            "antenna_length_m": 10.0,
+            "antenna_width_m": 0.78,
+            "antenna_width_comment": "天线距离向宽度 0.78米（θ_beam=2.28°，每子条带幅宽≈31-33km，3条带合计≈97km）",
+            "range_resolution_m": 5.0,
+            "num_subswaths": 3,
+            "burst_duration_s": 0.25,
+            "burst_duration_comment": "突发持续时间 0.25秒（< T_dwell_max≈0.32s，方位向分辨率由公式决定而非物理下限）",
+            "burst_switch_time_s": 0.002,
+            "burst_switch_time_comment": "子条带切换时间 2ms",
+            "duty_cycle": 0.10,
+            "duty_cycle_comment": "发射占空比 10%",
+            "prf_safety_factor": 1.25,
+            "subswath_positions": [
+              {
+                "subswath_id": "IW1",
+                "center_incidence_angle_deg": 29.0,
+                "_coverage": "入射角覆盖[27.86°, 30.14°]，幅宽约31km"
+              },
+              {
+                "subswath_id": "IW2",
+                "center_incidence_angle_deg": 31.0,
+                "_coverage": "入射角覆盖[29.86°, 32.14°]，幅宽约32km，与IW1重叠0.28°"
+              },
+              {
+                "subswath_id": "IW3",
+                "center_incidence_angle_deg": 33.0,
+                "_coverage": "入射角覆盖[31.86°, 34.14°]，幅宽约33km，与IW2重叠0.28°"
+              }
+            ]
           }
         }
       },

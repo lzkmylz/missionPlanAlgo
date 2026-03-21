@@ -502,8 +502,9 @@ class UnifiedScheduler:
             scheduler.set_slew_checker(self.slew_checker)
             logger.info("  使用精确姿态机动模型")
 
-        # 传递地面站/中继窗口用于交织调度（仅当使用GreedyScheduler时）
-        if hasattr(scheduler, 'set_downlink_windows'):
+        # 传递地面站/中继窗口用于交织调度（仅当使用interleaved策略时）
+        if (hasattr(scheduler, 'set_downlink_windows') and
+            self.scheduling_strategy == 'interleaved'):
             gs_windows = self._get_ground_station_windows()
             relay_windows = self._get_relay_windows()
             scheduler.set_downlink_windows(gs_windows, relay_windows)
@@ -549,11 +550,8 @@ class UnifiedScheduler:
                 current_gb=0.0,
                 capacity_gb=storage_capacity
             )
-            # 存储该卫星的独立数据率配置（供后续使用）
-            gs_scheduler._satellite_data_rates = getattr(
-                gs_scheduler, '_satellite_data_rates', {}
-            )
-            gs_scheduler._satellite_data_rates[sat.id] = data_rate
+            # 注册该卫星的独立数据率配置
+            gs_scheduler.register_satellite_data_rate(sat.id, data_rate)
 
             logger.debug(f"卫星 {sat.id}: 固存={storage_capacity}GB, 数传速率={data_rate}Mbps")
 
@@ -564,8 +562,6 @@ class UnifiedScheduler:
         pending_downlink_tasks = [t for t in scheduled_tasks if t.downlink_start is None]
         already_scheduled_count = len(scheduled_tasks) - len(pending_downlink_tasks)
         if already_scheduled_count > 0:
-            from scheduler.logging import get_scheduler_logger
-            logger = get_scheduler_logger(__name__)
             logger.info(f"  交织调度已安排 {already_scheduled_count} 个任务的数传，Phase2 处理剩余 {len(pending_downlink_tasks)} 个")
 
         # 执行数传调度

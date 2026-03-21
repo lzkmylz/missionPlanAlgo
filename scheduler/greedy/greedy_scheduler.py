@@ -655,14 +655,13 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         # Precompute satellite positions to accelerate scheduling
         # 默认启用预计算以加速姿态角计算，除非显式禁用
         if self.config.get('precompute_positions', True):
-            print("    Precomputing satellite positions...")
+            logger.info("Precomputing satellite positions...")
             self._precompute_satellite_positions(time_step_seconds=self.config.get('precompute_step_seconds', 1.0))
 
         # ========== 空间换时间：姿态预计算缓存 ==========
         # 使用Java预计算的姿态采样数据，避免实时计算的性能开销
         # Java在可见性计算阶段已经计算了所有窗口的完整姿态采样（1秒步长）
         if self.config.get('enable_attitude_precache', False):
-            logger = logging.getLogger(__name__)
             logger.info("初始化姿态预计算缓存（使用Java预计算数据）...")
             t_precache = self._perf_start()
 
@@ -718,7 +717,6 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         # 禁用快速筛选模式，使用完整精确计算
         if self._slew_checker is not None and hasattr(self._slew_checker, 'set_skip_reset_calculation'):
             self._slew_checker.set_skip_reset_calculation(False)
-            logger = logging.getLogger(__name__)
             logger.info("禁用姿态机动快速筛选模式，使用完整精确计算")
 
         # Main scheduling loop
@@ -751,7 +749,7 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                     task_id = task.task_id if hasattr(task, 'task_id') else task.id
                     self._record_failure(
                         task_id=task_id,
-                        reason="attitude_constraint_violation",
+                        reason=TaskFailureReason.OFF_NADIR_EXCEEDED,
                         detail=f"Task {task_id} violates attitude constraints at actual imaging time"
                     )
                     continue
@@ -1981,7 +1979,6 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
         # Calculate resource consumption
         power_coefficient = self._power_profile.get_coefficient_for_mode(imaging_mode)
-        sat = self.mission.get_satellite_by_id(sat_id)
         power_consumed = 0.0
         if sat and self.consider_power:
             power_consumed = sat.capabilities.power_capacity * power_coefficient * (imaging_duration / 3600)
@@ -2150,18 +2147,29 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
         sar_scene_area_km2 = None
         sar_limiting_constraint = None
 
+        # SAR TOPSAR模式物理计算结果
+        sar_topsar_num_subswaths = None
+        sar_topsar_total_swath_km = None
+        sar_topsar_burst_duration_s = None
+        sar_topsar_cycle_time_s = None
+        sar_topsar_matched_subswath_id = None
+
+        _DEFAULT_ALT_M = 631_000  # 默认LEO轨道高度（m），orbit.altitude缺失时使用
         _imaging_mode_str = imaging_mode.value if hasattr(imaging_mode, 'value') else str(imaging_mode)
+        _orbit = getattr(sat, 'orbit', None) if sat is not None else None
+        _alt_m = (getattr(_orbit, 'altitude', None) or _DEFAULT_ALT_M) if _orbit else _DEFAULT_ALT_M
+        # look_angle 近似取 roll_angle 绝对值（平地小角度近似，大侧视角存在轻微偏差）
+        _look_deg_default = 30.0  # 未知侧视角时的保守默认值
+
         if (sat is not None
-                and _imaging_mode_str in ('spotlight', 'sliding_spotlight')
+                and _imaging_mode_str == 'spotlight'
                 and hasattr(sat, 'payload_config')
                 and sat.payload_config is not None
                 and sat.payload_config.has_spotlight_config(_imaging_mode_str)):
             try:
                 _calc = sat.payload_config.get_spotlight_calculator(_imaging_mode_str)
                 if _calc is not None:
-                    _orbit = getattr(sat, 'orbit', None)
-                    _alt_m = (getattr(_orbit, 'altitude', None) or 631_000) if _orbit else 631_000
-                    _look_deg = abs(roll_angle) if roll_angle is not None else 30.0
+                    _look_deg = abs(roll_angle) if roll_angle is not None else _look_deg_default
                     _dwell_s = (actual_end - actual_start).total_seconds()
                     _result = _calc.compute_scene_coverage(
                         altitude_m=_alt_m,
@@ -2177,6 +2185,54 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
                         sar_limiting_constraint = _result.limiting_constraint
             except Exception as _e:
                 logger.debug(f"SAR spotlight physics calc failed for {task.id}: {_e}")
+
+        elif (sat is not None
+                and _imaging_mode_str == 'sliding_spotlight'
+                and hasattr(sat, 'payload_config')
+                and sat.payload_config is not None
+                and sat.payload_config.has_sliding_spotlight_config(_imaging_mode_str)):
+            try:
+                _calc = sat.payload_config.get_sliding_spotlight_calculator(_imaging_mode_str)
+                if _calc is not None:
+                    _look_deg = abs(roll_angle) if roll_angle is not None else _look_deg_default
+                    _dwell_s = (actual_end - actual_start).total_seconds()
+                    _result = _calc.compute_scene_coverage(
+                        altitude_m=_alt_m,
+                        look_angle_deg=_look_deg,
+                        dwell_time_s=_dwell_s,
+                    )
+                    if _result.feasible:
+                        sar_beam_id = _result.matched_beam_id
+                        sar_prf_hz_used = _result.prf_hz_used
+                        sar_scene_az_km = _result.scene_size_az_km
+                        sar_scene_rg_km = _result.scene_size_rg_km
+                        sar_scene_area_km2 = _result.scene_area_km2
+                        sar_limiting_constraint = _result.limiting_constraint
+            except Exception as _e:
+                logger.debug(f"SAR sliding_spotlight physics calc failed for {task.id}: {_e}")
+
+        elif (sat is not None
+                and _imaging_mode_str == 'topsar'
+                and hasattr(sat, 'payload_config')
+                and sat.payload_config is not None
+                and sat.payload_config.has_topsar_config(_imaging_mode_str)):
+            try:
+                _calc = sat.payload_config.get_topsar_calculator(_imaging_mode_str)
+                if _calc is not None:
+                    # TOPSAR 典型侧视角范围 29-37°，默认取中心值 35°
+                    _look_deg = abs(roll_angle) if roll_angle is not None else 35.0
+                    _result = _calc.compute_burst_params(
+                        altitude_m=_alt_m,
+                        look_angle_deg=_look_deg,
+                    )
+                    if _result.feasible:
+                        sar_topsar_num_subswaths = _result.num_subswaths_used
+                        sar_topsar_total_swath_km = _result.total_swath_width_km
+                        sar_topsar_burst_duration_s = _result.burst_duration_s
+                        sar_topsar_cycle_time_s = _result.cycle_time_s
+                        sar_topsar_matched_subswath_id = _result.matched_subswath_id
+            except Exception as _e:
+                logger.debug(f"SAR TOPSAR physics calc failed for {task.id}: {_e}")
 
         # 创建ScheduledTask对象
         scheduled_task = ScheduledTask(
@@ -2215,6 +2271,12 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
             sar_scene_rg_km=sar_scene_rg_km,
             sar_scene_area_km2=sar_scene_area_km2,
             sar_limiting_constraint=sar_limiting_constraint,
+            # SAR TOPSAR物理计算结果
+            sar_topsar_num_subswaths=sar_topsar_num_subswaths,
+            sar_topsar_total_swath_km=sar_topsar_total_swath_km,
+            sar_topsar_burst_duration_s=sar_topsar_burst_duration_s,
+            sar_topsar_cycle_time_s=sar_topsar_cycle_time_s,
+            sar_topsar_matched_subswath_id=sar_topsar_matched_subswath_id,
         )
 
         # 如果是聚类任务，记录聚类调度信息
@@ -2605,27 +2667,25 @@ class GreedyScheduler(BaseScheduler, ClusteringMixin, QualityAwareMixin):
 
             # 回退到简化估算
             # 估算复位角度（从前一目标回到对地定向的角度）
-            if hasattr(prev_target, 'latitude') and hasattr(prev_target, 'longitude'):
-                # 简化估算：假设复位角度约等于前一任务的侧摆角度
-                reset_angle = math.sqrt(
-                    prev_target.latitude**2 + prev_target.longitude**2
-                ) * 0.5
-                reset_angle = min(reset_angle, 45.0)  # 限制最大角度
+            # 使用保守估计：假设需要复位到最大侧摆角的一半
+            reset_angle = 15.0  # 默认保守复位角度（度）
 
-                # 简化计算复位时间
-                agility = getattr(self.mission.get_satellite_by_id(sat_id).capabilities, 'agility', {}) or {}
-                max_slew_rate = agility.get('max_slew_rate', 3.0)
-                settling_time = agility.get('settling_time', 5.0)
-                reset_time = (reset_angle / max_slew_rate) + settling_time if max_slew_rate > 0 else settling_time
+            # 简化计算复位时间
+            sat = self.mission.get_satellite_by_id(sat_id)
+            if sat is None:
+                return 0.0, True
+            agility = getattr(sat.capabilities, 'agility', {}) or {}
+            max_slew_rate = agility.get('max_slew_rate', 3.0)
+            settling_time = agility.get('settling_time', 5.0)
+            reset_time = (reset_angle / max_slew_rate) + settling_time if max_slew_rate > 0 else settling_time
 
-                # 检查冲突
-                total_time_needed = reset_time + current_slew_time + imaging_duration
-                time_available = (window_end - last_task_end).total_seconds()
+            # 检查冲突
+            total_time_needed = reset_time + current_slew_time + imaging_duration
+            time_available = (window_end - last_task_end).total_seconds()
 
-                return reset_time, total_time_needed <= time_available
+            return reset_time, total_time_needed <= time_available
 
         except Exception as e:
-            logger = logging.getLogger(__name__)
             logger.debug(f"计算复位时间失败 {sat_id}: {e}")
 
         # 默认不复位

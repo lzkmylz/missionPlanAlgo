@@ -819,6 +819,13 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
         sat = self.mission.get_satellite_by_id(sat_id)
         imaging_duration = self._imaging_calculator.calculate(task, imaging_mode, sat)
 
+        # 从姿态缓存获取姿态角（如果可用）
+        roll_angle, pitch_angle = 0.0, 0.0
+        if self._attitude_precache_manager:
+            attitude = self._attitude_precache_manager.get_attitude(sat_id, window_start)
+            if attitude:
+                roll_angle, pitch_angle = attitude
+
         usage = self._sat_resource_usage.get(sat_id, {})
         power_before = usage.get('power', 0)
         storage_before = usage.get('storage', 0)
@@ -859,15 +866,15 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             battery_soc_before = (power_before / sat.capabilities.power_capacity) * 100.0
             battery_soc_after = ((power_before - power_consumed) / sat.capabilities.power_capacity) * 100.0
 
-        # 计算任务期间发电量（简化计算，使用0度姿态角）
+        # 计算任务期间发电量（使用实际姿态角）
         power_generated = 0.0
         if self._enable_power_generation_calc:
             power_generated = self._calculate_power_generation(
                 sat_id=sat_id,
                 start_time=actual_start,
                 end_time=actual_end,
-                roll_angle=0.0,  # 简化计算
-                pitch_angle=0.0
+                roll_angle=roll_angle,
+                pitch_angle=pitch_angle
             )
 
         scheduled_task = ScheduledTask(
@@ -889,21 +896,21 @@ class HeuristicScheduler(BaseScheduler, ClusteringMixin):
             energy_consumption=energy_consumption,
             battery_soc_before=battery_soc_before,
             battery_soc_after=battery_soc_after,
-            # 姿态角字段（简化计算，使用0度）
-            roll_angle=0.0,
-            pitch_angle=0.0,
+            # 姿态角字段（从缓存获取的实际值）
+            roll_angle=roll_angle,
+            pitch_angle=pitch_angle,
             yaw_angle=0.0,
         )
 
-        # 计算成像足迹
+        # 计算成像足迹（使用实际姿态角）
         fill_footprint_to_task(
             mission=self.mission,
             attitude_calculator=self._attitude_calculator,
             scheduled_task=scheduled_task,
             sat_id=sat_id,
             imaging_start=actual_start,
-            roll_angle=0.0,
-            pitch_angle=0.0,
+            roll_angle=roll_angle,
+            pitch_angle=pitch_angle,
             imaging_mode=imaging_mode
         )
 

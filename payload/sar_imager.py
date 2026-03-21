@@ -14,7 +14,8 @@ from core.constants import (
     DEFAULT_SAR_RANGE_HALF_ANGLE_DEG,
     DEFAULT_SAR_AZIMUTH_HALF_ANGLE_DEG,
     DEFAULT_SAR_AZIMUTH_EXCLUSION_ANGLE_DEG,
-    EARTH_RADIUS_KM
+    EARTH_RADIUS_KM,
+    EARTH_GM
 )
 
 
@@ -34,6 +35,10 @@ class SARImager(Imager):
     - 滑动聚束模式（Sliding Spotlight）：中等分辨率，中等覆盖区域
     - 条带模式（Stripmap）：标准分辨率，大覆盖区域
     """
+
+    # 滑动聚束模式有效速度比例默认值
+    # V_eff = V_sat * (1 - R/D_vrc)，典型值约0.6（D_vrc ≈ 2.5R）
+    DEFAULT_SLIDING_SPOTLIGHT_VELOCITY_RATIO: float = 0.6
 
     def __init__(
         self,
@@ -140,6 +145,8 @@ class SARImager(Imager):
             **kwargs: 额外参数
                 - prf: 脉冲重复频率（Hz）
                 - look_angle: 观测视角（度）
+                - altitude_m: 轨道高度（米），默认631000（631km）
+                - antenna_length_m: 天线长度（米），聚束模式需要
 
         Returns:
             float: 成像时间（秒）
@@ -158,22 +165,36 @@ class SARImager(Imager):
         # 基础脉冲重复频率（Hz）
         prf = kwargs.get('prf', 1000.0)
 
+        # 轨道高度（米），默认631km
+        altitude_m = kwargs.get('altitude_m', 631000.0)
+
+        # 计算卫星速度（基于轨道高度）
+        satellite_velocity = self._calculate_satellite_velocity(altitude_m)
+
         # 计算合成孔径长度
         wavelength = self._get_wavelength()
-        satellite_velocity = 7000.0  # m/s
 
         if sar_mode == SARImagingMode.SPOTLIGHT:
-            # 聚束模式：天线始终指向目标区域中心
-            # 成像时间由合成孔径长度决定
-            synthetic_aperture_length = (wavelength * length) / (2 * self.resolution)
+            # 聚束模式：方位向分辨率固定为 L_a/2
+            # 使用天线长度计算合成孔径长度
+            antenna_length_m = kwargs.get('antenna_length_m', 10.0)
+            synthetic_aperture_length = self._calculate_synthetic_aperture_length(
+                wavelength, self.resolution, antenna_length_m
+            )
             integration_time = synthetic_aperture_length / satellite_velocity
             return integration_time * params['integration_factor']
 
         elif sar_mode == SARImagingMode.SLIDING_SPOTLIGHT:
-            # 滑动聚束模式：天线在成像过程中缓慢移动
-            # 成像时间介于聚束和条带之间
-            synthetic_aperture_length = (wavelength * length) / (2 * self.resolution * 1.5)
-            integration_time = synthetic_aperture_length / satellite_velocity
+            # 滑动聚束模式：有效速度降低
+            # V_eff = V_sat * (1 - R/D_vrc)，使用默认比例
+            effective_velocity = satellite_velocity * self.DEFAULT_SLIDING_SPOTLIGHT_VELOCITY_RATIO
+
+            antenna_length_m = kwargs.get('antenna_length_m', 10.0)
+            synthetic_aperture_length = self._calculate_synthetic_aperture_length(
+                wavelength, self.resolution, antenna_length_m
+            )
+            # 滑动聚束合成孔径时间更长
+            integration_time = synthetic_aperture_length / effective_velocity
             return integration_time * params['integration_factor']
 
         elif sar_mode == SARImagingMode.STRIPMAP:
@@ -254,6 +275,66 @@ class SARImager(Imager):
             'Ka': 0.008,  # ~35 GHz
         }
         return wavelengths.get(self.band.upper(), 0.031)  # 默认X波段
+
+    def _calculate_satellite_velocity(self, altitude_m: float) -> float:
+        """
+        根据轨道高度计算圆轨道卫星速度
+
+        公式: v = sqrt(GM / (Re + h))
+        其中:
+          - GM = 3.986004418e14 m³/s² (地球引力常数)
+          - Re = 6371 km (地球半径)
+          - h = 轨道高度 (m)
+
+        Args:
+            altitude_m: 轨道高度（米）
+
+        Returns:
+            float: 卫星速度（m/s）
+        """
+        r = EARTH_RADIUS_KM * 1000.0 + altitude_m  # 地心距（米）
+        velocity = math.sqrt(EARTH_GM / r)
+        return velocity
+
+    def _calculate_synthetic_aperture_length(
+        self,
+        wavelength: float,
+        resolution: float,
+        antenna_length: Optional[float] = None
+    ) -> float:
+        """
+        计算合成孔径长度
+
+        根据SAR物理，方位向分辨率 ρ_az = L_a/2（天线长度的一半）
+        合成孔径长度 L_synth = (λ * R) / ρ_az，其中R为斜距
+
+        对于聚束模式，使用天线长度计算；对于其他模式使用分辨率反推
+
+        Args:
+            wavelength: 波长（米）
+            resolution: 方位向分辨率（米）
+            antenna_length: 天线长度（米），聚束模式使用
+
+        Returns:
+            float: 合成孔径长度（米）
+        """
+        if antenna_length is not None:
+            # 聚束模式：ρ_az = L_a/2
+            azimuth_resolution = antenna_length / 2.0
+        else:
+            # 使用配置的分辨率
+            azimuth_resolution = resolution
+
+        # 避免除零
+        if azimuth_resolution <= 0:
+            azimuth_resolution = 1.0
+
+        # 典型斜距（631km高度，30°侧视角约728km）
+        typical_slant_range = 728000.0  # 米
+
+        # L_synth = (λ * R) / ρ_az
+        synthetic_aperture_length = (wavelength * typical_slant_range) / azimuth_resolution
+        return synthetic_aperture_length
 
     def get_specs(self) -> Dict[str, Any]:
         """

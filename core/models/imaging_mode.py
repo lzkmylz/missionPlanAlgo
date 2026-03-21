@@ -38,6 +38,7 @@ class ImagingMode(Enum):
     SPOTLIGHT = "spotlight"
     SCAN = "scan"
     SLIDING_SPOTLIGHT = "sliding_spotlight"
+    TOPSAR = "topsar"
 
 
 @dataclass
@@ -345,6 +346,27 @@ SAR_SLIDING_SPOTLIGHT_MODE = ImagingModeConfig(
     }
 )
 
+# SAR - TOPSAR模式（宽幅扫描）
+SAR_TOPSAR_MODE = ImagingModeConfig(
+    resolution_m=5.0,
+    swath_width_m=100000,   # 总幅宽100km（3子条带×约33km）
+    power_consumption_w=500.0,
+    data_rate_mbps=600.0,
+    min_duration_s=5.0,     # 至少完成一个突发循环
+    max_duration_s=60.0,
+    mode_type="sar",
+    fov_config={
+        'range_half_angle_deg': 7.27,   # 距离向大视场（与sar_2.json一致）
+        'azimuth_half_angle_deg': 0.5,
+    },
+    characteristics={
+        'polarization': 'VV+VH',
+        'incidence_angle_range': [20, 50],
+        'num_subswaths': 3,
+        'description': 'TOPSAR宽幅扫描模式，多子条带电子扫描，覆盖宽',
+    }
+)
+
 # 光学 - 主动前向推扫模式（PMC 25%降速）
 OPTICAL_PMC_25PERCENT = ImagingModeConfig(
     resolution_m=0.5,
@@ -488,6 +510,7 @@ MODE_TEMPLATES = {
     'sar_spotlight': SAR_SPOTLIGHT_MODE,
     'sar_scan': SAR_SCAN_MODE,
     'sar_sliding_spotlight': SAR_SLIDING_SPOTLIGHT_MODE,
+    'sar_topsar': SAR_TOPSAR_MODE,
     'sar_pmc_25percent': SAR_PMC_25PERCENT,
 }
 

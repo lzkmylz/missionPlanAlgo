@@ -105,6 +105,19 @@ class GroundStationScheduler:
             overflow_threshold=self.overflow_threshold
         )
 
+    def register_satellite_data_rate(
+        self,
+        satellite_id: str,
+        data_rate_mbps: float
+    ) -> None:
+        """注册每颗卫星的独立数据率配置
+
+        Args:
+            satellite_id: 卫星ID
+            data_rate_mbps: 数据率 (Mbps)，优先于默认值使用
+        """
+        self._satellite_data_rates[satellite_id] = data_rate_mbps
+
     def get_satellite_storage(self, satellite_id: str) -> Optional[StorageState]:
         """获取卫星固存状态"""
         return self._storage_states.get(satellite_id)

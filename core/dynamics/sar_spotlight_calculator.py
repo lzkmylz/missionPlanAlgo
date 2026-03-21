@@ -253,7 +253,8 @@ class SARSpotlightCalculator:
 
         # 场景方位向尺寸上限 × PRF多普勒模糊限制
         # 注：星载SAR中 PRF 限制的是方位向多普勒带宽，而非简单的距离无模糊
-        T_beam_scene = beam.scene_size_az_km * 1000.0 / v_sat
+        scene_size_az_km = beam.scene_size_az_km if beam.scene_size_az_km is not None else 10.0
+        T_beam_scene = scene_size_az_km * 1000.0 / v_sat
         T_prf = beam.prf_hz * cfg.wavelength_m * R / (2.0 * v_sat ** 2)
         T_dwell = min(T_beam_scene, T_prf)
         limiting = "beam_scene_size" if T_beam_scene <= T_prf else "prf_ambiguity"

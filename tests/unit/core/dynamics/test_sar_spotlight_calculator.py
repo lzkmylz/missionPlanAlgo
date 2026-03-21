@@ -580,8 +580,8 @@ class TestPayloadConfigurationLoading:
             raw = json.load(f)
         from core.models.payload_config import PayloadConfiguration
         pc = PayloadConfiguration.from_dict(raw["capabilities"]["payload_config"])
-        assert pc.has_spotlight_config("sliding_spotlight")
-        cfg = pc.sar_spotlight_configs["sliding_spotlight"]
+        assert pc.has_sliding_spotlight_config("sliding_spotlight")
+        cfg = pc.sar_sliding_spotlight_configs["sliding_spotlight"]
         assert cfg.beam_model == "derived_beam"
         assert len(cfg.beam_positions) == 3
 
@@ -603,3 +603,102 @@ class TestPayloadConfigurationLoading:
         pc = PayloadConfiguration.from_dict(raw["capabilities"]["payload_config"])
         calc = pc.get_spotlight_calculator("stripmap")
         assert calc is None
+
+    def test_calculator_caching_returns_same_instance(self):
+        """测试计算器缓存：同一模式多次调用应返回相同实例"""
+        import json
+        with open(PROJECT_ROOT / "data/entity_lib/satellites/sar_2.json") as f:
+            raw = json.load(f)
+        from core.models.payload_config import PayloadConfiguration
+        pc = PayloadConfiguration.from_dict(raw["capabilities"]["payload_config"])
+
+        calc1 = pc.get_spotlight_calculator("spotlight")
+        calc2 = pc.get_spotlight_calculator("spotlight")
+
+        # 缓存应返回同一实例
+        assert calc1 is calc2
+
+    def test_calculator_no_cache_returns_new_instance(self):
+        """测试禁用缓存：应返回新的实例"""
+        import json
+        with open(PROJECT_ROOT / "data/entity_lib/satellites/sar_2.json") as f:
+            raw = json.load(f)
+        from core.models.payload_config import PayloadConfiguration
+        pc = PayloadConfiguration.from_dict(raw["capabilities"]["payload_config"])
+
+        calc1 = pc.get_spotlight_calculator("spotlight", use_cache=False)
+        calc2 = pc.get_spotlight_calculator("spotlight", use_cache=False)
+
+        # 禁用缓存应返回不同实例
+        assert calc1 is not calc2
+
+    def test_clear_calculator_cache(self):
+        """测试清除缓存后应创建新实例"""
+        import json
+        with open(PROJECT_ROOT / "data/entity_lib/satellites/sar_2.json") as f:
+            raw = json.load(f)
+        from core.models.payload_config import PayloadConfiguration
+        pc = PayloadConfiguration.from_dict(raw["capabilities"]["payload_config"])
+
+        calc1 = pc.get_spotlight_calculator("spotlight")
+        pc.clear_calculator_cache()
+        calc2 = pc.get_spotlight_calculator("spotlight")
+
+        # 清除缓存后应创建新实例
+        assert calc1 is not calc2
+
+    def test_config_priority_override(self):
+        """测试可配置的SAR配置类型优先级"""
+        from core.models.payload_config import PayloadConfiguration
+
+        # 创建包含多种config的测试数据
+        test_data = {
+            'payload_type': 'sar',
+            'default_mode': 'test_mode',
+            'modes': {
+                'test_mode': {
+                    'resolution_m': 1.0,
+                    'swath_width_m': 10000,
+                    'power_consumption_w': 500,
+                    'data_rate_mbps': 300,
+                    'min_duration_s': 10,
+                    'max_duration_s': 30,
+                    'mode_type': 'sar',
+                    # 同时包含三种配置
+                    'spotlight_config': {
+                        'beam_model': 'continuous',
+                        'wavelength_m': 0.031,
+                        'antenna_length_m': 10.0,
+                        'prf_hz': 3000
+                    },
+                    'sliding_spotlight_config': {
+                        'beam_model': 'continuous',
+                        'wavelength_m': 0.031,
+                        'antenna_length_m': 10.0,
+                        'vrc_distance_m': 2000000.0,
+                        'prf_hz': 2500
+                    },
+                    'stripmap_config': {
+                        'beam_model': 'continuous',
+                        'wavelength_m': 0.031,
+                        'antenna_length_m': 10.0,
+                        'prf_hz': 1500
+                    }
+                }
+            }
+        }
+
+        # 默认优先级：stripmap优先
+        pc_default = PayloadConfiguration.from_dict(test_data)
+        assert pc_default.has_stripmap_config("test_mode")
+        assert not pc_default.has_sliding_spotlight_config("test_mode")
+        assert not pc_default.has_spotlight_config("test_mode")
+
+        # 自定义优先级：spotlight优先
+        pc_custom = PayloadConfiguration.from_dict(
+            test_data,
+            config_priority=['spotlight_config', 'sliding_spotlight_config', 'stripmap_config']
+        )
+        assert pc_custom.has_spotlight_config("test_mode")
+        assert not pc_custom.has_sliding_spotlight_config("test_mode")
+        assert not pc_custom.has_stripmap_config("test_mode")
